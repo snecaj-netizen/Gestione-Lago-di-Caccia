@@ -14,11 +14,11 @@ export default defineConfig(({mode}) => {
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
-        injectRegister: null,
+        injectRegister: 'auto',
         includeAssets: ['logo_lago.png'],
         manifest: {
           name: 'Gestione Lago',
-          short_name: 'Lago',
+          short_name: 'Gestione Lago',
           description: 'Gestione Lago di Caccia - Soci e Quotisti',
           start_url: '/',
           scope: '/',
@@ -27,19 +27,19 @@ export default defineConfig(({mode}) => {
           background_color: '#fffffd',
           icons: [
             {
-              src: 'logo_lago.png',
+              src: '/logo_lago.png',
               sizes: '192x192',
               type: 'image/png',
               purpose: 'any'
             },
             {
-              src: 'logo_lago.png',
+              src: '/logo_lago.png',
               sizes: '512x512',
               type: 'image/png',
               purpose: 'any'
             },
             {
-              src: 'logo_lago.png',
+              src: '/logo_lago.png',
               sizes: '512x512',
               type: 'image/png',
               purpose: 'maskable'

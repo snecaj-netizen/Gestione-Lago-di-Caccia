@@ -43,7 +43,7 @@ async function startServer() {
     const distPath = path.resolve(__dirname, "dist");
     
     // Explicitly serve manifest and sw with correct headers if needed
-    app.get("/manifest.webmanifest", (req, res) => {
+    app.get(["/manifest.json", "/manifest.webmanifest"], (req, res) => {
       res.setHeader("Content-Type", "application/manifest+json");
       res.sendFile(path.join(distPath, "manifest.webmanifest"));
     });
@@ -51,6 +51,7 @@ async function startServer() {
     app.get("/sw.js", (req, res) => {
       res.setHeader("Service-Worker-Allowed", "/");
       res.setHeader("Content-Type", "application/javascript");
+      res.setHeader("Cache-Control", "no-cache");
       res.sendFile(path.join(distPath, "sw.js"));
     });
 
