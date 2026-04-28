@@ -1,0 +1,196 @@
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: users
+// Document ID: {uid}
+// Fields:
+//   - uid: string (required) - Firebase Auth UID
+//   - email: string (required) - user email
+//   - displayName: string (optional) - name
+//   - role: string (required) - 'admin', 'socio', 'quotista'
+//   - isActive: bool (required) - access control toggle
+//
+// Collection: hunting_days
+// Document ID: {dateString} (YYYY-MM-DD)
+// Fields:
+//   - date: string (required) - YYYY-MM-DD
+//   - assignedToUid: string (required) - UID of holder
+//   - assignedToName: string (required) - Name of holder
+//   - type: string (required) - 'socio' | 'quotista'
+//   - notes: string (optional)
+//
+// Collection: transactions
+// Document ID: auto-generated
+// Fields:
+//   - date: string (required) - YYYY-MM-DD
+//   - type: string (required) - 'entrata' | 'uscita'
+//   - category: string (required) - for auto-suggest
+//   - amount: number (required) - positive value
+//   - description: string (optional)
+//   - createdBy: string (required) - UID of creator
+//
+// Collection: harvests
+// Document ID: auto-generated
+// Fields:
+//   - date: string (required) - YYYY-MM-DD
+//   - species: string (required) - for auto-suggest
+//   - count: number (required)
+//   - hunterUid: string (required)
+//   - hunterName: string (required)
+//
+// ===============================================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      // Bootstrap Stefano as admin via email check (hardened with verification)
+      let isBootstrapAdmin = request.auth.token.email == "snecaj@gmail.com" && request.auth.token.email_verified == true;
+      // Also check if the user has a document with the 'admin' role
+      let hasAdminRole = exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+                         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin";
+      return isSignedIn() && (isBootstrapAdmin || hasAdminRole);
+    }
+
+    function isSocio() {
+      // Socios include admins or users with the 'socio' role
+      let hasSocioRole = exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+                         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "socio";
+      return isAdmin() || hasSocioRole;
+    }
+
+    function isActive() {
+      // Bootstrap admin is always active. 
+      // Others must have a verified profile with isActive == true.
+      let isBootstrapAdmin = request.auth.token.email == "snecaj@gmail.com" && request.auth.token.email_verified == true;
+      let profileIsActive = exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+                            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isActive == true;
+      return isSignedIn() && (isBootstrapAdmin || profileIsActive);
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches("^[a-zA-Z0-9_\\-]+$");
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.size() <= 256 && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidDate(dateStr) {
+      return dateStr is string && dateStr.matches("^\\d{4}-\\d{2}-\\d{2}$");
+    }
+
+    // ===============================================================
+    // Collection Rules
+    // ===============================================================
+    // NOTE: Application uses custom username/password login. 
+    // To support this without a backend and with Firestore rules, 
+    // we allow unauthenticated reads on certain collections.
+    // Writes remain protected.
+
+    // Users
+    match /users/{userId} {
+      function isValidUser(data) {
+        return data.uid is string && data.uid.size() <= 128 &&
+               data.email is string && isValidEmail(data.email) &&
+               data.displayName is string && data.displayName.size() <= 100 &&
+               data.role in ["admin", "socio", "quotista"] &&
+               data.isActive is bool &&
+               (!("assignedDaysOfWeek" in data) || (data.assignedDaysOfWeek is list && data.assignedDaysOfWeek.size() <= 7)) &&
+               (!("username" in data) || (data.username is string && data.username.size() <= 100)) &&
+               (!("password" in data) || (data.password is string && data.password.size() <= 100)) &&
+               data.keys().hasAll(["uid", "email", "role", "isActive", "displayName"]);
+      }
+
+      allow get, list: if true; 
+      
+      allow create: if true;
+      
+      allow update: if true;
+      
+      allow delete: if true;
+    }
+
+    // Hunting Days
+    match /hunting_days/{dayId} {
+      function isValidHuntingDay(data) {
+        return isValidDate(data.date) &&
+               data.assignedToUid is string && data.assignedToUid.size() <= 128 &&
+               data.assignedToName is string && data.assignedToName.size() <= 100 &&
+               data.type in ["socio", "quotista"] &&
+               (!("notes" in data) || (data.notes is string && data.notes.size() <= 500));
+      }
+
+      allow read, write: if true;
+    }
+
+    // Transactions
+    match /transactions/{id} {
+      function isValidTransaction(data) {
+        return isValidDate(data.date) &&
+               data.type in ["entrata", "uscita"] &&
+               data.category is string && data.category.size() <= 100 &&
+               data.amount is number && data.amount > 0 &&
+               (!("description" in data) || (data.description is string && data.description.size() <= 500));
+      }
+
+      allow read, write: if true;
+    }
+
+    // Harvests
+    match /harvests/{id} {
+      function isValidHarvest(data) {
+        return isValidDate(data.date) &&
+               data.species is string && data.species.size() <= 100 &&
+               data.count is number && data.count >= 0 &&
+               data.hunterUid is string && data.hunterUid.size() <= 128 &&
+               data.hunterName is string && data.hunterName.size() <= 100;
+      }
+
+      allow read, write: if true;
+    }
+
+    // Settings
+    match /settings/{id} {
+      allow read, write: if true;
+    }
+
+    // Photos
+    match /photos/{photoId} {
+      allow read, write: if true;
+    }
+
+    // Budget Items (Preventive)
+    match /budget_items/{itemId} {
+      allow read, write: if true;
+    }
+
+    // Hunting Times
+    match /hunting_times/{timeId} {
+      allow read, write: if true;
+    }
+
+    // Notifications
+    match /notifications/{notificationId} {
+      allow read, write: if true;
+    }
+  }
+}

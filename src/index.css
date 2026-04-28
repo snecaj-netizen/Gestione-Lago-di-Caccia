@@ -1,0 +1,45 @@
+@import "tailwindcss";
+
+@theme {
+  --color-lake-green: #2d4739;
+  --color-earth-brown: #5d4037;
+  --color-clay: #a1887f;
+  --color-slate-gray: #455a64;
+  --color-off-white: #fcfbf7;
+  --color-accent-gold: #c5a059;
+  --color-bg-body: #e9ecef;
+  
+  --font-serif: "Georgia", serif;
+  --font-sans: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+}
+
+@layer base {
+  body {
+    @apply bg-bg-body text-slate-900 font-sans;
+  }
+  
+  h1, h2, h3 {
+    @apply font-serif;
+  }
+}
+
+.card-polish {
+  @apply bg-white rounded-lg p-4 sm:p-6 shadow-md border-t-4 border-lake-green transition-all;
+}
+
+.badge-socio {
+  @apply bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border border-blue-100;
+}
+
+.badge-quotista {
+  @apply bg-purple-50 text-purple-700 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border border-purple-100;
+}
+
+.calendar-day-hunting {
+  @apply bg-[#f0f4f1] border-[#d1dbd3];
+}
+
+.calendar-day-off {
+  @apply bg-[#fdfdfd] opacity-40 border-dashed;
+}
+

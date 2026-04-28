@@ -1,0 +1,171 @@
+/**
+ * Defines the structure of the FirebaseBlueprint configuration for Gestione Lago di Caccia.
+ */
+{
+  "entities": {
+    "user": {
+      "title": "User",
+      "description": "User profile and role management.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "socio", "quotista"] },
+        "isActive": { "type": "boolean" },
+        "assignedDaysOfWeek": { "type": "array", "items": { "type": "number" }, "description": "0-6 for recurring days" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "settings": {
+      "title": "Settings",
+      "description": "Global application and lake configuration.",
+      "type": "object",
+      "properties": {
+        "latitude": { "type": "number" },
+        "longitude": { "type": "number" },
+        "seasonStart": { "type": "string", "format": "date" },
+        "seasonEnd": { "type": "string", "format": "date" },
+        "weekdaySeasonQuotas": { 
+          "type": "object", 
+          "description": "Season-wide quota for each day of the week (0-6)",
+          "additionalProperties": { "type": "number" }
+        }
+      }
+    },
+    "huntingTime": {
+      "title": "Hunting Time",
+      "description": "Daily hunting start and end times for specific periods.",
+      "type": "object",
+      "properties": {
+        "startDate": { "type": "string", "format": "date" },
+        "endDate": { "type": "string", "format": "date" },
+        "startTime": { "type": "string", "description": "HH:mm" },
+        "endTime": { "type": "string", "description": "HH:mm" }
+      },
+      "required": ["startDate", "endDate", "startTime", "endTime"]
+    },
+    "huntingDay": {
+      "title": "Hunting Day",
+      "description": "Assignment of hunting days to users.",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string", "format": "date", "description": "ISO date YYYY-MM-DD" },
+        "assignedToUid": { "type": "string", "description": "UID of the user (quotista or socio)" },
+        "assignedToName": { "type": "string" },
+        "type": { "type": "string", "enum": ["quotista", "socio"] },
+        "notes": { "type": "string" },
+        "overrideQuota": { "type": "number", "description": "Specific quota for this day (optional)" }
+      },
+      "required": ["date", "assignedToUid", "assignedToName"]
+    },
+    "transaction": {
+      "title": "Transaction",
+      "description": "Income or expense entry.",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string", "format": "date" },
+        "type": { "type": "string", "enum": ["entrata", "uscita"] },
+        "category": { "type": "string", "description": "Category for auto-suggest" },
+        "amount": { "type": "number" },
+        "description": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "huntingDayId": { "type": "string", "description": "Optional link to a specific HuntingDay date string" },
+        "payerUid": { "type": "string", "description": "Optional UID of the user paying" },
+        "payerName": { "type": "string", "description": "Optional name of the user paying" }
+      },
+      "required": ["date", "type", "category", "amount"]
+    },
+    "harvest": {
+      "title": "Harvest",
+      "description": "Record of animals harvested (abbattimenti).",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string", "format": "date" },
+        "species": { "type": "string", "description": "Species for auto-suggest" },
+        "count": { "type": "number" },
+        "hunterUid": { "type": "string" },
+        "hunterName": { "type": "string" }
+      },
+      "required": ["date", "species", "count"]
+    },
+    "photo": {
+      "title": "Hunting Photo",
+      "description": "Photos shared by users of their hunting days.",
+      "type": "object",
+      "properties": {
+        "url": { "type": "string", "description": "Image URL (direct link or base64)" },
+        "caption": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "userUid": { "type": "string" },
+        "userName": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["url", "userUid", "userName", "createdAt"]
+    },
+    "budget_item": {
+      "title": "Budget Item",
+      "description": "Preventive budget entry for income or expense.",
+      "type": "object",
+      "properties": {
+        "label": { "type": "string" },
+        "amount": { "type": "number" },
+        "type": { "type": "string", "enum": ["entrata", "uscita"] }
+      },
+      "required": ["label", "amount", "type"]
+    },
+    "notification": {
+      "title": "Notification",
+      "description": "In-app notifications for users.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "body": { "type": "string" },
+        "type": { "type": "string", "enum": ["harvest", "transaction", "system"] },
+        "targetUid": { "type": "string", "description": "UID of the recipient user" },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "metadata": { "type": "object" }
+      },
+      "required": ["title", "body", "targetUid", "read", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": "user",
+      "description": "Collection of community members and their roles."
+    },
+    "/hunting_days/{dayId}": {
+      "schema": "huntingDay",
+      "description": "Hunting day assignments (Day ID is date string)."
+    },
+    "/transactions/{transactionId}": {
+      "schema": "transaction",
+      "description": "Financial records."
+    },
+    "/harvests/{harvestId}": {
+      "schema": "harvest",
+      "description": "Hunting harvest records."
+    },
+    "/photos/{photoId}": {
+      "schema": "photo",
+      "description": "Gallery of hunting photos."
+    },
+    "/settings/global": {
+      "schema": "settings",
+      "description": "Global application configuration."
+    },
+    "/budget_items/{itemId}": {
+      "schema": "budget_item",
+      "description": "Preventive budget targets."
+    },
+    "/notifications/{notificationId}": {
+      "schema": "notification",
+      "description": "In-app notifications."
+    },
+    "/hunting_times/{timeId}": {
+      "schema": "huntingTime",
+      "description": "Hunting periods and times table."
+    }
+  }
+}
