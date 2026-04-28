@@ -326,7 +326,6 @@ function Logo() {
               src={logoUrl} 
               alt="Gestione Lago" 
               className="w-full h-full object-contain"
-              referrerPolicy="no-referrer"
               onLoad={() => console.log('Logo loaded successfully')}
               onError={(e) => {
                 console.error('Logo failed to load:', logoUrl);
