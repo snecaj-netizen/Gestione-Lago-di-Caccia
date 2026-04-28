@@ -1,10 +1,24 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
-import firebaseConfig from '../firebase-applet-config.json';
+
+// Configuration from environment variables (prefixed with VITE_ for client-side)
+// In AI Studio, these are injected via vite.config.ts from the local JSON file.
+// In GitHub/Railway, these will be populated from Secrets/Environment Variables during build.
+const metaEnv = (import.meta as any).env || {};
+
+const firebaseConfig = {
+  apiKey: metaEnv.VITE_FIREBASE_API_KEY || "",
+  authDomain: metaEnv.VITE_FIREBASE_AUTH_DOMAIN || "",
+  projectId: metaEnv.VITE_FIREBASE_PROJECT_ID || "",
+  storageBucket: metaEnv.VITE_FIREBASE_STORAGE_BUCKET || "",
+  messagingSenderId: metaEnv.VITE_FIREBASE_MESSAGING_SENDER_ID || "",
+  appId: metaEnv.VITE_FIREBASE_APP_ID || "",
+  firestoreDatabaseId: metaEnv.VITE_FIREBASE_FIRESTORE_DB_ID || ""
+};
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId || '(default)');
 export const auth = getAuth(app);
 
 export enum OperationType {
