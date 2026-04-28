@@ -41,6 +41,23 @@ function Sidebar({ isOpen, setIsOpen }: { isOpen: boolean, setIsOpen: (val: bool
   const { logout, profile } = useAuth();
   const location = useLocation();
   const [showLogoutConfirm, setShowLogoutConfirm] = React.useState(false);
+  const [deferredPrompt, setDeferredPrompt] = React.useState<any>(null);
+
+  React.useEffect(() => {
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    });
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setDeferredPrompt(null);
+    }
+  };
 
   const navItems = [
     { name: 'Calendario Venatorio', path: '/', icon: CalendarIcon },
@@ -119,7 +136,16 @@ function Sidebar({ isOpen, setIsOpen }: { isOpen: boolean, setIsOpen: (val: bool
             </ul>
           </nav>
 
-          <div className="mt-auto p-6 border-t border-white/10">
+          <div className="mt-auto p-6 border-t border-white/10 space-y-4">
+            {deferredPrompt && (
+              <button 
+                onClick={handleInstallClick}
+                className="flex items-center gap-3 w-full text-xs font-bold text-accent-gold hover:text-white transition-colors bg-white/5 py-3 px-4 rounded-lg border border-accent-gold/20"
+              >
+                <Link size={18} />
+                Installa App (PWA)
+              </button>
+            )}
             <button 
               onClick={handleLogout}
               className="flex items-center gap-3 w-full text-sm font-semibold text-white/60 hover:text-rose-400 transition-colors"

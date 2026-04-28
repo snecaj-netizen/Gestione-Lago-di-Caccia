@@ -34,26 +34,61 @@ export default defineConfig(({mode}) => {
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
+        injectRegister: 'script',
         includeAssets: ['logo_lago.png'],
         manifest: {
           name: 'Gestione Lago',
           short_name: 'Lago',
           description: 'Gestione Lago di Caccia - Soci e Quotisti',
-          theme_color: '#0a2e2a', // text-lake-green
-          background_color: '#fffffd', // bg-bg-body
+          start_url: '/',
+          scope: '/',
           display: 'standalone',
+          theme_color: '#0a2e2a',
+          background_color: '#fffffd',
           icons: [
             {
               src: 'logo_lago.png',
               sizes: '192x192',
-              type: 'image/png'
+              type: 'image/png',
+              purpose: 'any'
             },
             {
               src: 'logo_lago.png',
               sizes: '512x512',
-              type: 'image/png'
+              type: 'image/png',
+              purpose: 'any'
+            },
+            {
+              src: 'logo_lago.png',
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'maskable'
             }
           ]
+        },
+        workbox: {
+          globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+          runtimeCaching: [
+            {
+              urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'google-fonts-cache',
+                expiration: {
+                  maxEntries: 10,
+                  maxAgeSeconds: 60 * 60 * 24 * 365 // <== 365 days
+                },
+                cacheableResponse: {
+                  statuses: [0, 200]
+                }
+              }
+            }
+          ]
+        },
+        devOptions: {
+          enabled: true,
+          type: 'module',
+          navigateFallback: 'index.html',
         }
       })
     ],
