@@ -50,10 +50,17 @@ async function startServer() {
 
     app.get("/sw.js", (req, res) => {
       res.setHeader("Service-Worker-Allowed", "/");
+      res.setHeader("Content-Type", "application/javascript");
       res.sendFile(path.join(distPath, "sw.js"));
     });
 
-    app.use(express.static(distPath));
+    app.use(express.static(distPath, {
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith('.png')) {
+          res.setHeader('Cache-Control', 'public, max-age=31536000');
+        }
+      }
+    }));
     app.get("*", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
     });
