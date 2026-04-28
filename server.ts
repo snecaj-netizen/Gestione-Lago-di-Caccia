@@ -41,6 +41,18 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.resolve(__dirname, "dist");
+    
+    // Explicitly serve manifest and sw with correct headers if needed
+    app.get("/manifest.webmanifest", (req, res) => {
+      res.setHeader("Content-Type", "application/manifest+json");
+      res.sendFile(path.join(distPath, "manifest.webmanifest"));
+    });
+
+    app.get("/sw.js", (req, res) => {
+      res.setHeader("Service-Worker-Allowed", "/");
+      res.sendFile(path.join(distPath, "sw.js"));
+    });
+
     app.use(express.static(distPath));
     app.get("*", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));

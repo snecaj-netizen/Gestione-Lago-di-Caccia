@@ -21,7 +21,8 @@ import {
   Lock,
   User as UserIcon,
   Camera,
-  Bird
+  Bird,
+  Download
 } from 'lucide-react';
 import { cn } from './lib/utils';
 
@@ -137,14 +138,20 @@ function Sidebar({ isOpen, setIsOpen }: { isOpen: boolean, setIsOpen: (val: bool
           </nav>
 
           <div className="mt-auto p-6 border-t border-white/10 space-y-4">
-            {deferredPrompt && (
+            {deferredPrompt ? (
               <button 
                 onClick={handleInstallClick}
                 className="flex items-center gap-3 w-full text-xs font-bold text-accent-gold hover:text-white transition-colors bg-white/5 py-3 px-4 rounded-lg border border-accent-gold/20"
               >
-                <Link size={18} />
+                <Download size={18} />
                 Installa App (PWA)
               </button>
+            ) : (
+              <div className="px-4 py-2 bg-white/5 rounded-lg border border-white/10">
+                <p className="text-[10px] text-white/50 leading-tight">
+                  Per installare: usa "Aggiungi a home" dal menu del browser.
+                </p>
+              </div>
             )}
             <button 
               onClick={handleLogout}
@@ -308,17 +315,23 @@ function PrivateRoute({ children, allowPending = false }: { children: React.Reac
 
 function Logo() {
   const [error, setError] = React.useState(false);
+  const logoUrl = "/logo_lago.png";
+  
   return (
     <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
       <Link to="/" className="flex items-center justify-center group flex-col">
         <div className="w-11 h-11 bg-white rounded-full flex items-center justify-center shadow-lg group-hover:scale-110 group-active:scale-95 transition-all duration-300 ring-4 ring-lake-green/5 overflow-hidden border border-slate-100 p-1">
           {!error ? (
             <img 
-              src="/logo_lago.png" 
+              src={logoUrl} 
               alt="Gestione Lago" 
               className="w-full h-full object-contain"
               referrerPolicy="no-referrer"
-              onError={() => setError(true)}
+              onLoad={() => console.log('Logo loaded successfully')}
+              onError={(e) => {
+                console.error('Logo failed to load:', logoUrl);
+                setError(true);
+              }}
             />
           ) : (
             <div className="text-lake-green flex items-center justify-center">

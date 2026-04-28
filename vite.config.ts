@@ -34,7 +34,7 @@ export default defineConfig(({mode}) => {
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
-        injectRegister: 'script',
+        injectRegister: null,
         includeAssets: ['logo_lago.png'],
         manifest: {
           name: 'Gestione Lago',
