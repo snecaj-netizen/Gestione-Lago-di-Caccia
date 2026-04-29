@@ -1,6 +1,7 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
+import fs from "fs";
 import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -45,7 +46,10 @@ async function startServer() {
     // Explicitly serve manifest and sw with correct headers if needed
     app.get(["/manifest.json", "/manifest.webmanifest"], (req, res) => {
       res.setHeader("Content-Type", "application/manifest+json");
-      res.sendFile(path.join(distPath, "manifest.webmanifest"));
+      const manifestPath = fs.existsSync(path.join(distPath, "manifest.json")) 
+        ? "manifest.json" 
+        : "manifest.webmanifest";
+      res.sendFile(path.join(distPath, manifestPath));
     });
 
     app.get("/sw.js", (req, res) => {
@@ -53,6 +57,11 @@ async function startServer() {
       res.setHeader("Content-Type", "application/javascript");
       res.setHeader("Cache-Control", "no-cache");
       res.sendFile(path.join(distPath, "sw.js"));
+    });
+
+    app.get("/registerSW.js", (req, res) => {
+      res.setHeader("Content-Type", "application/javascript");
+      res.sendFile(path.join(distPath, "registerSW.js"));
     });
 
     app.use(express.static(distPath, {

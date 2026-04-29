@@ -14,8 +14,9 @@ export default defineConfig(({mode}) => {
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
-        injectRegister: 'auto',
+        injectRegister: 'script',
         includeAssets: ['logo_lago.png'],
+        manifestFilename: 'manifest.json',
         manifest: {
           name: 'Gestione Lago',
           short_name: 'Gestione Lago',
@@ -27,19 +28,19 @@ export default defineConfig(({mode}) => {
           background_color: '#fffffd',
           icons: [
             {
-              src: '/logo_lago.png',
+              src: 'logo_lago.png',
               sizes: '192x192',
               type: 'image/png',
               purpose: 'any'
             },
             {
-              src: '/logo_lago.png',
+              src: 'logo_lago.png',
               sizes: '512x512',
               type: 'image/png',
               purpose: 'any'
             },
             {
-              src: '/logo_lago.png',
+              src: 'logo_lago.png',
               sizes: '512x512',
               type: 'image/png',
               purpose: 'maskable'
