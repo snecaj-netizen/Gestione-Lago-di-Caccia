@@ -11,17 +11,37 @@ import { Plus, Target, Trash2, Search, Filter, X, Edit2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
+import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 
 export function Harvests() {
   const { profile } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [items, setItems] = useState<Harvest[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
+  
+  const showModal = searchParams.get('modal') === 'record';
+  const showDeleteConfirm = searchParams.get('modal') === 'delete';
+
+  const setShowModal = (val: boolean) => {
+    if (val) {
+      setSearchParams({ modal: 'record' });
+    } else {
+      setSearchParams({});
+    }
+  };
+
+  const setShowDeleteConfirm = (val: boolean) => {
+    if (val) {
+      setSearchParams({ modal: 'delete' });
+    } else {
+      setSearchParams({});
+    }
+  };
+
   const [editingItem, setEditingItem] = useState<Harvest | null>(null);
-  const [speciesSuggestions, setSpeciesSuggestions] = useState<string[]>([]);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<Harvest | null>(null);
+  const [speciesSuggestions, setSpeciesSuggestions] = useState<string[]>([]);
 
   const [formData, setFormData] = useState({
     date: format(new Date(), 'yyyy-MM-dd'),

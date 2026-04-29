@@ -17,25 +17,53 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
+import { useSearchParams } from 'react-router-dom';
 import { cn } from '../lib/utils';
 
 const MAX_IMAGE_SIZE = 800; // max width/height in px
 
 export function Gallery() {
   const { profile } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const galleryInputRef = React.useRef<HTMLInputElement>(null);
   const [photos, setPhotos] = useState<HuntingPhoto[]>([]);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
+  
+  const showAddModal = searchParams.get('modal') === 'add';
+  const showEditModal = searchParams.get('modal') === 'edit';
+  const selectedPhotoId = searchParams.get('view');
+  const selectedPhoto = photos.find(p => p.id === selectedPhotoId) || null;
+
+  const setShowAddModal = (val: boolean) => {
+    if (val) {
+      setSearchParams({ modal: 'add' });
+    } else {
+      setSearchParams({});
+    }
+  };
+
+  const setShowEditModal = (val: boolean) => {
+    if (val) {
+      setSearchParams({ modal: 'edit' });
+    } else {
+      setSearchParams({});
+    }
+  };
+
+  const setSelectedPhoto = (photo: HuntingPhoto | null) => {
+    if (photo) {
+      setSearchParams({ view: photo.id });
+    } else {
+      setSearchParams({});
+    }
+  };
+
   const [editingPhoto, setEditingPhoto] = useState<HuntingPhoto | null>(null);
   const [loading, setLoading] = useState(true);
   
   const [batchPhotos, setBatchPhotos] = useState<{url: string, caption: string, date: string}[]>([]);
   const [isPublishing, setIsPublishing] = useState(false);
-  
   const [filter, setFilter] = useState<'all' | 'mine'>('all');
-  const [selectedPhoto, setSelectedPhoto] = useState<HuntingPhoto | null>(null);
 
   useEffect(() => {
     const unsub = subscribeToPhotos((data) => {

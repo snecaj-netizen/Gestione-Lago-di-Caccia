@@ -6,8 +6,10 @@ import {
   Route, 
   Navigate, 
   Link,
-  useLocation
+  useLocation,
+  useNavigate
 } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Calendar as CalendarIcon, 
   CloudSun, 
@@ -45,6 +47,11 @@ function Sidebar({ isOpen, setIsOpen }: { isOpen: boolean, setIsOpen: (val: bool
   const location = useLocation();
   const [showLogoutConfirm, setShowLogoutConfirm] = React.useState(false);
   const [deferredPrompt, setDeferredPrompt] = React.useState<any>(null);
+
+  // Close sidebar on path change
+  React.useEffect(() => {
+    setIsOpen(false);
+  }, [location.pathname]);
 
   React.useEffect(() => {
     const handler = (e: any) => {
@@ -388,6 +395,42 @@ function MainLayout() {
   const [isOpen, setIsOpen] = React.useState(false);
   const [showProfileMenu, setShowProfileMenu] = React.useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = React.useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // Swipe back logic
+  React.useEffect(() => {
+    let touchStartX = 0;
+    let touchStartY = 0;
+    
+    const handleTouchStart = (e: TouchEvent) => {
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+    };
+    
+    const handleTouchEnd = (e: TouchEvent) => {
+      const touchEndX = e.changedTouches[0].clientX;
+      const touchEndY = e.changedTouches[0].clientY;
+      
+      const dx = touchEndX - touchStartX;
+      const dy = touchEndY - touchStartY;
+      
+      // Left-to-right swipe (back)
+      if (dx > 70 && Math.abs(dy) < 30) {
+        // Only swipe back if we are not at root
+        if (location.pathname !== '/') {
+          navigate(-1);
+        }
+      }
+    };
+    
+    window.addEventListener('touchstart', handleTouchStart);
+    window.addEventListener('touchend', handleTouchEnd);
+    return () => {
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [location.pathname, navigate]);
 
   const confirmLogout = () => {
     logout();
@@ -505,23 +548,33 @@ function MainLayout() {
           </div>
         )}
 
-        <main className="p-3 sm:p-4 lg:p-10 pt-24 sm:pt-28 lg:pt-32 min-h-screen w-full">
+        <main className="p-3 sm:p-4 lg:p-10 pt-24 sm:pt-28 lg:pt-32 min-h-screen w-full overflow-x-hidden">
           <div className="max-w-7xl mx-auto w-full">
-            <Routes>
-              <Route path="/" element={<HuntingCalendar />} />
-              {(profile?.role === 'admin' || profile?.role === 'socio') && (
-                <>
-                  <Route path="/dashboard" element={<Dashboard />} />
-                  <Route path="/spese" element={<Accounting />} />
-                </>
-              )}
-              <Route path="/meteo" element={<WeatherPage />} />
-              <Route path="/abbattimenti" element={<Harvests />} />
-              <Route path="/galleria" element={<Gallery />} />
-              <Route path="/admin" element={<AdminPanel />} />
-              <Route path="/profilo" element={<Profile />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={location.pathname}
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+              >
+                <Routes location={location} key={location.pathname}>
+                  <Route path="/" element={<HuntingCalendar />} />
+                  {(profile?.role === 'admin' || profile?.role === 'socio') && (
+                    <>
+                      <Route path="/dashboard" element={<Dashboard />} />
+                      <Route path="/spese" element={<Accounting />} />
+                    </>
+                  )}
+                  <Route path="/meteo" element={<WeatherPage />} />
+                  <Route path="/abbattimenti" element={<Harvests />} />
+                  <Route path="/galleria" element={<Gallery />} />
+                  <Route path="/admin" element={<AdminPanel />} />
+                  <Route path="/profilo" element={<Profile />} />
+                  <Route path="*" element={<Navigate to="/" replace />} />
+                </Routes>
+              </motion.div>
+            </AnimatePresence>
           </div>
         </main>
       </div>

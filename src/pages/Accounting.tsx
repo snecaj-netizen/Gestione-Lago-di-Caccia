@@ -17,20 +17,48 @@ import { Plus, Wallet, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, X
 import { cn } from '../lib/utils';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
+import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 
 export function Accounting() {
   const { profile } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [items, setItems] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showAdd, setShowAdd] = useState(false);
+  
+  const showAdd = searchParams.get('modal') === 'add';
+  const showQuotaConfig = searchParams.get('modal') === 'quota';
+  const showBudgetConfig = searchParams.get('modal') === 'budget';
+
+  const setShowAdd = (val: boolean) => {
+    if (val) {
+      setSearchParams({ modal: 'add' });
+    } else {
+      setSearchParams({});
+    }
+  };
+
+  const setShowQuotaConfig = (val: boolean) => {
+    if (val) {
+      setSearchParams({ modal: 'quota' });
+    } else {
+      setSearchParams({});
+    }
+  };
+
+  const setShowBudgetConfig = (val: boolean) => {
+    if (val) {
+      setSearchParams({ modal: 'budget' });
+    } else {
+      setSearchParams({});
+    }
+  };
+
   const [categorySuggestions, setCategorySuggestions] = useState<string[]>([]);
   const [huntingDays, setHuntingDays] = useState<HuntingDay[]>([]);
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [settings, setSettings] = useState<LakeSettings | null>(null);
   const [budgetItems, setBudgetItems] = useState<BudgetItem[]>([]);
-  const [showQuotaConfig, setShowQuotaConfig] = useState(false);
-  const [showBudgetConfig, setShowBudgetConfig] = useState(false);
   const [editingBudgetItemId, setEditingBudgetItemId] = useState<string | null>(null);
 
   const [newBudgetItem, setNewBudgetItem] = useState<Omit<BudgetItem, 'id'>>({
