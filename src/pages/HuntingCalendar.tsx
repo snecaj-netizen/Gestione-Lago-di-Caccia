@@ -28,7 +28,7 @@ import {
   differenceInSeconds
 } from 'date-fns';
 import { it } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, User as UserIcon, Calendar as CalendarIcon, Info, Plus, X, Clock, Trash2, Filter, ArrowRight, ArrowLeftRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, User as UserIcon, Calendar as CalendarIcon, Info, Plus, X, Clock, Trash2, Filter, ArrowRight, ArrowLeftRight, ChevronDown } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Link } from 'react-router-dom';
 
@@ -102,6 +102,7 @@ export function HuntingCalendar() {
   const [availableUsers, setAvailableUsers] = useState<UserProfile[]>([]);
   const [settings, setSettings] = useState<LakeSettings | null>(null);
   const [huntingTimes, setHuntingTimes] = useState<HuntingTime[]>([]);
+  const [showAllTimes, setShowAllTimes] = useState(false);
   const [hideSilence, setHideSilence] = useState(true);
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
   const [isAssigning, setIsAssigning] = useState(false);
@@ -277,49 +278,101 @@ export function HuntingCalendar() {
               <motion.div 
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
-                className="p-4 bg-off-white border-b border-slate-100 flex items-center gap-2"
+                className="p-4 bg-off-white border-b border-slate-100 flex items-center justify-between"
               >
-                <Clock size={16} className="text-lake-green" />
-                <h3 className="text-xs font-black text-slate-gray uppercase tracking-widest">Tabella Orari e Periodi di Caccia</h3>
+                <div className="flex items-center gap-2">
+                  <Clock size={16} className="text-lake-green" />
+                  <h3 className="text-xs font-black text-slate-gray uppercase tracking-widest">Tabella Orari e Periodi di Caccia</h3>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-lake-green animate-pulse" />
+                  <span className="text-[10px] font-black text-lake-green uppercase tracking-widest">Periodo Attivo</span>
+                </div>
               </motion.div>
-              <div className="overflow-x-auto scrollbar-hide">
-                <table className="w-full text-left">
-                  <thead className="bg-white border-b border-slate-50">
-                    <tr className="text-[0.6rem] font-bold text-slate-400 uppercase tracking-widest">
-                      <th className="px-4 py-2">Inizio</th>
-                      <th className="px-4 py-2">Fine</th>
-                      <th className="px-4 py-2">Inizio</th>
-                      <th className="px-4 py-2">Fine</th>
+              <div className="">
+                <table className="w-full text-left border-collapse table-fixed">
+                  <thead className="bg-white border-b border-slate-100">
+                    <tr className="text-[0.55rem] font-black text-slate-400 uppercase tracking-widest">
+                      <th className="px-2 py-3 w-[28%] text-center">Dal</th>
+                      <th className="px-2 py-3 w-[26%] text-center">Al</th>
+                      <th className="px-2 py-3 w-[23%] text-center">Alba</th>
+                      <th className="px-2 py-3 w-[23%] text-center">Tramonto</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-50">
-                    {huntingTimes.map((time) => (
-                      <tr key={time.id} className="hover:bg-slate-50/50 transition-colors">
-                        <td className="px-4 py-1.5 whitespace-nowrap">
-                          <span className="text-[11px] font-bold text-slate-900 leading-none">
-                            {format(new Date(time.startDate), 'dd/MM/yy', { locale: it })}
-                          </span>
-                        </td>
-                        <td className="px-4 py-1.5 whitespace-nowrap">
-                          <span className="text-[11px] font-bold text-slate-900 leading-none">
-                            {format(new Date(time.endDate), 'dd/MM/yy', { locale: it })}
-                          </span>
-                        </td>
-                        <td className="px-4 py-1.5 whitespace-nowrap">
-                          <span className="text-[10px] font-black text-lake-green bg-emerald-50 px-2 py-1 rounded-full border border-emerald-100">
-                            {time.startTime}
-                          </span>
-                        </td>
-                        <td className="px-4 py-1.5 whitespace-nowrap">
-                          <span className="text-[10px] font-black text-rose-600 bg-rose-50 px-2 py-1 rounded-full border border-rose-100">
-                            {time.endTime}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
+                  <tbody>
+                    {(showAllTimes ? huntingTimes : huntingTimes.slice(0, 2)).map((time, idx) => {
+                      const isCurrent = idx === 0;
+                      return (
+                        <tr 
+                          key={time.id} 
+                          className={cn(
+                            "transition-all duration-300",
+                            isCurrent 
+                              ? "bg-emerald-50/60 ring-2 ring-inset ring-lake-green relative z-10 shadow-sm" 
+                              : "hover:bg-slate-50/50 border-b border-slate-50 last:border-0"
+                          )}
+                        >
+                          <td className="px-1 py-3 whitespace-nowrap text-center align-bottom">
+                            <div className="flex flex-col items-center">
+                              {isCurrent && <span className="text-[7px] font-black text-lake-green uppercase tracking-tighter mb-0.5">In corso</span>}
+                              <span className={cn(
+                                "font-black leading-none",
+                                isCurrent ? "text-xs text-lake-green" : "text-[10px] text-slate-700"
+                              )}>
+                                {format(new Date(time.startDate), 'dd/MM/yy', { locale: it })}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-1 py-3 whitespace-nowrap align-bottom text-center">
+                            <div className="pb-[1px]">
+                              <span className={cn(
+                                "font-bold leading-none",
+                                isCurrent ? "text-xs text-slate-900" : "text-[10px] text-slate-600"
+                              )}>
+                                {format(new Date(time.endDate), 'dd/MM/yy', { locale: it })}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-1 py-3 whitespace-nowrap align-bottom text-center">
+                            <div className="pb-0.5">
+                              <span className={cn(
+                                "font-black text-white px-2 py-1 rounded shadow-sm inline-block min-w-[42px]",
+                                isCurrent ? "bg-lake-green text-[11px]" : "bg-lake-green/50 text-[9px]"
+                              )}>
+                                {time.startTime}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-1 py-3 whitespace-nowrap align-bottom text-center">
+                            <div className="pb-0.5">
+                              <span className={cn(
+                                "font-black text-white px-2 py-1 rounded shadow-sm inline-block min-w-[42px]",
+                                isCurrent ? "bg-rose-600 text-[11px]" : "bg-rose-600/50 text-[9px]"
+                              )}>
+                                {time.endTime}
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
+              
+              {huntingTimes.length > 2 && (
+                <button
+                  onClick={() => setShowAllTimes(!showAllTimes)}
+                  className="w-full py-3 bg-white hover:bg-slate-50 border-t border-slate-100 flex items-center justify-center gap-2 transition-colors group"
+                >
+                  <span className="text-[10px] font-black text-slate-400 group-hover:text-lake-green uppercase tracking-[0.2em]">
+                    {showAllTimes ? 'Mostra meno periodi' : `Mostra altri ${huntingTimes.length - 2} periodi`}
+                  </span>
+                  <div className={cn("transition-transform duration-300", showAllTimes ? "rotate-180" : "")}>
+                    <ChevronDown size={14} className="text-slate-300 group-hover:text-lake-green" />
+                  </div>
+                </button>
+              )}
             </div>
           )}
         </div>
