@@ -226,7 +226,7 @@ function Login() {
       <div className="max-w-md w-full bg-white p-8 sm:p-10 text-center rounded-xl shadow-2xl border-t-8 border-lake-green">
         <div className="w-20 h-20 sm:w-24 sm:h-24 bg-white rounded-full flex items-center justify-center mx-auto mb-6 sm:mb-8 shadow-xl overflow-hidden border-4 border-lake-green/10 p-2">
           <img 
-            src="/logo_lago.png?v=3" 
+            src="/logo_lago.png" 
             alt="Logo" 
             className="w-full h-full object-contain"
             onError={(e) => {
@@ -315,7 +315,7 @@ function PrivateRoute({ children, allowPending = false }: { children: React.Reac
 
 function Logo() {
   const [error, setError] = React.useState(false);
-  const logoUrl = "/logo_lago.png?v=3";
+  const logoUrl = "/logo_lago.png";
   
   return (
     <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
