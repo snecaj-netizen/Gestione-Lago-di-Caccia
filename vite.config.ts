@@ -17,8 +17,8 @@ export default defineConfig(({mode}) => {
         includeAssets: ['logo_lago.png'],
         manifestFilename: 'manifest.json',
         manifest: {
-          name: 'Gestione Lago Portale Soci',
-          short_name: 'GestioneLago',
+          name: 'Gestione Lago',
+          short_name: 'LagoSoci',
           description: 'Gestione Lago di Caccia - Soci e Quotisti',
           lang: 'it',
           theme_color: '#0a2e2a',
@@ -29,19 +29,19 @@ export default defineConfig(({mode}) => {
           scope: '/',
           icons: [
             {
-              src: 'logo_lago.png',
+              src: '/logo_lago.png',
               sizes: '192x192',
               type: 'image/png',
               purpose: 'any'
             },
             {
-              src: 'logo_lago.png',
+              src: '/logo_lago.png',
               sizes: '512x512',
               type: 'image/png',
               purpose: 'any'
             },
             {
-              src: 'logo_lago.png',
+              src: '/logo_lago.png',
               sizes: '512x512',
               type: 'image/png',
               purpose: 'maskable'

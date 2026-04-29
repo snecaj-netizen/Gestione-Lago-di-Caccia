@@ -46,11 +46,12 @@ function Sidebar({ isOpen, setIsOpen }: { isOpen: boolean, setIsOpen: (val: bool
 
   React.useEffect(() => {
     const handler = (e: any) => {
-      console.log('PWA: beforeinstallprompt caught in Sidebar');
+      console.log('PWA: beforeinstallprompt event fired in Sidebar');
       e.preventDefault();
       setDeferredPrompt(e);
     };
     window.addEventListener('beforeinstallprompt', handler);
+    window.addEventListener('appinstalled', () => setDeferredPrompt(null));
     return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
 
@@ -210,14 +211,30 @@ function Login() {
   React.useEffect(() => {
     seedUsers();
     
+    // Debug PWA status
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistration().then(reg => {
+        console.log('PWA: Service Worker registration state:', reg ? 'Found' : 'Not found');
+        if (reg) console.log('PWA: Registration active:', !!reg.active);
+      });
+    }
+
     const handler = (e: any) => {
-      console.log('PWA: beforeinstallprompt caught in Login');
+      console.log('PWA: beforeinstallprompt event fired!');
       e.preventDefault();
       setDeferredPrompt(e);
+      // Let the user know the prompt is ready (internally)
     };
     
     window.addEventListener('beforeinstallprompt', handler);
-    return () => window.removeEventListener('beforeinstallprompt', handler);
+    window.addEventListener('appinstalled', () => {
+      console.log('PWA: App was successfully installed');
+      setDeferredPrompt(null);
+    });
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handler);
+    };
   }, []);
 
   const handleInstall = async () => {
@@ -246,7 +263,22 @@ function Login() {
   return (
     <div className="min-h-screen bg-bg-body flex items-center justify-center p-4">
       <div className="max-w-md w-full bg-white p-8 sm:p-10 text-center rounded-xl shadow-2xl border-t-8 border-lake-green">
-        <div className="w-20 h-20 sm:w-24 sm:h-24 bg-white rounded-full flex items-center justify-center mx-auto mb-6 sm:mb-8 shadow-xl overflow-hidden border-4 border-lake-green/10 p-2">
+        <div 
+          className="w-20 h-20 sm:w-24 sm:h-24 bg-white rounded-full flex items-center justify-center mx-auto mb-6 sm:mb-8 shadow-xl overflow-hidden border-4 border-lake-green/10 p-2 cursor-help"
+          onClick={() => {
+            console.log('PWA Status Check:');
+            console.log('- Deferred Prompt:', !!deferredPrompt);
+            if ('serviceWorker' in navigator) {
+              navigator.serviceWorker.getRegistration().then(reg => {
+                console.log('- SW Registration:', reg ? 'Found' : 'Missing');
+                if (reg) {
+                  console.log('- SW State:', reg.active ? 'Active' : 'Not active');
+                  console.log('- SW Scope:', reg.scope);
+                }
+              });
+            }
+          }}
+        >
           <img 
             src="/logo_lago.png" 
             alt="Logo" 
@@ -309,6 +341,10 @@ function Login() {
             </button>
           </div>
         )}
+        
+        <div className="mt-8 text-[8px] text-slate-300 font-mono tracking-tighter invisible group-hover:visible">
+          PWA: {deferredPrompt ? 'READY' : 'WAITING'} | { 'serviceWorker' in navigator ? 'SW_SUPPORTED' : 'NO_SW' }
+        </div>
       </div>
     </div>
   );
