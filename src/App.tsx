@@ -177,6 +177,11 @@ function Sidebar({ isOpen, setIsOpen }: { isOpen: boolean, setIsOpen: (val: bool
               <LogOut size={18} />
               Esci dal portale
             </button>
+            <div className="pt-2 text-center">
+              <p className="text-[9px] font-medium text-white/30 uppercase tracking-widest">
+                © 2026 Stefano Necaj
+              </p>
+            </div>
           </div>
         </div>
       </aside>
