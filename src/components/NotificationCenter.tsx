@@ -8,10 +8,9 @@ import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'motion/react';
 
-export function NotificationCenter() {
+export function NotificationCenter({ isOpen, onToggle }: { isOpen: boolean, onToggle: (val: boolean) => void }) {
   const { profile } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
     if (!profile?.uid) return;
@@ -32,7 +31,7 @@ export function NotificationCenter() {
   return (
     <div className="relative">
       <button 
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => onToggle(!isOpen)}
         className="relative p-2 text-slate-500 hover:text-lake-green transition-colors bg-white rounded-full shadow-sm border border-slate-100"
       >
         <Bell size={20} />
@@ -45,21 +44,16 @@ export function NotificationCenter() {
 
       <AnimatePresence>
         {isOpen && (
-          <>
-            <div 
-              className="fixed inset-0 z-[60]" 
-              onClick={() => setIsOpen(false)} 
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              className="absolute right-0 mt-3 w-80 sm:w-96 bg-white rounded-xl shadow-2xl border border-slate-100 z-[70] overflow-hidden origin-top-right"
-            >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 10 }}
+            className="absolute right-0 mt-3 w-80 sm:w-96 bg-white rounded-xl shadow-2xl border border-slate-100 z-[70] overflow-hidden origin-top-right"
+          >
               <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-off-white/50">
                 <h3 className="text-xs font-black text-lake-green uppercase tracking-widest">Notifiche</h3>
                 <button 
-                  onClick={() => setIsOpen(false)}
+                  onClick={() => onToggle(false)}
                   className="text-slate-400 hover:text-slate-600"
                 >
                   <X size={16} />
@@ -125,7 +119,6 @@ export function NotificationCenter() {
                 </div>
               )}
             </motion.div>
-          </>
         )}
       </AnimatePresence>
     </div>

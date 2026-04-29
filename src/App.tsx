@@ -394,9 +394,35 @@ function MainLayout() {
   const { profile, logout } = useAuth();
   const [isOpen, setIsOpen] = React.useState(false);
   const [showProfileMenu, setShowProfileMenu] = React.useState(false);
+  const [showNotifications, setShowNotifications] = React.useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = React.useState(false);
   const location = useLocation();
   const navigate = useNavigate();
+
+  // Handle mutual exclusivity
+  const toggleNotifications = (val: boolean) => {
+    if (val) {
+      setShowProfileMenu(false);
+      setIsOpen(false);
+    }
+    setShowNotifications(val);
+  };
+
+  const toggleProfileMenu = (val: boolean) => {
+    if (val) {
+      setShowNotifications(false);
+      setIsOpen(false);
+    }
+    setShowProfileMenu(val);
+  };
+
+  const toggleSidebar = (val: boolean) => {
+    if (val) {
+      setShowNotifications(false);
+      setShowProfileMenu(false);
+    }
+    setIsOpen(val);
+  };
 
   // Swipe back logic
   React.useEffect(() => {
@@ -439,13 +465,30 @@ function MainLayout() {
 
   return (
     <div className="flex min-h-screen bg-slate-50">
-      <Sidebar isOpen={isOpen} setIsOpen={setIsOpen} />
+      <Sidebar isOpen={isOpen} setIsOpen={toggleSidebar} />
+      
+      {/* Global Overlay for Menus (Profile/Notifications) */}
+      <AnimatePresence>
+        {(showProfileMenu || showNotifications) && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/20 z-[25] backdrop-blur-[1px]"
+            onClick={() => {
+              setShowProfileMenu(false);
+              setShowNotifications(false);
+            }}
+          />
+        )}
+      </AnimatePresence>
+
       <div className="flex-1 lg:ml-64 flex flex-col min-w-0">
         {/* Top Header */}
-        <header className="fixed top-0 right-0 left-0 lg:left-64 h-16 bg-white/80 backdrop-blur-md border-b border-slate-100 z-20 flex items-center justify-between px-4 sm:px-8 shadow-sm">
+        <header className="fixed top-0 right-0 left-0 lg:left-64 h-16 bg-white/80 backdrop-blur-md border-b border-slate-100 z-[30] flex items-center justify-between px-4 sm:px-8 shadow-sm">
           {/* Mobile Menu Toggle */}
           <button 
-            onClick={() => setIsOpen(!isOpen)}
+            onClick={() => toggleSidebar(!isOpen)}
             className="lg:hidden flex flex-col items-center text-lake-green hover:bg-slate-100 rounded-md transition-colors px-1"
           >
             <Menu size={24}/>
@@ -460,12 +503,12 @@ function MainLayout() {
           <div className="hidden lg:block flex-1" />
 
           <div className="flex items-center gap-4">
-            <NotificationCenter />
+            <NotificationCenter isOpen={showNotifications} onToggle={toggleNotifications} />
             <div className="h-8 w-[1px] bg-slate-100 mx-1 hidden sm:block" />
             
             <div className="relative">
               <button 
-                onClick={() => setShowProfileMenu(!showProfileMenu)}
+                onClick={() => toggleProfileMenu(!showProfileMenu)}
                 className="flex items-center gap-3 hover:bg-slate-50 p-1 rounded-lg transition-colors cursor-pointer"
               >
                 <div className="hidden sm:block text-right">
@@ -481,13 +524,14 @@ function MainLayout() {
                 </div>
               </button>
 
-              {showProfileMenu && (
-                <>
-                  <div 
-                    className="fixed inset-0 z-30" 
-                    onClick={() => setShowProfileMenu(false)}
-                  />
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-slate-100 py-1 z-40 transform origin-top-right transition-all animate-in fade-in zoom-in duration-200">
+              <AnimatePresence>
+                {showProfileMenu && (
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                    className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-slate-100 py-1 z-40 transform origin-top-right transition-all"
+                  >
                     <div className="px-4 py-2 border-b border-slate-50 lg:hidden">
                       <p className="text-xs font-black text-slate-900">{profile?.displayName}</p>
                       <p className="text-[10px] font-bold text-lake-green uppercase tracking-tighter">{profile?.role}</p>
@@ -512,9 +556,9 @@ function MainLayout() {
                       <LogOut size={14} />
                       Esci (Logout)
                     </button>
-                  </div>
-                </>
-              )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </div>
         </header>
