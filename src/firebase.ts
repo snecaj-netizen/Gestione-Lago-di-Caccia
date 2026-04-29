@@ -17,6 +17,11 @@ const firebaseConfig = {
   firestoreDatabaseId: metaEnv.VITE_FIREBASE_FIRESTORE_DB_ID || ""
 };
 
+// Log warning if config is likely missing
+if (!firebaseConfig.apiKey && typeof window !== 'undefined') {
+  console.warn("⚠️ Firebase configuration missing! Ensure environment variables prefixed with VITE_FIREBASE_ are set in settings.");
+}
+
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId || '(default)');
 export const auth = getAuth(app);
