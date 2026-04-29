@@ -15,34 +15,44 @@ export default defineConfig(({mode}) => {
       VitePWA({
         registerType: 'autoUpdate',
         includeAssets: ['logo_lago.png'],
+        manifestFilename: 'manifest.json',
         manifest: {
-          name: 'Gestione Lago',
-          short_name: 'LagoSoci',
+          name: 'Gestione Lago Portale Soci',
+          short_name: 'GestioneLago',
           description: 'Gestione Lago di Caccia - Soci e Quotisti',
           lang: 'it',
           theme_color: '#0a2e2a',
           background_color: '#ffffff',
           display: 'standalone',
+          orientation: 'portrait',
           start_url: '/',
           scope: '/',
           icons: [
             {
-              src: 'logo_lago.png',
+              src: '/logo_lago.png',
               sizes: '192x192',
-              type: 'image/png'
+              type: 'image/png',
+              purpose: 'any'
             },
             {
-              src: 'logo_lago.png',
-              sizes: '512x512',
-              type: 'image/png'
-            },
-            {
-              src: 'logo_lago.png',
+              src: '/logo_lago.png',
               sizes: '512x512',
               type: 'image/png',
-              purpose: 'any maskable'
+              purpose: 'any'
+            },
+            {
+              src: '/logo_lago.png',
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'maskable'
             }
           ]
+        },
+        workbox: {
+          globPatterns: ['**/*.{js,css,html,ico,png,svg,json,webmanifest}'],
+          cleanupOutdatedCaches: true,
+          clientsClaim: true,
+          skipWaiting: true
         }
       })
     ],
