@@ -9,7 +9,7 @@ import {
   useLocation,
   useNavigate
 } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
   Calendar as CalendarIcon, 
   CloudSun, 
@@ -558,7 +558,7 @@ function MainLayout() {
                 exit={{ opacity: 0, x: -20 }}
                 transition={{ duration: 0.2, ease: "easeOut" }}
               >
-                <Routes location={location} key={location.pathname}>
+                <Routes location={location}>
                   <Route path="/" element={<HuntingCalendar />} />
                   {(profile?.role === 'admin' || profile?.role === 'socio') && (
                     <>

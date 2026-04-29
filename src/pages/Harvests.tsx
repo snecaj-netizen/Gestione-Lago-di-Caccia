@@ -3,11 +3,12 @@ import {
   addHarvest, 
   updateHarvest,
   deleteHarvest,
-  subscribeToHarvests 
+  subscribeToHarvests,
+  subscribeToUsers
 } from '../services';
-import { Harvest } from '../types';
+import { Harvest, UserProfile } from '../types';
 import { useAuth } from '../contexts/AuthContext';
-import { Plus, Target, Trash2, Search, Filter, X, Edit2 } from 'lucide-react';
+import { Plus, Target, Trash2, Search, Filter, X, Edit2, User } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -42,21 +43,33 @@ export function Harvests() {
   const [editingItem, setEditingItem] = useState<Harvest | null>(null);
   const [itemToDelete, setItemToDelete] = useState<Harvest | null>(null);
   const [speciesSuggestions, setSpeciesSuggestions] = useState<string[]>([]);
+  const [users, setUsers] = useState<UserProfile[]>([]);
 
   const [formData, setFormData] = useState({
     date: format(new Date(), 'yyyy-MM-dd'),
     species: '',
-    count: 1
+    count: 1,
+    hunterUid: '',
+    hunterName: ''
   });
 
   useEffect(() => {
-    return subscribeToHarvests((data) => {
+    const unsubHarvests = subscribeToHarvests((data) => {
       setItems(data);
-      // Auto-suggest logic: unique species from history
       const uniqueSpecies = Array.from(new Set(data.map(i => i.species))).sort();
       setSpeciesSuggestions(uniqueSpecies);
       setLoading(false);
     });
+
+    const unsubUsers = subscribeToUsers((data) => {
+      const activeHunters = data.filter(u => u.isActive && (u.role === 'admin' || u.role === 'socio' || u.role === 'quotista'));
+      setUsers(activeHunters);
+    });
+
+    return () => {
+      unsubHarvests();
+      unsubUsers();
+    };
   }, []);
 
   const handleOpenAdd = () => {
@@ -64,7 +77,9 @@ export function Harvests() {
     setFormData({
       date: format(new Date(), 'yyyy-MM-dd'),
       species: '',
-      count: 1
+      count: 1,
+      hunterUid: profile?.uid || '',
+      hunterName: profile?.displayName || ''
     });
     setShowModal(true);
   };
@@ -74,7 +89,9 @@ export function Harvests() {
     setFormData({
       date: item.date,
       species: item.species,
-      count: item.count
+      count: item.count,
+      hunterUid: item.hunterUid,
+      hunterName: item.hunterName
     });
     setShowModal(true);
   };
@@ -83,16 +100,21 @@ export function Harvests() {
     e.preventDefault();
     if (!profile) return;
     
+    // Ensure hunter information is set
+    // For admins, it might have been selected. For others, it's pre-filled or automatic.
+    const submissionData = {
+      ...formData,
+      // Safety: always ensure name matches UID if it's the current user, 
+      // or if admin selected a different user, keep those.
+      // But if we're not admin, force current user.
+      hunterUid: profile.role === 'admin' ? formData.hunterUid : profile.uid,
+      hunterName: profile.role === 'admin' ? formData.hunterName : profile.displayName
+    };
+
     if (editingItem) {
-      await updateHarvest(editingItem.id, {
-        ...formData
-      });
+      await updateHarvest(editingItem.id, submissionData);
     } else {
-      await addHarvest({
-        ...formData,
-        hunterUid: profile.uid,
-        hunterName: profile.displayName
-      });
+      await addHarvest(submissionData);
     }
     setShowModal(false);
   };
@@ -233,6 +255,35 @@ export function Harvests() {
                     {speciesSuggestions.map(s => <option key={s} value={s} />)}
                   </datalist>
                 </div>
+
+                {profile?.role === 'admin' && (
+                  <div className="space-y-2">
+                    <label className="text-[0.65rem] font-black text-slate-400 uppercase tracking-widest">Assegna a Cacciatore</label>
+                    <div className="relative">
+                      <select 
+                        required
+                        value={formData.hunterUid}
+                        onChange={e => {
+                          const user = users.find(u => u.uid === e.target.value);
+                          if (user) {
+                            setFormData({ 
+                              ...formData, 
+                              hunterUid: user.uid, 
+                              hunterName: user.displayName 
+                            });
+                          }
+                        }}
+                        className="w-full bg-off-white border border-slate-200 rounded px-10 py-2.5 text-sm font-bold text-slate-gray outline-none focus:border-lake-green appearance-none"
+                      >
+                        <option value="" disabled>Seleziona Cacciatore</option>
+                        {users.map(u => (
+                          <option key={u.uid} value={u.uid}>{u.displayName}</option>
+                        ))}
+                      </select>
+                      <User size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                    </div>
+                  </div>
+                )}
 
                 <div className="flex gap-4 pt-2">
                   <button 

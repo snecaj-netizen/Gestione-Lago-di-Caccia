@@ -214,23 +214,6 @@ export const seedUsers = async () => {
       });
     }
 
-    // Check if test quotista exists
-    const qQuotista = query(usersRef, where('username', '==', 'quotista'));
-    const quotistaSnap = await getDocs(qQuotista);
-
-    if (quotistaSnap.empty) {
-      const newQuotistaRef = doc(usersRef);
-      await setDoc(newQuotistaRef, {
-        uid: newQuotistaRef.id,
-        email: 'quotista@test.com',
-        username: 'quotista',
-        password: 'password',
-        displayName: 'Test Quotista',
-        role: 'quotista',
-        isActive: true,
-        assignedDaysOfWeek: [0, 6] // Weekend
-      });
-    }
     console.log("Users seeded successfully");
   } catch (error) {
     console.error("Seeding error:", error);
