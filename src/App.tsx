@@ -45,10 +45,13 @@ function Sidebar({ isOpen, setIsOpen }: { isOpen: boolean, setIsOpen: (val: bool
   const [deferredPrompt, setDeferredPrompt] = React.useState<any>(null);
 
   React.useEffect(() => {
-    window.addEventListener('beforeinstallprompt', (e) => {
+    const handler = (e: any) => {
+      console.log('PWA: beforeinstallprompt caught in Sidebar');
       e.preventDefault();
       setDeferredPrompt(e);
-    });
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
 
   const handleInstallClick = async () => {
@@ -202,11 +205,30 @@ function Login() {
   const [password, setPassword] = React.useState('');
   const [error, setError] = React.useState('');
   const [isSubmitting, setIsSubmitting] = React.useState(false);
-  const [showForm, setShowForm] = React.useState(false);
+  const [deferredPrompt, setDeferredPrompt] = React.useState<any>(null);
 
   React.useEffect(() => {
     seedUsers();
+    
+    const handler = (e: any) => {
+      console.log('PWA: beforeinstallprompt caught in Login');
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
+
+  const handleInstall = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    console.log(`PWA: User choice: ${outcome}`);
+    if (outcome === 'accepted') {
+      setDeferredPrompt(null);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -274,6 +296,19 @@ function Login() {
             {isSubmitting ? 'Accesso in corso...' : 'Accedi al Portale'}
           </button>
         </form>
+
+        {deferredPrompt && (
+          <div className="mt-8 pt-6 border-t border-slate-100 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Installazione Consigliata</p>
+            <button 
+              onClick={handleInstall}
+              className="w-full bg-accent-gold text-lake-green font-black py-3 px-6 rounded-lg transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 uppercase text-[0.65rem] tracking-[0.2em] hover:bg-accent-gold/90 border border-lake-green/10"
+            >
+              <Download size={16} />
+              Installa App Sul Telefono
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -29,19 +29,19 @@ export default defineConfig(({mode}) => {
           scope: '/',
           icons: [
             {
-              src: '/logo_lago.png',
+              src: 'logo_lago.png',
               sizes: '192x192',
               type: 'image/png',
               purpose: 'any'
             },
             {
-              src: '/logo_lago.png',
+              src: 'logo_lago.png',
               sizes: '512x512',
               type: 'image/png',
               purpose: 'any'
             },
             {
-              src: '/logo_lago.png',
+              src: 'logo_lago.png',
               sizes: '512x512',
               type: 'image/png',
               purpose: 'maskable'
@@ -52,7 +52,12 @@ export default defineConfig(({mode}) => {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,json,webmanifest}'],
           cleanupOutdatedCaches: true,
           clientsClaim: true,
-          skipWaiting: true
+          skipWaiting: true,
+          navigateFallback: 'index.html'
+        },
+        devOptions: {
+          enabled: true,
+          type: 'module'
         }
       })
     ],
