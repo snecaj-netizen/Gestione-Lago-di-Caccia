@@ -22,7 +22,9 @@ import {
   User as UserIcon,
   Camera,
   Bird,
-  Download
+  Download,
+  Waves,
+  Fish
 } from 'lucide-react';
 import { cn } from './lib/utils';
 
@@ -118,7 +120,11 @@ function Sidebar({ isOpen, setIsOpen }: { isOpen: boolean, setIsOpen: (val: bool
             <X size={28} />
           </button>
 
-          <nav className="flex-1 pt-20 lg:pt-8">
+          <div className="flex flex-col items-center pt-20 lg:pt-8 mb-6">
+            <Logo />
+            <p className="mt-4 text-xs font-serif text-white/50 tracking-widest uppercase">Gestione Lago</p>
+          </div>
+          <nav className="flex-1">
             <ul>
               {navItems.map((item) => (
                 <Link
@@ -263,30 +269,10 @@ function Login() {
   return (
     <div className="min-h-screen bg-bg-body flex items-center justify-center p-4">
       <div className="max-w-md w-full bg-white p-8 sm:p-10 text-center rounded-xl shadow-2xl border-t-8 border-lake-green">
-        <div 
-          className="w-20 h-20 sm:w-24 sm:h-24 bg-white rounded-full flex items-center justify-center mx-auto mb-6 sm:mb-8 shadow-xl overflow-hidden border-4 border-lake-green/10 p-2 cursor-help"
-          onClick={() => {
-            console.log('PWA Status Check:');
-            console.log('- Deferred Prompt:', !!deferredPrompt);
-            if ('serviceWorker' in navigator) {
-              navigator.serviceWorker.getRegistration().then(reg => {
-                console.log('- SW Registration:', reg ? 'Found' : 'Missing');
-                if (reg) {
-                  console.log('- SW State:', reg.active ? 'Active' : 'Not active');
-                  console.log('- SW Scope:', reg.scope);
-                }
-              });
-            }
-          }}
-        >
-          <img 
-            src="/logo_lago.png" 
-            alt="Logo" 
-            className="w-full h-full object-contain"
-            onError={(e) => {
-              (e.target as HTMLImageElement).src = 'https://via.placeholder.com/150?text=Logo';
-            }}
-          />
+        <div className="mb-8 flex justify-center">
+          <div className="w-20 h-20 sm:w-24 sm:h-24 bg-white rounded-full flex items-center justify-center mx-auto shadow-xl border-4 border-lake-green/10 p-2">
+            <Bird className="text-lake-green w-10 h-10 sm:w-12 sm:h-12" />
+          </div>
         </div>
         <h1 className="text-2xl sm:text-3xl font-serif text-lake-green mb-2 sm:mb-4">Gestione Lago</h1>
         <p className="text-slate-gray mb-8 sm:mb-10 font-medium text-sm">Portale riservato ai soci e quotisti</p>
@@ -341,10 +327,6 @@ function Login() {
             </button>
           </div>
         )}
-        
-        <div className="mt-8 text-[8px] text-slate-300 font-mono tracking-tighter invisible group-hover:visible">
-          PWA: {deferredPrompt ? 'READY' : 'WAITING'} | { 'serviceWorker' in navigator ? 'SW_SUPPORTED' : 'NO_SW' }
-        </div>
       </div>
     </div>
   );
@@ -385,34 +367,12 @@ function PrivateRoute({ children, allowPending = false }: { children: React.Reac
 }
 
 function Logo() {
-  const [error, setError] = React.useState(false);
-  const logoUrl = "/logo_lago.png";
-  
   return (
     <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
       <Link to="/" className="flex items-center justify-center group flex-col">
-        <div className="w-11 h-11 bg-white rounded-full flex items-center justify-center shadow-lg group-hover:scale-110 group-active:scale-95 transition-all duration-300 ring-4 ring-lake-green/5 overflow-hidden border border-slate-100 p-1">
-          {!error ? (
-            <img 
-              src={logoUrl} 
-              alt="Gestione Lago" 
-              className="w-full h-full object-contain"
-              onLoad={() => console.log('Logo loaded successfully')}
-              onError={(e) => {
-                console.error('Logo failed to load:', logoUrl);
-                setError(true);
-              }}
-            />
-          ) : (
-            <div className="text-lake-green flex items-center justify-center">
-              {/* Stylized Duck SVG inspirated by the ink drawing */}
-              <svg viewBox="0 0 24 24" className="w-8 h-8 fill-current drop-shadow-sm">
-                <path d="M21,11C20.3,10.1 19.4,9.5 18.5,9.2C18.8,8.2 18.8,7.2 18.3,6.2C17.5,4.7 15.7,4.1 14.2,4.8C13.4,5.2 12.8,5.8 12.4,6.6C10.9,6.2 9.2,6.5 8,7.5C6.8,8.5 6.2,10 6.2,11.5C6.2,12.5 6.4,13.5 6.9,14.3C5.1,14.6 3.5,15.7 2.6,17.4C2.3,17.8 2.5,18.3 2.9,18.6C3.3,18.9 3.8,18.7 4.1,18.3C4.8,17.1 6.1,16.3 7.4,16.1C8.2,17.2 9.4,18 10.8,18.3C12.2,18.6 13.7,18.3 14.8,17.5C16,16.7 16.7,15.4 16.9,14C18.2,14.5 19.6,14.3 20.7,13.5C21.1,13.2 21.2,12.7 20.9,12.3C20.6,11.9 20.1,11.8 19.7,12.1C19,12.6 18.1,12.7 17.3,12.4C17.6,11.9 17.8,11.4 17.8,10.9C18.4,11 19,11.2 19.5,11.6C19.9,11.9 20.4,11.8 20.7,11.4C20.9,11.1 20.9,10.6 20.5,10.4C20,10.1 19.5,10 19,10C19.7,10.2 20.4,10.5 21,11M14,8C14.6,8 15,7.6 15,7C15,6.4 14.6,6 14,6C13.4,6 13,6.4 13,7C13,7.6 13.4,8 14,8Z" />
-              </svg>
-            </div>
-          )}
+        <div className="w-11 h-11 bg-white rounded-full flex items-center justify-center shadow-lg group-hover:scale-110 group-active:scale-95 transition-all duration-300 ring-4 ring-lake-green/5 border border-slate-100 p-2">
+          <Bird className="text-lake-green w-7 h-7" />
         </div>
-        <span className="sr-only">Calendario Venatorio</span>
       </Link>
     </div>
   );

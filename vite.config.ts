@@ -14,7 +14,7 @@ export default defineConfig(({mode}) => {
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['logo_lago.png'],
+        includeAssets: [],
         manifestFilename: 'manifest.json',
         manifest: {
           name: 'Gestione Lago',
@@ -29,21 +29,21 @@ export default defineConfig(({mode}) => {
           scope: '/',
           icons: [
             {
-              src: 'logo_lago.png',
+              src: 'https://placehold.co/192x192/0a2e2a/ffffff/png?text=LAGO',
               sizes: '192x192',
-              type: 'image/jpeg',
+              type: 'image/png',
               purpose: 'any'
             },
             {
-              src: 'logo_lago.png',
+              src: 'https://placehold.co/512x512/0a2e2a/ffffff/png?text=LAGO',
               sizes: '512x512',
-              type: 'image/jpeg',
+              type: 'image/png',
               purpose: 'any'
             },
             {
-              src: 'logo_lago.png',
+              src: 'https://placehold.co/512x512/0a2e2a/ffffff/png?text=LAGO',
               sizes: '512x512',
-              type: 'image/jpeg',
+              type: 'image/png',
               purpose: 'maskable'
             }
           ]
