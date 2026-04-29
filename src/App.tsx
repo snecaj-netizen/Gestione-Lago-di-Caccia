@@ -121,8 +121,8 @@ function Sidebar({ isOpen, setIsOpen }: { isOpen: boolean, setIsOpen: (val: bool
           </button>
 
           <div className="flex flex-col items-center pt-20 lg:pt-8 mb-6">
-            <Logo />
-            <p className="mt-4 text-xs font-serif text-white/50 tracking-widest uppercase">Gestione Lago</p>
+            {/* Logo removed here */}
+            <p className="mt-4 text-[10px] font-black text-white/40 uppercase tracking-[0.3em] font-sans">Lago di Caccia</p>
           </div>
           <nav className="flex-1">
             <ul>
@@ -368,10 +368,15 @@ function PrivateRoute({ children, allowPending = false }: { children: React.Reac
 
 function Logo() {
   return (
-    <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-      <Link to="/" className="flex items-center justify-center group flex-col">
-        <div className="w-11 h-11 bg-white rounded-full flex items-center justify-center shadow-lg group-hover:scale-110 group-active:scale-95 transition-all duration-300 ring-4 ring-lake-green/5 border border-slate-100 p-2">
-          <Bird className="text-lake-green w-7 h-7" />
+    <div className="flex flex-col items-center justify-center">
+      <Link to="/" className="group flex flex-col items-center">
+        <div className="relative">
+          <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 group-active:scale-95 transition-all duration-300 border border-slate-100 p-2">
+            <Bird className="text-lake-green w-8 h-8" />
+          </div>
+          <div className="absolute -bottom-1 -right-1 bg-accent-gold p-1 rounded-full shadow-sm">
+            <Waves className="text-white" size={10} />
+          </div>
         </div>
       </Link>
     </div>
@@ -404,7 +409,9 @@ function MainLayout() {
             <span className="text-[10px] font-black uppercase tracking-tighter -mt-0.5">Menu</span>
           </button>
 
-          <Logo />
+          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+            <Logo />
+          </div>
 
           <div className="flex-1 lg:hidden" />
           <div className="hidden lg:block flex-1" />
@@ -498,7 +505,7 @@ function MainLayout() {
           </div>
         )}
 
-        <main className="p-3 sm:p-4 lg:p-10 pt-20 lg:pt-24 min-h-screen w-full">
+        <main className="p-3 sm:p-4 lg:p-10 pt-24 sm:pt-28 lg:pt-32 min-h-screen w-full">
           <div className="max-w-7xl mx-auto w-full">
             <Routes>
               <Route path="/" element={<HuntingCalendar />} />

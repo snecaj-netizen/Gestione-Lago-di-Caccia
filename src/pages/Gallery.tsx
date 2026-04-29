@@ -31,12 +31,9 @@ export function Gallery() {
   const [editingPhoto, setEditingPhoto] = useState<HuntingPhoto | null>(null);
   const [loading, setLoading] = useState(true);
   
-  const [newPhoto, setNewPhoto] = useState({
-    url: '',
-    caption: '',
-    date: format(new Date(), 'yyyy-MM-dd')
-  });
-
+  const [batchPhotos, setBatchPhotos] = useState<{url: string, caption: string, date: string}[]>([]);
+  const [isPublishing, setIsPublishing] = useState(false);
+  
   const [filter, setFilter] = useState<'all' | 'mine'>('all');
   const [selectedPhoto, setSelectedPhoto] = useState<HuntingPhoto | null>(null);
 
@@ -48,55 +45,79 @@ export function Gallery() {
     return () => unsub();
   }, []);
 
-  const handleAddPhoto = async (e: React.FormEvent) => {
+  const handlePublishBatch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!profile || !newPhoto.url) return;
+    if (!profile || batchPhotos.length === 0) return;
     
-    await addPhoto({
-      url: newPhoto.url,
-      caption: newPhoto.caption,
-      date: newPhoto.date
-    }, profile);
-    
-    setShowAddModal(false);
-    setNewPhoto({ url: '', caption: '', date: format(new Date(), 'yyyy-MM-dd') });
+    setIsPublishing(true);
+    try {
+      for (const photo of batchPhotos) {
+        await addPhoto({
+          url: photo.url,
+          caption: photo.caption,
+          date: photo.date
+        }, profile);
+      }
+      setShowAddModal(false);
+      setBatchPhotos([]);
+    } catch (err) {
+      console.error("Error publishing photos:", err);
+    } finally {
+      setIsPublishing(false);
+    }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const img = new window.Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        let width = img.width;
-        let height = img.height;
+    const defaultDate = format(new Date(), 'yyyy-MM-dd');
 
-        if (width > height) {
-          if (width > MAX_IMAGE_SIZE) {
-            height *= MAX_IMAGE_SIZE / width;
-            width = MAX_IMAGE_SIZE;
+    Array.from(files as FileList).forEach((file: File) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new window.Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > MAX_IMAGE_SIZE) {
+              height *= MAX_IMAGE_SIZE / width;
+              width = MAX_IMAGE_SIZE;
+            }
+          } else {
+            if (height > MAX_IMAGE_SIZE) {
+              width *= MAX_IMAGE_SIZE / height;
+              height = MAX_IMAGE_SIZE;
+            }
           }
-        } else {
-          if (height > MAX_IMAGE_SIZE) {
-            width *= MAX_IMAGE_SIZE / height;
-            height = MAX_IMAGE_SIZE;
-          }
-        }
 
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx?.drawImage(img, 0, 0, width, height);
-        
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-        setNewPhoto({ ...newPhoto, url: dataUrl });
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+          
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+          setBatchPhotos(prev => [...prev, { url: dataUrl, caption: '', date: defaultDate }]);
+        };
+        img.src = event.target?.result as string;
       };
-      img.src = event.target?.result as string;
-    };
-    reader.readAsDataURL(file);
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const updateBatchItem = (index: number, updates: any) => {
+    setBatchPhotos(prev => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], ...updates };
+      return copy;
+    });
+  };
+
+  const removeBatchItem = (index: number) => {
+    setBatchPhotos(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleEditPhoto = async (e: React.FormEvent) => {
@@ -184,47 +205,50 @@ export function Gallery() {
                 <img 
                   src={photo.url} 
                   alt={photo.caption || 'Foto di caccia'} 
-                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                   referrerPolicy="no-referrer"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-4">
-                  <p className="text-white text-xs font-medium italic line-clamp-2">
-                    {photo.caption || 'Nessuna descrizione'}
-                  </p>
-                </div>
-                {canManage(photo) && (
-                  <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button 
-                      onClick={() => {
-                        setEditingPhoto(photo);
-                        setShowEditModal(true);
-                      }}
-                      className="p-1.5 bg-white/90 text-slate-700 rounded-full shadow hover:bg-white hover:text-lake-green transition-colors"
-                    >
-                      <Edit2 size={12} />
-                    </button>
-                    <button 
-                      onClick={() => handleDeletePhoto(photo.id)}
-                      className="p-1.5 bg-white/90 text-slate-700 rounded-full shadow hover:bg-white hover:text-rose-600 transition-colors"
-                    >
-                      <Trash2 size={12} />
-                    </button>
+                <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                  <div className="bg-white/20 backdrop-blur-sm p-3 rounded-full border border-white/30 transform scale-75 group-hover:scale-100 transition-all">
+                    <Plus className="text-white" size={24} />
                   </div>
-                )}
+                </div>
               </div>
-              <div className="p-4 bg-white flex-1 flex flex-col justify-between">
-                <div>
+              <div className="p-4 bg-white flex-1 flex flex-col">
+                <div className="mb-4">
                   <div className="flex items-center gap-1.5 text-[9px] font-black uppercase text-slate-400 tracking-widest mb-2">
                     <UserIcon size={10} className="text-lake-green" />
                     {photo.userName}
                   </div>
-                  <p className="text-xs font-bold text-slate-700 leading-snug line-clamp-2 mb-3">
-                    {photo.caption || <em>Senza descrizione</em>}
+                  <p className="text-xs font-bold text-slate-700 leading-snug line-clamp-2 mb-2">
+                    {photo.caption || <em className="text-slate-300 font-normal">Senza descrizione</em>}
                   </p>
-                </div>
-                <div className="flex items-center gap-1.5 text-[10px] font-medium text-slate-400">
-                  <CalendarIcon size={12} />
-                  {photo.date ? format(new Date(photo.date), 'dd MMM yyyy', { locale: it }) : 'N/D'}
+                  <div className="flex items-center justify-between text-[10px] font-medium text-slate-400">
+                    <div className="flex items-center gap-1.5">
+                      <CalendarIcon size={12} />
+                      {photo.date ? format(new Date(photo.date), 'dd MMM yyyy', { locale: it }) : 'N/D'}
+                    </div>
+
+                    {canManage(photo) && (
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={() => {
+                            setEditingPhoto(photo);
+                            setShowEditModal(true);
+                          }}
+                          className="p-1.5 text-slate-400 hover:text-lake-green transition-colors"
+                        >
+                          <Edit2 size={12} />
+                        </button>
+                        <button 
+                          onClick={() => handleDeletePhoto(photo.id)}
+                          className="p-1.5 text-slate-400 hover:text-rose-500 transition-colors"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -282,22 +306,28 @@ export function Gallery() {
               <X size={24} />
             </button>
             
-            <div className="flex items-center gap-3 mb-6">
-              <div className="bg-off-white p-3 rounded border border-slate-100 text-lake-green">
-                <Camera size={24} />
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="bg-off-white p-3 rounded border border-slate-100 text-lake-green">
+                  <Camera size={24} />
+                </div>
+                <div>
+                  <h3 className="text-xl font-serif text-lake-green leading-none mb-1">Carica Foto</h3>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Condividi un momento speciale</p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-xl font-serif text-lake-green leading-none mb-1">Carica Foto</h3>
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Condividi un momento speciale</p>
-              </div>
+              {batchPhotos.length > 0 && (
+                <span className="bg-lake-green text-white text-[10px] font-black px-2 py-1 rounded-full">{batchPhotos.length} foto selezionate</span>
+              )}
             </div>
 
-            <form onSubmit={handleAddPhoto} className="space-y-6">
+            <form onSubmit={handlePublishBatch} className="space-y-6">
               <div className="space-y-4">
                 <input 
                   type="file"
                   accept="image/*"
                   capture="environment"
+                  multiple
                   ref={fileInputRef}
                   onChange={handleFileChange}
                   className="hidden"
@@ -306,6 +336,7 @@ export function Gallery() {
                 <input 
                   type="file"
                   accept="image/*"
+                  multiple
                   ref={galleryInputRef}
                   onChange={handleFileChange}
                   className="hidden"
@@ -315,10 +346,10 @@ export function Gallery() {
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="py-6 border-2 border-dashed border-slate-200 rounded-xl hover:border-lake-green hover:bg-slate-50 transition-all flex flex-col items-center justify-center gap-2 group"
+                    className="py-4 border-2 border-dashed border-slate-200 rounded-xl hover:border-lake-green hover:bg-slate-50 transition-all flex flex-col items-center justify-center gap-2 group"
                   >
-                    <div className="p-3 bg-slate-100 rounded-full group-hover:bg-lake-green group-hover:text-white transition-colors">
-                      <Camera size={24} />
+                    <div className="p-2 bg-slate-100 rounded-full group-hover:bg-lake-green group-hover:text-white transition-colors">
+                      <Camera size={20} />
                     </div>
                     <div className="text-center">
                       <p className="text-[10px] font-black text-slate-700 uppercase tracking-widest">Scatta Foto</p>
@@ -328,10 +359,10 @@ export function Gallery() {
                   <button
                     type="button"
                     onClick={() => galleryInputRef.current?.click()}
-                    className="py-6 border-2 border-dashed border-slate-200 rounded-xl hover:border-lake-green hover:bg-slate-50 transition-all flex flex-col items-center justify-center gap-2 group"
+                    className="py-4 border-2 border-dashed border-slate-200 rounded-xl hover:border-lake-green hover:bg-slate-50 transition-all flex flex-col items-center justify-center gap-2 group"
                   >
-                    <div className="p-3 bg-slate-100 rounded-full group-hover:bg-lake-green group-hover:text-white transition-colors">
-                      <ImagePlus size={24} />
+                    <div className="p-2 bg-slate-100 rounded-full group-hover:bg-lake-green group-hover:text-white transition-colors">
+                      <ImagePlus size={20} />
                     </div>
                     <div className="text-center">
                       <p className="text-[10px] font-black text-slate-700 uppercase tracking-widest">Scegli Libreria</p>
@@ -340,55 +371,62 @@ export function Gallery() {
                 </div>
               </div>
 
-              {newPhoto.url && (
-                <div className="aspect-video bg-slate-50 rounded border border-dashed border-slate-200 overflow-hidden relative">
-                  <img 
-                    src={newPhoto.url} 
-                    alt="Preview" 
-                    className="w-full h-full object-contain"
-                    onError={(e) => (e.currentTarget.src = 'https://picsum.photos/seed/error/400/300?grayscale')}
-                    referrerPolicy="no-referrer"
-                  />
+              {batchPhotos.length > 0 && (
+                <div className="space-y-4 max-h-[40vh] overflow-y-auto pr-2 custom-scrollbar">
+                  {batchPhotos.map((item, index) => (
+                    <div key={index} className="bg-off-white p-4 rounded-lg border border-slate-100 space-y-3 relative group">
+                      <button 
+                        type="button"
+                        onClick={() => removeBatchItem(index)}
+                        className="absolute top-2 right-2 p-1 bg-rose-50 text-rose-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X size={12} />
+                      </button>
+                      <div className="flex gap-4">
+                        <div className="w-20 h-20 bg-white rounded border border-slate-200 overflow-hidden flex-shrink-0">
+                          <img src={item.url} alt="preview" className="w-full h-full object-cover" />
+                        </div>
+                        <div className="flex-1 space-y-3">
+                          <div className="space-y-1">
+                            <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Descrizione</label>
+                            <input 
+                              type="text"
+                              value={item.caption}
+                              onChange={(e) => updateBatchItem(index, { caption: e.target.value })}
+                              className="w-full bg-white border border-slate-200 rounded px-3 py-2 text-xs font-bold text-slate-900 outline-none focus:border-lake-green"
+                              placeholder="Cosa vedi in questa foto?"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Data</label>
+                            <input 
+                              type="date"
+                              value={item.date}
+                              onChange={(e) => updateBatchItem(index, { date: e.target.value })}
+                              className="w-full bg-white border border-slate-200 rounded px-3 py-2 text-xs font-bold text-slate-900 outline-none focus:border-lake-green"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
-
-              <div className="space-y-2">
-                <label className="text-[0.65rem] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
-                  <ImageIcon size={10} /> Descrizione
-                </label>
-                <textarea 
-                  value={newPhoto.caption}
-                  onChange={(e) => setNewPhoto({...newPhoto, caption: e.target.value})}
-                  className="w-full bg-off-white border border-slate-200 rounded px-4 py-3 text-sm font-bold text-slate-900 outline-none focus:border-lake-green h-24 resize-none"
-                  placeholder="Scrivi qualcosa sulla foto..."
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[0.65rem] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
-                  <CalendarIcon size={10} /> Data dello Scatto
-                </label>
-                <input 
-                  type="date"
-                  value={newPhoto.date}
-                  onChange={(e) => setNewPhoto({...newPhoto, date: e.target.value})}
-                  className="w-full bg-off-white border border-slate-200 rounded px-4 py-3 text-sm font-bold text-slate-900 outline-none focus:border-lake-green"
-                />
-              </div>
 
               <div className="pt-4 flex gap-3">
                 <button 
                   type="button"
-                  onClick={() => setShowAddModal(false)}
+                  onClick={() => { setShowAddModal(false); setBatchPhotos([]); }}
                   className="flex-1 py-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-[0.6rem] uppercase tracking-widest rounded transition-all"
                 >
                   Annulla
                 </button>
                 <button 
                   type="submit"
-                  className="flex-1 py-4 bg-lake-green text-accent-gold font-black text-[0.6rem] uppercase tracking-widest rounded shadow-lg hover:bg-opacity-90 active:scale-95 transition-all"
+                  disabled={batchPhotos.length === 0 || isPublishing}
+                  className="flex-1 py-4 bg-lake-green text-accent-gold font-black text-[0.6rem] uppercase tracking-widest rounded shadow-lg hover:bg-opacity-90 active:scale-95 transition-all disabled:opacity-50"
                 >
-                  Pubblica Foto
+                  {isPublishing ? 'Pubblicazione...' : `Pubblica ${batchPhotos.length} ${batchPhotos.length === 1 ? 'Foto' : 'Foto'}`}
                 </button>
               </div>
             </form>

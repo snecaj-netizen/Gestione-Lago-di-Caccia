@@ -12,7 +12,10 @@ import {
   ChevronRight,
   Bird,
   Wallet,
-  ExternalLink
+  ExternalLink,
+  Trophy,
+  Medal,
+  Award
 } from 'lucide-react';
 import { format, subDays, isAfter } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -36,6 +39,17 @@ export function Dashboard() {
   
   const recentHarvests = harvests.slice(0, 5);
   const recentTxs = txs.slice(0, 5);
+
+  // Top Hunters Logic
+  const huntersMap: Record<string, number> = {};
+  harvests.forEach(h => {
+    huntersMap[h.hunterName] = (huntersMap[h.hunterName] || 0) + h.count;
+  });
+
+  const topHunters = Object.entries(huntersMap)
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 3);
 
   const stats = [
     { name: 'Saldo Cassa', value: `€${(totalIncome - totalExpense).toLocaleString()}`, icon: Wallet, color: 'text-lake-green' },
@@ -75,6 +89,77 @@ export function Dashboard() {
           </div>
         ))}
       </div>
+
+      {/* Top Hunters Podium */}
+      <section className="card-polish bg-gradient-to-br from-lake-green to-lake-green/90 text-white overflow-hidden relative">
+        <div className="absolute top-0 right-0 p-8 opacity-10 rotate-12">
+          <Trophy size={160} />
+        </div>
+        
+        <div className="relative z-10">
+          <div className="mb-8 flex items-center gap-3">
+            <div className="bg-white/20 p-2 rounded-lg backdrop-blur-sm">
+              <Trophy size={20} className="text-accent-gold" />
+            </div>
+            <div>
+              <h3 className="text-sm font-black uppercase tracking-widest">Migliori Cacciatori</h3>
+              <p className="text-xs text-white/60 font-medium">Classifica abbattimenti stagionali</p>
+            </div>
+          </div>
+
+          <div className="flex items-end justify-center gap-2 sm:gap-6 pt-4 pb-2">
+            {/* 2nd Place */}
+            {topHunters[1] && (
+              <div className="flex flex-col items-center group">
+                <div className="mb-2 text-center">
+                  <p className="text-[10px] font-black uppercase text-white/50 tracking-tighter leading-none mb-1">2° Posto</p>
+                  <p className="text-xs font-bold truncate max-w-[80px]">{topHunters[1].name.split(' ')[0]}</p>
+                </div>
+                <div className="w-16 sm:w-20 bg-white/10 backdrop-blur-sm border-t-2 border-slate-300 h-20 rounded-t-lg flex flex-col items-center justify-center gap-1 group-hover:bg-white/20 transition-all">
+                  <Medal size={20} className="text-slate-300" />
+                  <span className="text-lg font-black">{topHunters[1].count}</span>
+                </div>
+              </div>
+            )}
+
+            {/* 1st Place */}
+            {topHunters[0] && (
+              <div className="flex flex-col items-center group">
+                <div className="mb-2 text-center scale-110">
+                  <Trophy size={24} className="text-accent-gold mx-auto mb-1 animate-bounce" />
+                  <p className="text-[10px] font-black uppercase text-white/70 tracking-tighter leading-none mb-1 uppercase tracking-widest">Campione</p>
+                  <p className="text-sm font-black truncate max-w-[100px]">{topHunters[0].name.split(' ')[0]}</p>
+                </div>
+                <div className="w-20 sm:w-24 bg-white/20 backdrop-blur-sm border-t-4 border-accent-gold h-32 rounded-t-xl flex flex-col items-center justify-center gap-1 group-hover:bg-white/30 transition-all shadow-2xl relative">
+                  <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-8 h-1 bg-accent-gold/50 blur-sm rounded-full" />
+                  <span className="text-3xl font-black text-accent-gold">{topHunters[0].count}</span>
+                  <span className="text-[8px] font-black uppercase tracking-widest text-white/50">Capi</span>
+                </div>
+              </div>
+            )}
+
+            {/* 3rd Place */}
+            {topHunters[2] && (
+              <div className="flex flex-col items-center group">
+                <div className="mb-2 text-center">
+                  <p className="text-[10px] font-black uppercase text-white/50 tracking-tighter leading-none mb-1">3° Posto</p>
+                  <p className="text-xs font-bold truncate max-w-[80px]">{topHunters[2].name.split(' ')[0]}</p>
+                </div>
+                <div className="w-14 sm:w-16 bg-white/10 backdrop-blur-sm border-t-2 border-amber-700/50 h-16 rounded-t-lg flex flex-col items-center justify-center gap-1 group-hover:bg-white/20 transition-all">
+                  <Award size={18} className="text-amber-600" />
+                  <span className="text-base font-black">{topHunters[2].count}</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {topHunters.length === 0 && (
+            <div className="py-10 text-center">
+              <p className="text-white/40 italic text-sm">Ancora nessun abbattimento registrato</p>
+            </div>
+          )}
+        </div>
+      </section>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Recent Harvests */}
