@@ -8,12 +8,33 @@ import {
 } from '../services';
 import { Harvest, UserProfile } from '../types';
 import { useAuth } from '../contexts/AuthContext';
-import { Plus, Target, Trash2, Search, Filter, X, Edit2, User } from 'lucide-react';
+import { Plus, Target, Trash2, Search, Filter, X, Edit2, User, ChevronDown } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
+
+const SPECIES_LIST = [
+  'Alzavola',
+  'Beccaccino',
+  'Canapiglia',
+  'Codone',
+  'Colombaccio',
+  'Fagiano',
+  'Fischione',
+  'Folaga',
+  'Frullino',
+  'Gallinella',
+  'Germano',
+  'Lepre',
+  'Marzaiola',
+  'Mestolone',
+  'Moriglione',
+  'Porciglione',
+  'Stampi',
+  'Altro'
+].sort();
 
 export function Harvests() {
   const { profile } = useAuth();
@@ -42,7 +63,7 @@ export function Harvests() {
 
   const [editingItem, setEditingItem] = useState<Harvest | null>(null);
   const [itemToDelete, setItemToDelete] = useState<Harvest | null>(null);
-  const [speciesSuggestions, setSpeciesSuggestions] = useState<string[]>([]);
+  const [showSpeciesList, setShowSpeciesList] = useState(false);
   const [users, setUsers] = useState<UserProfile[]>([]);
 
   const [formData, setFormData] = useState({
@@ -56,8 +77,6 @@ export function Harvests() {
   useEffect(() => {
     const unsubHarvests = subscribeToHarvests((data) => {
       setItems(data);
-      const uniqueSpecies = Array.from(new Set(data.map(i => i.species))).sort();
-      setSpeciesSuggestions(uniqueSpecies);
       setLoading(false);
     });
 
@@ -100,6 +119,12 @@ export function Harvests() {
     e.preventDefault();
     if (!profile) return;
     
+    // Non-admins must use the list
+    if (profile.role !== 'admin' && !SPECIES_LIST.includes(formData.species)) {
+      alert('Per favore, seleziona una specie valida dalla lista.');
+      return;
+    }
+
     // Ensure hunter information is set
     // For admins, it might have been selected. For others, it's pre-filled or automatic.
     const submissionData = {
@@ -241,19 +266,67 @@ export function Harvests() {
                   </div>
                 </div>
                 
-                <div className="space-y-2">
+                <div className="space-y-2 relative">
                   <label className="text-[0.65rem] font-black text-slate-400 uppercase tracking-widest">Specie</label>
-                  <input 
-                    list="species"
-                    required
-                    placeholder="Es. Germano, Alzavola..."
-                    value={formData.species}
-                    onChange={e => setFormData({ ...formData, species: e.target.value })}
-                    className="w-full bg-off-white border border-slate-200 rounded px-4 py-2.5 text-sm font-bold text-slate-gray outline-none focus:border-lake-green"
-                  />
-                  <datalist id="species">
-                    {speciesSuggestions.map(s => <option key={s} value={s} />)}
-                  </datalist>
+                  <div className="relative">
+                    <input 
+                      required
+                      placeholder="Cerca o seleziona specie..."
+                      value={formData.species}
+                      onChange={e => {
+                        setFormData({ ...formData, species: e.target.value });
+                        setShowSpeciesList(true);
+                      }}
+                      onFocus={() => setShowSpeciesList(true)}
+                      className="w-full bg-off-white border border-slate-200 rounded px-4 py-2.5 text-sm font-bold text-slate-gray outline-none focus:border-lake-green"
+                    />
+                    <button 
+                      type="button"
+                      onClick={() => setShowSpeciesList(!showSpeciesList)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
+                    >
+                      <ChevronDown size={16} className={cn("transition-transform", showSpeciesList && "rotate-180")} />
+                    </button>
+                  </div>
+
+                  {showSpeciesList && (
+                    <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded shadow-xl max-h-48 overflow-y-auto py-1">
+                      {SPECIES_LIST.filter(s => 
+                        s.toLowerCase().includes(formData.species.toLowerCase())
+                      ).map(s => (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => {
+                            setFormData({ ...formData, species: s });
+                            setShowSpeciesList(false);
+                          }}
+                          className="w-full text-left px-4 py-2 text-sm font-bold text-slate-gray hover:bg-lake-green hover:text-white transition-colors"
+                        >
+                          {s}
+                        </button>
+                      ))}
+                      {profile?.role === 'admin' && formData.species && !SPECIES_LIST.includes(formData.species) && (
+                        <button
+                          type="button"
+                          onClick={() => setShowSpeciesList(false)}
+                          className="w-full text-left px-4 py-2 text-sm font-black text-lake-green hover:bg-slate-50 transition-colors border-t border-slate-100 italic"
+                        >
+                          Usa nuovo: "{formData.species}"
+                        </button>
+                      )}
+                      {SPECIES_LIST.filter(s => 
+                        s.toLowerCase().includes(formData.species.toLowerCase())
+                      ).length === 0 && profile?.role !== 'admin' && (
+                        <div className="px-4 py-2 text-xs text-slate-400 italic">Nessun risultato</div>
+                      )}
+                    </div>
+                  )}
+                  {profile?.role !== 'admin' && formData.species && !SPECIES_LIST.includes(formData.species) && (
+                    <p className="text-[10px] font-bold text-rose-500 italic mt-1">
+                      * Devi selezionare una specie dalla lista ufficiale
+                    </p>
+                  )}
                 </div>
 
                 {profile?.role === 'admin' && (
