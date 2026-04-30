@@ -65,7 +65,16 @@ export const addPhoto = async (photo: Omit<HuntingPhoto, 'id' | 'userUid' | 'use
       userName: user.displayName,
       createdAt: new Date().toISOString()
     };
-    await addDoc(collection(db, 'photos'), photoData);
+    const docRef = await addDoc(collection(db, 'photos'), photoData);
+
+    // Notify admins and soci
+    await notifyAdminsAndSubscribers(
+      "Nuova Foto Gallery",
+      `${user.displayName} ha caricato una nuova foto${photo.caption ? ': ' + photo.caption : ''}`,
+      'photo',
+      `/galleria?view=${docRef.id}`,
+      { photoId: docRef.id }
+    );
   } catch (error) {
     handleFirestoreError(error, OperationType.CREATE, 'photos');
   }
@@ -81,7 +90,8 @@ export const updatePhoto = async (photoId: string, updates: Partial<HuntingPhoto
 
 export const deletePhoto = async (photoId: string) => {
   try {
-    await deleteDoc(doc(db, 'photos', photoId));
+    const photoRef = doc(db, 'photos', photoId);
+    await deleteDoc(photoRef);
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, `photos/${photoId}`);
   }
@@ -231,17 +241,18 @@ export const subscribeToHuntingDays = (callback: (days: HuntingDay[]) => void) =
 
 export const assignHuntingDay = async (day: HuntingDay) => {
   try {
-    await setDoc(doc(db, 'hunting_days', day.date), day);
+    const id = `${day.date}_${day.assignedToUid}`;
+    await setDoc(doc(db, 'hunting_days', id), { ...day, id });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `hunting_days/${day.date}`);
   }
 };
 
-export const unassignHuntingDay = async (date: string) => {
+export const unassignHuntingDay = async (id: string) => {
   try {
-    await deleteDoc(doc(db, 'hunting_days', date));
+    await deleteDoc(doc(db, 'hunting_days', id));
   } catch (error) {
-    handleFirestoreError(error, OperationType.DELETE, `hunting_days/${date}`);
+    handleFirestoreError(error, OperationType.DELETE, `hunting_days/${id}`);
   }
 };
 
@@ -255,10 +266,23 @@ export const subscribeToTransactions = (callback: (txs: Transaction[]) => void) 
 
 export const addTransaction = async (tx: Omit<Transaction, 'id' | 'createdBy'>) => {
   try {
-    await addDoc(collection(db, 'transactions'), {
+    const docRef = await addDoc(collection(db, 'transactions'), {
       ...tx,
       createdBy: auth.currentUser?.uid
     });
+
+    // Notify admins
+    const amount = tx.amount.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' });
+    const targetUid = tx.payerUid || auth.currentUser?.uid;
+    const userName = tx.payerName || "Un utente";
+
+    await notifyAdminsAndSubscribers(
+      "Nuovo Versamento",
+      `${userName} ha effettuato un versamento di ${amount}`,
+      'transaction',
+      '/spese',
+      { transactionId: docRef.id }
+    );
   } catch (error) {
     handleFirestoreError(error, OperationType.CREATE, 'transactions');
   }
@@ -304,7 +328,7 @@ export const subscribeToHarvests = (callback: (harvests: Harvest[]) => void) => 
   }, (error) => handleFirestoreError(error, OperationType.LIST, 'harvests'));
 };
 
-const notifyAdminsAndSoci = async (title: string, body: string, type: Notification['type'], metadata?: any) => {
+const notifyAdminsAndSubscribers = async (title: string, body: string, type: Notification['type'], link?: string, metadata?: any) => {
   try {
     const usersSnap = await getDocs(collection(db, 'users'));
     const recipients = usersSnap.docs
@@ -312,6 +336,8 @@ const notifyAdminsAndSoci = async (title: string, body: string, type: Notificati
       .filter(u => (u.role === 'admin' || u.role === 'socio') && u.isActive);
 
     const promises = recipients.map(async (u) => {
+      // Don't notify the person who triggered it if metadata exists and has current user info? 
+      // Actually simplified logic: notify all relevant roles.
       await addDoc(collection(db, 'notifications'), {
         title,
         body,
@@ -319,6 +345,7 @@ const notifyAdminsAndSoci = async (title: string, body: string, type: Notificati
         targetUid: u.uid,
         read: false,
         createdAt: new Date().toISOString(),
+        link,
         metadata
       });
     });
@@ -334,10 +361,11 @@ export const addHarvest = async (harvest: Omit<Harvest, 'id'>) => {
     const docRef = await addDoc(collection(db, 'harvests'), harvest);
     
     // Notify admins and soci
-    await notifyAdminsAndSoci(
+    await notifyAdminsAndSubscribers(
       "Nuovo Abbattimento",
       `${harvest.hunterName} ha registrato ${harvest.count}x ${harvest.species}`,
       'harvest',
+      `/abbattimenti?highlight=${docRef.id}`,
       { harvestId: docRef.id }
     );
   } catch (error) {
@@ -347,7 +375,29 @@ export const addHarvest = async (harvest: Omit<Harvest, 'id'>) => {
 
 export const updateHarvest = async (harvestId: string, updates: Partial<Harvest>) => {
   try {
-    await updateDoc(doc(db, 'harvests', harvestId), updates);
+    const docRef = doc(db, 'harvests', harvestId);
+    const oldDoc = await getDoc(docRef);
+    const oldData = oldDoc.data() as Harvest;
+    
+    await updateDoc(docRef, updates);
+
+    // Notify about the change
+    const species = updates.species || oldData.species;
+    const count = updates.count !== undefined ? updates.count : oldData.count;
+    const oldCount = oldData.count;
+
+    let message = `${oldData.hunterName} ha modificato un record: ${species}`;
+    if (updates.count !== undefined && updates.count !== oldCount) {
+      message = `${oldData.hunterName} ha aggiornato il numero di capi per ${species}: da ${oldCount} a ${count}`;
+    }
+
+    await notifyAdminsAndSubscribers(
+      "Abbattimento Modificato",
+      message,
+      'harvest',
+      `/abbattimenti?highlight=${harvestId}`,
+      { harvestId, previousCount: oldCount, newCount: count }
+    );
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, `harvests/${harvestId}`);
   }
@@ -373,6 +423,17 @@ export const subscribeToUserNotifications = (uid: string, callback: (notificatio
   }, (error) => handleFirestoreError(error, OperationType.LIST, 'notifications'));
 };
 
+export const createNotification = async (notif: Omit<Notification, 'id' | 'createdAt' | 'read'>) => {
+  try {
+    await addDoc(collection(db, 'notifications'), {
+      ...notif,
+      read: false,
+      createdAt: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error("Error creating manual notification:", error);
+  }
+};
 export const markNotificationAsRead = async (id: string) => {
   try {
     await updateDoc(doc(db, 'notifications', id), { read: true });

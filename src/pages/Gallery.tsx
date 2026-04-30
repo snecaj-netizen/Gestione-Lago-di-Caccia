@@ -19,6 +19,7 @@ import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { useSearchParams } from 'react-router-dom';
 import { cn } from '../lib/utils';
+import { motion, AnimatePresence } from 'motion/react';
 
 const MAX_IMAGE_SIZE = 800; // max width/height in px
 
@@ -59,6 +60,7 @@ export function Gallery() {
   };
 
   const [editingPhoto, setEditingPhoto] = useState<HuntingPhoto | null>(null);
+  const [photoToDelete, setPhotoToDelete] = useState<HuntingPhoto | null>(null);
   const [loading, setLoading] = useState(true);
   
   const [batchPhotos, setBatchPhotos] = useState<{url: string, caption: string, date: string}[]>([]);
@@ -161,9 +163,18 @@ export function Gallery() {
     setEditingPhoto(null);
   };
 
-  const handleDeletePhoto = async (photoId: string) => {
-    if (confirm("Sei sicuro di voler eliminare questa foto?")) {
-      await deletePhoto(photoId);
+  const handleDeletePhoto = async () => {
+    if (!photoToDelete) return;
+    try {
+      const idToDelete = photoToDelete.id;
+      await deletePhoto(idToDelete);
+      if (selectedPhotoId === idToDelete) {
+        setSelectedPhoto(null);
+      }
+      setPhotoToDelete(null);
+    } catch (err) {
+      console.error("Delete error:", err);
+      alert("Errore durante l'eliminazione della foto.");
     }
   };
 
@@ -236,6 +247,8 @@ export function Gallery() {
                   className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                   referrerPolicy="no-referrer"
                 />
+
+                {/* Plus Overlay for viewing */}
                 <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                   <div className="bg-white/20 backdrop-blur-sm p-3 rounded-full border border-white/30 transform scale-75 group-hover:scale-100 transition-all">
                     <Plus className="text-white" size={24} />
@@ -243,39 +256,48 @@ export function Gallery() {
                 </div>
               </div>
               <div className="p-4 bg-white flex-1 flex flex-col">
-                <div className="mb-4">
-                  <div className="flex items-center gap-1.5 text-[9px] font-black uppercase text-slate-400 tracking-widest mb-2">
-                    <UserIcon size={10} className="text-lake-green" />
-                    {photo.userName}
-                  </div>
-                  <p className="text-xs font-bold text-slate-700 leading-snug line-clamp-2 mb-2">
-                    {photo.caption || <em className="text-slate-300 font-normal">Senza descrizione</em>}
-                  </p>
-                  <div className="flex items-center justify-between text-[10px] font-medium text-slate-400">
+                <div className="mb-2">
+                  <div className="flex items-center justify-between gap-1.5 text-[9px] font-black uppercase text-slate-400 tracking-widest mb-2">
                     <div className="flex items-center gap-1.5">
-                      <CalendarIcon size={12} />
-                      {photo.date ? format(new Date(photo.date), 'dd MMM yyyy', { locale: it }) : 'N/D'}
+                      <UserIcon size={10} className="text-lake-green" />
+                      {photo.userName}
                     </div>
-
+                    
+                    {/* Management Buttons - BACK WHERE THEY WERE */}
                     {canManage(photo) && (
-                      <div className="flex gap-2">
+                      <div className="flex gap-1">
                         <button 
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             setEditingPhoto(photo);
                             setShowEditModal(true);
                           }}
                           className="p-1.5 text-slate-400 hover:text-lake-green transition-colors"
+                          title="Modifica"
                         >
-                          <Edit2 size={12} />
+                          <Edit2 size={14} />
                         </button>
                         <button 
-                          onClick={() => handleDeletePhoto(photo.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPhotoToDelete(photo);
+                          }}
                           className="p-1.5 text-slate-400 hover:text-rose-500 transition-colors"
+                          title="Elimina"
                         >
-                          <Trash2 size={12} />
+                          <Trash2 size={14} />
                         </button>
                       </div>
                     )}
+                  </div>
+                  <p className="text-xs font-bold text-slate-700 leading-snug line-clamp-2 mb-3">
+                    {photo.caption || <em className="text-slate-300 font-normal">Senza descrizione</em>}
+                  </p>
+                  <div className="flex items-center justify-between text-[10px] font-medium text-slate-400 border-t border-slate-50 pt-3">
+                    <div className="flex items-center gap-1.5">
+                      <CalendarIcon size={12} />
+                      {photo.date ? format(new Date(photo.date), 'dd MMM yyyy', { locale: it }) : 'N/D'}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -318,6 +340,32 @@ export function Gallery() {
                   {selectedPhoto.date ? format(new Date(selectedPhoto.date), 'dd MMMM yyyy', { locale: it }) : 'N/D'}
                 </div>
               </div>
+              
+              {canManage(selectedPhoto) && (
+                <div className="pt-8 flex justify-center gap-6">
+                  <button 
+                    onClick={() => {
+                      setEditingPhoto(selectedPhoto);
+                      setShowEditModal(true);
+                      setSelectedPhoto(null);
+                    }}
+                    className="flex items-center justify-center p-4 bg-white/10 hover:bg-white/20 text-white rounded-full transition-all border border-white/20 shadow-2xl backdrop-blur-md hover:scale-110"
+                    title="Modifica Foto"
+                  >
+                    <Edit2 size={24} />
+                  </button>
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPhotoToDelete(selectedPhoto);
+                    }}
+                    className="flex items-center justify-center p-4 bg-rose-500/30 hover:bg-rose-500/50 text-rose-100 rounded-full transition-all border border-rose-500/40 shadow-2xl backdrop-blur-md hover:scale-110"
+                    title="Elimina Foto"
+                  >
+                    <Trash2 size={24} />
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -535,6 +583,39 @@ export function Gallery() {
           </div>
         </div>
       )}
+
+      {/* Delete Confirmation Modal */}
+      <AnimatePresence>
+        {photoToDelete && (
+          <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-rose-950/40 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="bg-white rounded-lg p-6 sm:p-8 max-w-sm w-full shadow-2xl border-t-8 border-rose-600 relative"
+            >
+              <h3 className="text-xl font-serif text-slate-900 mb-2">Conferma Eliminazione</h3>
+              <p className="text-sm text-slate-500 mb-6">
+                Sei sicuro di voler eliminare questa foto? L'azione non può essere annullata.
+              </p>
+              <div className="flex gap-4">
+                <button
+                  onClick={() => setPhotoToDelete(null)}
+                  className="flex-1 py-3 px-6 rounded bg-slate-100 text-slate-500 font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all"
+                >
+                  Annulla
+                </button>
+                <button
+                  onClick={handleDeletePhoto}
+                  className="flex-1 py-3 px-6 rounded bg-rose-600 text-white font-black text-xs uppercase tracking-widest hover:bg-rose-700 transition-all shadow-lg active:scale-95"
+                >
+                  Elimina
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

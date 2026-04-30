@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, X, Check, Trash2, Target, Wallet, Info } from 'lucide-react';
+import { Bell, X, Check, Trash2, Target, Wallet, Info, Camera, ExternalLink } from 'lucide-react';
 import { subscribeToUserNotifications, markNotificationAsRead, deleteNotification } from '../services';
 import { Notification } from '../types';
 import { useAuth } from '../contexts/AuthContext';
@@ -7,10 +7,12 @@ import { cn } from '../lib/utils';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'motion/react';
+import { useNavigate } from 'react-router-dom';
 
 export function NotificationCenter({ isOpen, onToggle }: { isOpen: boolean, onToggle: (val: boolean) => void }) {
   const { profile } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (!profile?.uid) return;
@@ -20,10 +22,21 @@ export function NotificationCenter({ isOpen, onToggle }: { isOpen: boolean, onTo
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
+  const handleNotificationClick = async (n: Notification) => {
+    if (!n.read) {
+      await markNotificationAsRead(n.id);
+    }
+    if (n.link) {
+      navigate(n.link);
+      onToggle(false);
+    }
+  };
+
   const getIcon = (type: Notification['type']) => {
     switch (type) {
       case 'harvest': return <Target size={16} className="text-lake-green" />;
       case 'transaction': return <Wallet size={16} className="text-accent-gold" />;
+      case 'photo': return <Camera size={16} className="text-sky-500" />;
       default: return <Info size={16} className="text-slate-400" />;
     }
   };
@@ -72,9 +85,11 @@ export function NotificationCenter({ isOpen, onToggle }: { isOpen: boolean, onTo
                       <div 
                         key={n.id} 
                         className={cn(
-                          "p-4 transition-colors group relative",
-                          !n.read ? "bg-lake-green/5" : "hover:bg-slate-50"
+                          "p-4 transition-colors group relative border-l-2",
+                          !n.read ? "bg-lake-green/5 border-lake-green" : "hover:bg-slate-50 border-transparent",
+                          n.link && "cursor-pointer"
                         )}
+                        onClick={() => handleNotificationClick(n)}
                       >
                         <div className="flex gap-3">
                           <div className="shrink-0 mt-1">
@@ -82,7 +97,10 @@ export function NotificationCenter({ isOpen, onToggle }: { isOpen: boolean, onTo
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex justify-between items-start mb-0.5">
-                              <p className="text-xs font-black text-slate-900 uppercase tracking-tight">{n.title}</p>
+                              <p className="text-xs font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
+                                {n.title}
+                                {n.link && <ExternalLink size={8} className="text-slate-300" />}
+                              </p>
                               <span className="text-[9px] font-medium text-slate-400 whitespace-nowrap ml-2">
                                 {format(new Date(n.createdAt), 'HH:mm • d MMM', { locale: it })}
                               </span>
@@ -92,14 +110,20 @@ export function NotificationCenter({ isOpen, onToggle }: { isOpen: boolean, onTo
                             <div className="flex items-center gap-3 mt-3">
                               {!n.read && (
                                 <button 
-                                  onClick={() => markNotificationAsRead(n.id)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    markNotificationAsRead(n.id);
+                                  }}
                                   className="text-[9px] font-black text-lake-green uppercase tracking-widest flex items-center gap-1 hover:underline"
                                 >
                                   <Check size={10} /> Segna come letta
                                 </button>
                               )}
                               <button 
-                                onClick={() => deleteNotification(n.id)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  deleteNotification(n.id);
+                                }}
                                 className="text-[9px] font-black text-rose-400 uppercase tracking-widest flex items-center gap-1 hover:text-rose-600 transition-colors opacity-0 group-hover:opacity-100"
                               >
                                 <Trash2 size={10} /> Elimina

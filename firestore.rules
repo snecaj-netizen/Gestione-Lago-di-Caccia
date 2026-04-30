@@ -62,12 +62,8 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      // Bootstrap Stefano as admin via email check (hardened with verification)
-      let isBootstrapAdmin = request.auth.token.email == "snecaj@gmail.com" && request.auth.token.email_verified == true;
-      // Also check if the user has a document with the 'admin' role
-      let hasAdminRole = exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-                         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin";
-      return isSignedIn() && (isBootstrapAdmin || hasAdminRole);
+      // Very simple admin check for Stefano
+      return isSignedIn() && (request.auth.token.email == "snecaj@gmail.com");
     }
 
     function isSocio() {
@@ -78,12 +74,12 @@ service cloud.firestore {
     }
 
     function isActive() {
-      // Bootstrap admin is always active. 
-      // Others must have a verified profile with isActive == true.
-      let isBootstrapAdmin = request.auth.token.email == "snecaj@gmail.com" && request.auth.token.email_verified == true;
-      let profileIsActive = exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-                            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isActive == true;
-      return isSignedIn() && (isBootstrapAdmin || profileIsActive);
+      // Stefano is always active. Others must have profile isActive == true
+      return isSignedIn() && (
+        (request.auth.token.email == "snecaj@gmail.com") ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isActive == true)
+      );
     }
 
     function isValidId(id) {
@@ -175,6 +171,15 @@ service cloud.firestore {
 
     // Photos
     match /photos/{photoId} {
+      function isValidPhoto(data) {
+        return data.url is string && data.url.size() <= 2000000 && // Allowing for base64
+               (!("caption" in data) || (data.caption is string && data.caption.size() <= 1000)) &&
+               (!("date" in data) || (data.date is string && data.date.size() <= 20)) &&
+               data.userUid is string && data.userUid.size() <= 128 &&
+               data.userName is string && data.userName.size() <= 100 &&
+               data.createdAt is string;
+      }
+
       allow read, write: if true;
     }
 

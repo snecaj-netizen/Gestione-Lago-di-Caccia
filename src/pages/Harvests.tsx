@@ -44,6 +44,7 @@ export function Harvests() {
   
   const showModal = searchParams.get('modal') === 'record';
   const showDeleteConfirm = searchParams.get('modal') === 'delete';
+  const highlightId = searchParams.get('highlight');
 
   const setShowModal = (val: boolean) => {
     if (val) {
@@ -90,6 +91,15 @@ export function Harvests() {
       unsubUsers();
     };
   }, []);
+
+  useEffect(() => {
+    if (highlightId && !loading) {
+      const element = document.getElementById(`harvest-${highlightId}`);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+  }, [highlightId, loading]);
 
   const handleOpenAdd = () => {
     setEditingItem(null);
@@ -435,7 +445,14 @@ export function Harvests() {
                   <td colSpan={5} className="px-3 sm:px-6 py-10 text-center text-slate-300 italic font-medium">Nessun record trovato</td>
                 </tr>
               ) : filteredItems.map((item) => (
-                <tr key={item.id} className="hover:bg-slate-50 transition-colors group">
+                <tr 
+                  key={item.id} 
+                  id={`harvest-${item.id}`}
+                  className={cn(
+                    "hover:bg-slate-50 transition-colors group",
+                    item.id === highlightId ? "bg-lake-green/10" : ""
+                  )}
+                >
                   <td className="px-3 sm:px-6 py-3 text-xs sm:text-sm font-medium text-slate-600 whitespace-nowrap">
                     {format(new Date(item.date), 'dd MMM', { locale: it })}
                   </td>

@@ -102,9 +102,10 @@ export interface Notification {
   id: string;
   title: string;
   body: string;
-  type: 'harvest' | 'transaction' | 'system';
+  type: 'harvest' | 'transaction' | 'system' | 'photo';
   targetUid: string;
   read: boolean;
   createdAt: string;
+  link?: string;
   metadata?: any;
 }

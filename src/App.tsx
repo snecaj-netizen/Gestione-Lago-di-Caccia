@@ -40,7 +40,12 @@ import { AdminPanel } from './pages/AdminPanel';
 import { Profile } from './pages/Profile';
 import { Gallery } from './pages/Gallery';
 import { NotificationCenter } from './components/NotificationCenter';
-import { seedUsers } from './services';
+import { it } from 'date-fns/locale';
+import { format } from 'date-fns';
+import { db } from './firebase';
+import { collection, query, where, orderBy, limit, onSnapshot, getDocs } from 'firebase/firestore';
+import { Notification as AppNotification } from './types';
+import { seedUsers, createNotification } from './services';
 
 function Sidebar({ isOpen, setIsOpen }: { isOpen: boolean, setIsOpen: (val: boolean) => void }) {
   const { logout, profile } = useAuth();
@@ -403,6 +408,95 @@ function MainLayout() {
   const [showLogoutConfirm, setShowLogoutConfirm] = React.useState(false);
   const location = useLocation();
   const navigate = useNavigate();
+
+  // Notification permission and browser push
+  React.useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, []);
+
+  // Monitor new notifications for browser alert
+  React.useEffect(() => {
+    if (!profile?.uid) return;
+
+    const q = query(
+      collection(db, 'notifications'),
+      where('targetUid', '==', profile.uid),
+      where('read', '==', false),
+      orderBy('createdAt', 'desc'),
+      limit(5)
+    );
+
+    let isInitial = true;
+    const unsub = onSnapshot(q, (snapshot) => {
+      if (isInitial) {
+        isInitial = false;
+        return;
+      }
+
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === 'added') {
+          const notif = change.doc.data() as AppNotification;
+          if ('Notification' in window && Notification.permission === 'granted') {
+            new Notification(notif.title, {
+              body: notif.body,
+              icon: '/logo.png' // Adjust if logo path differs
+            }).onclick = () => {
+              if (notif.link) navigate(notif.link);
+              window.focus();
+            };
+          }
+        }
+      });
+    });
+
+    return () => unsub();
+  }, [profile?.uid, navigate]);
+
+  // Check for tomorrow's hunt reminder
+  React.useEffect(() => {
+    if (!profile?.uid) return;
+
+    const checkReminders = async () => {
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const tomorrowStr = format(tomorrow, 'yyyy-MM-dd');
+
+      // 1. Check if user has a hunt tomorrow
+      const qHunts = query(
+        collection(db, 'hunting_days'),
+        where('date', '==', tomorrowStr),
+        where('assignedToUid', '==', profile.uid)
+      );
+      const huntSnap = await getDocs(qHunts);
+
+      if (!huntSnap.empty) {
+        // 2. Check if reminder already sent today
+        const reminderId = `reminder_${profile.uid}_${tomorrowStr}`;
+        const qNotifs = query(
+          collection(db, 'notifications'),
+          where('targetUid', '==', profile.uid),
+          where('metadata.reminderId', '==', reminderId)
+        );
+        const notifSnap = await getDocs(qNotifs);
+
+        if (notifSnap.empty) {
+          // Send reminder
+          await createNotification({
+            title: "Promemoria Caccia",
+            body: `Domani (${format(tomorrow, 'dd/MM', { locale: it })}) hai una giornata di caccia prenotata!`,
+            type: 'system',
+            targetUid: profile.uid,
+            link: '/',
+            metadata: { reminderId }
+          });
+        }
+      }
+    };
+
+    checkReminders();
+  }, [profile?.uid]);
 
   // Handle mutual exclusivity
   const toggleNotifications = (val: boolean) => {

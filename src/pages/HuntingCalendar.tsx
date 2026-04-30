@@ -28,7 +28,7 @@ import {
   differenceInSeconds
 } from 'date-fns';
 import { it } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, User as UserIcon, Calendar as CalendarIcon, Info, Plus, X, Clock, Trash2, Filter, ArrowRight, ArrowLeftRight, ChevronDown } from 'lucide-react';
+import { ChevronLeft, ChevronRight, User as UserIcon, Calendar as CalendarIcon, Info, Plus, X, Clock, Trash2, Filter, ArrowRight, ArrowLeftRight, ChevronDown, ShieldAlert } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Link } from 'react-router-dom';
 
@@ -88,6 +88,54 @@ function Countdown({ targetDate }: { targetDate: string }) {
             <span className="text-xl sm:text-3xl font-black tabular-nums">{timeLeft.s.toString().padStart(2, '0')}</span>
             <span className="text-[7px] sm:text-[8px] font-bold uppercase tracking-widest text-white/40">Sec</span>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TodayInfo({ day, assignments, isSilenced, title }: { day: Date, assignments: HuntingDay[], isSilenced: boolean, title?: string }) {
+  const dayName = format(day, 'EEEE', { locale: it });
+  const dateStr = format(day, 'dd', { locale: it });
+  const monthStr = format(day, 'MMMM', { locale: it });
+
+  if (isSilenced) {
+    return (
+      <div className="flex items-center gap-3 sm:gap-4 bg-rose-600 text-white p-4 sm:p-6 rounded-lg shadow-xl border-t-4 border-rose-800 animate-in fade-in zoom-in duration-500">
+        <div className="bg-white/10 p-2 sm:p-3 rounded-full shrink-0">
+          <ShieldAlert size={24} className="sm:w-8 sm:h-8 text-white" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-[8px] sm:text-[10px] font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-white/50 mb-0.5 truncate">{title || "Stato Attuale"}</p>
+          <h3 className="text-xl sm:text-3xl font-black tabular-nums leading-none mb-1 capitalize">
+            {dayName} <span className="opacity-60">{dateStr}</span> {monthStr}
+          </h3>
+          <p className="text-[10px] sm:text-xs font-black uppercase tracking-widest opacity-80 italic">Silenzio Venatorio - Chiuso</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-3 sm:gap-4 bg-lake-green text-accent-gold p-4 sm:p-6 rounded-lg shadow-xl border-t-4 border-accent-gold animate-in fade-in zoom-in duration-500">
+      <div className="bg-white/10 p-2 sm:p-3 rounded-full shrink-0">
+        <UserIcon size={24} className="sm:w-8 sm:h-8 text-white transition-transform" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-[8px] sm:text-[10px] font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-white/40 mb-0.5 truncate">{title || "Cacciatori di Oggi"}</p>
+        <h3 className="text-xl sm:text-3xl font-black tabular-nums text-white leading-none mb-2 capitalize">
+          {dayName} <span className="opacity-40">{dateStr}</span> {monthStr}
+        </h3>
+        <div className="flex flex-wrap gap-2">
+          {assignments.length > 0 ? (
+            assignments.map(a => (
+              <span key={a.id} className="bg-white/10 px-3 py-1 rounded border border-white/20 text-[10px] sm:text-xs font-black text-accent-gold uppercase tracking-widest whitespace-nowrap">
+                {a.assignedToName}
+              </span>
+            ))
+          ) : (
+            <span className="text-white/40 italic text-[10px] sm:text-xs font-bold uppercase tracking-widest">Nessun cacciatore assegnato</span>
+          )}
         </div>
       </div>
     </div>
@@ -170,12 +218,11 @@ export function HuntingCalendar() {
 
   const dayAssignments = (date: Date): HuntingDay[] => {
     const list: HuntingDay[] = [];
+    const dateStr = format(date, 'yyyy-MM-dd');
     
     // 1. Manual assignments
-    const manual = huntingDays.find(d => isSameDay(new Date(d.date), date));
-    if (manual) {
-      list.push(manual);
-    }
+    const manuals = huntingDays.filter(d => d.date === dateStr);
+    list.push(...manuals);
 
     // 2. Automatic recurring assignments
     if (isInSeason(date)) {
@@ -184,10 +231,10 @@ export function HuntingCalendar() {
       
       recurringUsers.forEach(u => {
         // Only add if not manually overwritten for this specific person
-        if (!manual || manual.assignedToUid !== u.uid) {
+        if (!manuals.some(m => m.assignedToUid === u.uid)) {
           list.push({
-            id: `recurring-${u.uid}-${format(date, "yyyy-MM-dd")}`,
-            date: format(date, "yyyy-MM-dd"),
+            id: `recurring-${u.uid}-${dateStr}`,
+            date: dateStr,
             assignedToUid: u.uid,
             assignedToName: u.displayName,
             type: u.role === "quotista" ? "quotista" : "socio"
@@ -207,25 +254,26 @@ export function HuntingCalendar() {
 
   const onAssign = async (userId: string) => {
     if (!selectedDay) return;
+    const currentAssignments = dayAssignments(selectedDay);
+    if (currentAssignments.length >= 4) {
+      alert("Massimo 4 cacciatori consentiti per giornata.");
+      return;
+    }
+
     const user = availableUsers.find(u => u.uid === userId);
     if (!user) return;
 
     await assignHuntingDay({
-      id: format(selectedDay, 'yyyy-MM-dd'),
+      id: `${format(selectedDay, 'yyyy-MM-dd')}_${user.uid}`,
       date: format(selectedDay, 'yyyy-MM-dd'),
       assignedToUid: user.uid,
       assignedToName: user.displayName,
       type: user.role === 'socio' || user.role === 'admin' ? 'socio' : 'quotista'
     });
-    setIsAssigning(false);
-    setSelectedDay(null);
   };
 
-  const onUnassign = async () => {
-    if (!selectedDay) return;
-    await unassignHuntingDay(format(selectedDay, 'yyyy-MM-dd'));
-    setIsAssigning(false);
-    setSelectedDay(null);
+  const onUnassign = async (id: string) => {
+    await unassignHuntingDay(id);
   };
 
   const onSwap = async () => {
@@ -234,20 +282,29 @@ export function HuntingCalendar() {
     const date1 = format(selectedDay, 'yyyy-MM-dd');
     const date2 = swapTargetDate;
 
-    const assignment1 = huntingDays.find(d => d.date === date1);
-    const assignment2 = huntingDays.find(d => d.date === date2);
+    const assignments1 = huntingDays.filter(d => d.date === date1);
+    const assignments2 = huntingDays.filter(d => d.date === date2);
 
-    if (assignment1) {
-      await assignHuntingDay({ ...assignment1, date: date2, id: date2 });
-    } else {
-      await unassignHuntingDay(date2);
-    }
+    // Swap date1 to date2
+    const promises: Promise<any>[] = [];
 
-    if (assignment2) {
-      await assignHuntingDay({ ...assignment2, date: date1, id: date1 });
-    } else {
-      await unassignHuntingDay(date1);
-    }
+    // Remove existing ones
+    assignments1.forEach(a => promises.push(unassignHuntingDay(a.id)));
+    assignments2.forEach(a => promises.push(unassignHuntingDay(a.id)));
+
+    await Promise.all(promises);
+
+    const newPromises: Promise<any>[] = [];
+    // Move 1 to 2
+    assignments1.forEach(a => {
+      newPromises.push(assignHuntingDay({ ...a, date: date2, id: `${date2}_${a.assignedToUid}` }));
+    });
+    // Move 2 to 1
+    assignments2.forEach(a => {
+      newPromises.push(assignHuntingDay({ ...a, date: date1, id: `${date1}_${a.assignedToUid}` }));
+    });
+
+    await Promise.all(newPromises);
 
     setShowSwapModal(false);
     setIsAssigning(false);
@@ -269,9 +326,18 @@ export function HuntingCalendar() {
         </div>
       </header>
 
-      {settings && settings.seasonStart && parseISO(settings.seasonStart).toString() !== 'Invalid Date' && parseISO(settings.seasonStart) > new Date() && (
+      {/* Countdown or Today's Status based on season start */}
+      {settings && settings.seasonStart && parseISO(settings.seasonStart).toString() !== 'Invalid Date' && (
         <div className="space-y-6">
-          <Countdown targetDate={settings.seasonStart} />
+          {parseISO(settings.seasonStart) > new Date() ? (
+            <Countdown targetDate={settings.seasonStart} />
+          ) : (
+            <TodayInfo 
+              day={new Date()} 
+              assignments={dayAssignments(new Date())} 
+              isSilenced={!isHuntingDay(new Date())} 
+            />
+          )}
           
           {huntingTimes.length > 0 && (
             <div className="card-polish overflow-hidden !p-0 border-t-4 border-lake-green">
@@ -556,8 +622,11 @@ export function HuntingCalendar() {
                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                  <h4 className="text-[0.65rem] font-black text-slate-400 uppercase tracking-widest">Cacciatori Presenti</h4>
                  {dayAssignments(selectedDay).length > 0 && (
-                   <span className="text-[8px] font-bold text-lake-green bg-emerald-50 px-2 py-0.5 rounded">
-                     {dayAssignments(selectedDay).length} / 2 POSTI
+                   <span className={cn(
+                     "text-[8px] font-bold px-2 py-0.5 rounded",
+                     dayAssignments(selectedDay).length >= 4 ? "bg-rose-50 text-rose-600" : "text-lake-green bg-emerald-50"
+                   )}>
+                     {dayAssignments(selectedDay).length} / 4 POSTI
                    </span>
                  )}
                </div>
@@ -567,7 +636,7 @@ export function HuntingCalendar() {
                ) : (
                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                    {dayAssignments(selectedDay).map(a => (
-                      <div key={a.id} className="p-3 bg-off-white rounded-lg border border-slate-100 flex flex-col gap-1">
+                      <div key={a.id} className="p-3 bg-off-white rounded-lg border border-slate-100 flex flex-col gap-1 group">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <div className={cn(
@@ -576,8 +645,20 @@ export function HuntingCalendar() {
                             )} />
                             <span className="text-sm font-bold text-slate-800">{a.assignedToName}</span>
                           </div>
-                          <div className="flex items-center gap-1">
-                            {a.id.includes('recurring') && <span className="text-[7px] font-black text-accent-gold uppercase tracking-tighter">FISSO</span>}
+                          <div className="flex items-center gap-2">
+                            {a.id.includes('recurring') ? (
+                              <span className="text-[7px] font-black text-accent-gold uppercase tracking-tighter">FISSO</span>
+                            ) : (
+                              (profile?.role === 'admin' || profile?.role === 'socio') && (
+                                <button 
+                                  onClick={() => onUnassign(a.id)}
+                                  className="text-rose-400 hover:text-rose-600 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                  title="Rimuovi"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              )
+                            )}
                             <span className="text-[8px] font-black uppercase text-slate-400 tracking-widest">
                               {a.type === 'socio' ? 'Socio' : 'Quotista'}
                             </span>
@@ -637,26 +718,13 @@ export function HuntingCalendar() {
                   </div>
                 )}
 
-                {/* Current Manual Assignment */}
-                {huntingDays.find(d => isSameDay(new Date(d.date), selectedDay)) && (
-                  <div className="p-4 bg-rose-50 border border-rose-100 rounded-lg flex items-center justify-between">
-                    <div>
-                      <p className="text-[10px] font-black text-rose-400 uppercase tracking-widest leading-none mb-1">Rimozione Assegnazione</p>
-                      <p className="text-sm font-bold text-rose-900">
-                        {huntingDays.find(d => isSameDay(new Date(d.date), selectedDay))?.assignedToName}
-                      </p>
-                    </div>
-                    <button 
-                      onClick={onUnassign}
-                      className="bg-rose-600 text-white px-4 py-2 rounded font-black text-[10px] uppercase tracking-widest shadow-sm hover:bg-rose-700 transition-all flex items-center gap-2"
-                    >
-                      <Trash2 size={12} /> Rimuovi
-                    </button>
-                  </div>
-                )}
-
                 <div className="space-y-3">
-                  <p className="text-[0.6rem] font-black text-slate-400 uppercase tracking-widest mb-1">Aggiungi Cacciatore (Manuale)</p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-[0.6rem] font-black text-slate-400 uppercase tracking-widest mb-1">Aggiungi Cacciatore (Manuale)</p>
+                    {dayAssignments(selectedDay).length >= 4 && (
+                      <span className="text-[9px] font-bold text-rose-500 uppercase tracking-tight italic">Limite raggiunto (4)</span>
+                    )}
+                  </div>
                   <div className="max-h-48 overflow-y-auto pr-2 custom-scrollbar">
                     {availableUsers
                       .filter(u => u.isActive)
@@ -664,8 +732,14 @@ export function HuntingCalendar() {
                       .map(user => (
                         <button
                           key={user.uid}
+                          disabled={dayAssignments(selectedDay).length >= 4}
                           onClick={() => onAssign(user.uid)}
-                          className="w-full flex items-center justify-between p-3 rounded border border-slate-50 hover:border-accent-gold hover:bg-white transition-all group mb-2"
+                          className={cn(
+                            "w-full flex items-center justify-between p-3 rounded border border-slate-50 transition-all group mb-2 text-left",
+                            dayAssignments(selectedDay).length >= 4 
+                              ? "opacity-50 cursor-not-allowed grayscale" 
+                              : "hover:border-accent-gold hover:bg-white"
+                          )}
                         >
                           <div className="flex items-center gap-3">
                           <div className={cn(
@@ -674,12 +748,14 @@ export function HuntingCalendar() {
                           )}>
                             {user.displayName[0]}
                           </div>
-                          <div className="text-left">
+                          <div>
                             <p className="font-bold text-slate-800 text-xs">{user.displayName}</p>
                             <p className="text-[9px] text-slate-400 uppercase font-bold tracking-widest leading-tight">{user.role}</p>
                           </div>
                         </div>
-                        <ChevronRight size={14} className="text-slate-200 group-hover:text-accent-gold" />
+                        {dayAssignments(selectedDay).length < 4 && (
+                          <Plus size={14} className="text-slate-200 group-hover:text-accent-gold" />
+                        )}
                       </button>
                     ))}
                   </div>
