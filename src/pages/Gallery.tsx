@@ -425,25 +425,27 @@ export function Gallery() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[999] flex items-center justify-center bg-black overflow-hidden"
+            className="fixed inset-[-100px] z-[9999] flex flex-col bg-black overflow-hidden touch-none"
+            style={{ height: 'calc(100dvh + 200px)', width: 'calc(100vw + 200px)', top: '-100px', left: '-100px' }}
             onClick={() => setSelectedPhoto(null)}
           >
-            {/* Hidden button for accessibility but also to ensure click-catch */}
-            <div className="sr-only">Modal Dettaglio Foto</div>
+            {/* Full Black Background Mask */}
+            <div className="absolute inset-0 bg-black z-0" />
 
-            <button 
-              onClick={() => setSelectedPhoto(null)}
-              className="absolute top-6 right-6 text-white p-3 bg-white/10 rounded-full hover:bg-white/20 transition-all z-[1001] active:scale-95 border border-white/10 shadow-2xl"
-            >
-              <X size={32} />
-            </button>
-            
-            <div 
-              className="w-full h-full flex flex-col relative"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Main Image 영역 - Occupies most of the screen */}
-              <div className="relative flex-1 flex items-center justify-center overflow-hidden p-2 sm:p-4">
+            <div className="relative w-screen h-[100dvh] top-[100px] left-[100px] flex flex-col overflow-hidden">
+              <button 
+                onClick={() => setSelectedPhoto(null)}
+                className="absolute top-4 right-4 sm:top-8 sm:right-8 text-white p-3 bg-white/10 rounded-full hover:bg-white/20 transition-all z-[10001] active:scale-95 border border-white/10 shadow-2xl mt-safe"
+              >
+                <X size={32} />
+              </button>
+              
+              <div 
+                className="relative flex-1 w-full flex flex-col items-center justify-center overflow-hidden z-[10000]"
+                onClick={(e) => e.stopPropagation()}
+              >
+              {/* Main Image 영역 - Occupies all screen */}
+              <div className="relative w-full h-full flex items-center justify-center p-2">
                 <AnimatePresence mode="wait">
                   <motion.img 
                     key={currentImageIndex}
@@ -466,28 +468,28 @@ export function Gallery() {
                         e.stopPropagation();
                         setCurrentImageIndex(prev => prev === 0 ? selectedPhoto.images.length - 1 : prev - 1);
                       }}
-                      className="absolute left-4 top-1/2 -translate-y-1/2 p-3 text-white/40 hover:text-white hover:bg-white/10 rounded-full transition-all"
+                      className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 p-3 text-white/40 hover:text-white hover:bg-white/10 rounded-full transition-all z-20"
                     >
-                      <ChevronLeft size={64} strokeWidth={1} />
+                      <ChevronLeft size={64} strokeWidth={1} className="w-12 h-12 sm:w-16 sm:h-16" />
                     </button>
                     <button 
                       onClick={(e) => {
                         e.stopPropagation();
                         setCurrentImageIndex(prev => (prev + 1) % selectedPhoto.images.length);
                       }}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 p-3 text-white/40 hover:text-white hover:bg-white/10 rounded-full transition-all"
+                      className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 p-3 text-white/40 hover:text-white hover:bg-white/10 rounded-full transition-all z-20"
                     >
-                      <ChevronRight size={64} strokeWidth={1} />
+                      <ChevronRight size={64} strokeWidth={1} className="w-12 h-12 sm:w-16 sm:h-16" />
                     </button>
                   </>
                 )}
               </div>
               
-              {/* Elegant Bottom Info Overay */}
-              <div className="w-full bg-gradient-to-t from-black/90 via-black/50 to-transparent pt-20 pb-10 px-6">
-                <div className="max-w-3xl mx-auto text-center space-y-4">
+              {/* Elegant Bottom Info Overlay */}
+              <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-black via-black/80 to-transparent pt-32 pb-10 px-6 z-10 pointer-events-none">
+                <div className="max-w-3xl mx-auto text-center space-y-3 pointer-events-auto">
                   {selectedPhoto.images.length > 1 && (
-                    <div className="flex justify-center gap-1.5 mb-6">
+                    <div className="flex justify-center gap-1.5 mb-5">
                       {selectedPhoto.images.map((_, idx) => (
                         <button
                           key={idx}
@@ -501,21 +503,21 @@ export function Gallery() {
                     </div>
                   )}
 
-                  <h3 className="text-white text-xl sm:text-2xl font-serif italic leading-snug">
+                  <h3 className="text-white text-lg sm:text-2xl font-serif italic leading-tight">
                     {selectedPhoto.images[currentImageIndex]?.caption || selectedPhoto.albumCaption || 'Galleria di Caccia'}
                   </h3>
                   
-                  <div className="flex items-center justify-center gap-8 pt-2">
-                    <div className="flex items-center gap-2.5 text-white/40 text-[10px] font-black uppercase tracking-[0.25em]">
-                      <UserIcon size={12} className="text-accent-gold/60" />
+                  <div className="flex items-center justify-center gap-6 pt-1">
+                    <div className="flex items-center gap-2 text-white/40 text-[9px] font-black uppercase tracking-[0.25em]">
+                      <UserIcon size={10} className="text-accent-gold/60" />
                       {selectedPhoto.userName}
                     </div>
-                    <div className="flex items-center gap-2.5 text-white/40 text-[10px] font-black uppercase tracking-[0.25em]">
-                      <CalendarIcon size={12} className="text-accent-gold/60" />
+                    <div className="flex items-center gap-2 text-white/40 text-[9px] font-black uppercase tracking-[0.25em]">
+                      <CalendarIcon size={10} className="text-accent-gold/60" />
                       {selectedPhoto.date ? format(new Date(selectedPhoto.date), 'dd MMMM yyyy', { locale: it }) : 'N/D'}
                     </div>
                     {selectedPhoto.images.length > 1 && (
-                      <div className="text-accent-gold/60 text-[10px] font-black tracking-widest border border-accent-gold/20 px-2 py-0.5 rounded">
+                      <div className="text-accent-gold/60 text-[9px] font-black tracking-widest border border-accent-gold/10 px-2 py-0.5 rounded">
                         {currentImageIndex + 1} / {selectedPhoto.images.length}
                       </div>
                     )}
@@ -523,6 +525,7 @@ export function Gallery() {
                 </div>
               </div>
             </div>
+          </div>
         </motion.div>
         )}
       </AnimatePresence>
