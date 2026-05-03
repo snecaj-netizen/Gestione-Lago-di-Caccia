@@ -13,7 +13,9 @@ import {
   Filter,
   Image as ImageIcon,
   Upload,
-  ImagePlus
+  ImagePlus,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -36,27 +38,42 @@ export function Gallery() {
   const selectedPhoto = photos.find(p => p.id === selectedPhotoId) || null;
 
   const setShowAddModal = (val: boolean) => {
-    if (val) {
-      setSearchParams({ modal: 'add' });
-    } else {
-      setSearchParams({});
-    }
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      if (val) {
+        next.set('modal', 'add');
+        next.delete('view');
+      } else {
+        next.delete('modal');
+      }
+      return next;
+    });
   };
 
   const setShowEditModal = (val: boolean) => {
-    if (val) {
-      setSearchParams({ modal: 'edit' });
-    } else {
-      setSearchParams({});
-    }
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      if (val) {
+        next.set('modal', 'edit');
+        next.delete('view');
+      } else {
+        next.delete('modal');
+      }
+      return next;
+    });
   };
 
   const setSelectedPhoto = (photo: HuntingPhoto | null) => {
-    if (photo) {
-      setSearchParams({ view: photo.id });
-    } else {
-      setSearchParams({});
-    }
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      if (photo) {
+        next.set('view', photo.id);
+        next.delete('modal');
+      } else {
+        next.delete('view');
+      }
+      return next;
+    });
   };
 
   const [editingPhoto, setEditingPhoto] = useState<HuntingPhoto | null>(null);
@@ -64,12 +81,28 @@ export function Gallery() {
   const [loading, setLoading] = useState(true);
   
   const [batchPhotos, setBatchPhotos] = useState<{url: string, caption: string, date: string}[]>([]);
+  const [albumCaption, setAlbumCaption] = useState('');
   const [isPublishing, setIsPublishing] = useState(false);
   const [filter, setFilter] = useState<'all' | 'mine'>('all');
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
   useEffect(() => {
     const unsub = subscribeToPhotos((data) => {
-      setPhotos(data);
+      // Normalize data for backward compatibility
+      const normalizedData = data.map(photo => {
+        if (!photo.images || !Array.isArray(photo.images)) {
+          return {
+            ...photo,
+            images: [{ 
+              url: photo.url || '', 
+              caption: photo.caption || '' 
+            }],
+            albumCaption: photo.caption || ''
+          };
+        }
+        return photo;
+      });
+      setPhotos(normalizedData);
       setLoading(false);
     });
     return () => unsub();
@@ -81,15 +114,15 @@ export function Gallery() {
     
     setIsPublishing(true);
     try {
-      for (const photo of batchPhotos) {
-        await addPhoto({
-          url: photo.url,
-          caption: photo.caption,
-          date: photo.date
-        }, profile);
-      }
+      await addPhoto({
+        images: batchPhotos.map(p => ({ url: p.url, caption: p.caption })),
+        date: batchPhotos[0].date,
+        albumCaption: albumCaption
+      }, profile);
+
       setShowAddModal(false);
       setBatchPhotos([]);
+      setAlbumCaption('');
     } catch (err) {
       console.error("Error publishing photos:", err);
     } finally {
@@ -150,12 +183,70 @@ export function Gallery() {
     setBatchPhotos(prev => prev.filter((_, i) => i !== index));
   };
 
+  const handleAddPhotosToAlbum = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!editingPhoto) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    Array.from(files as FileList).forEach((file: File) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new window.Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > MAX_IMAGE_SIZE) {
+              height *= MAX_IMAGE_SIZE / width;
+              width = MAX_IMAGE_SIZE;
+            }
+          } else {
+            if (height > MAX_IMAGE_SIZE) {
+              width *= MAX_IMAGE_SIZE / height;
+              height = MAX_IMAGE_SIZE;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+          
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+          setEditingPhoto(prev => {
+            if (!prev) return null;
+            return {
+              ...prev,
+              images: [...prev.images, { url: dataUrl, caption: '' }]
+            };
+          });
+        };
+        img.src = event.target?.result as string;
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const removePhotoFromAlbum = (index: number) => {
+    if (!editingPhoto) return;
+    setEditingPhoto(prev => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        images: prev.images.filter((_, i) => i !== index)
+      };
+    });
+  };
+
   const handleEditPhoto = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingPhoto) return;
     
     await updatePhoto(editingPhoto.id, {
-      caption: editingPhoto.caption,
+      images: editingPhoto.images,
+      albumCaption: editingPhoto.albumCaption,
       date: editingPhoto.date
     });
     
@@ -185,6 +276,18 @@ export function Gallery() {
   const filteredPhotos = filter === 'mine' 
     ? photos.filter(p => p.userUid === profile?.uid) 
     : photos;
+
+  // Prevent background scroll when modals are open
+  useEffect(() => {
+    if (selectedPhoto || showAddModal || showEditModal || photoToDelete) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [selectedPhoto, showAddModal, showEditModal, photoToDelete]);
 
   return (
     <div className="space-y-8">
@@ -238,15 +341,24 @@ export function Gallery() {
           {filteredPhotos.map((photo) => (
             <div key={photo.id} className="card-polish !p-0 overflow-hidden flex flex-col group hover:shadow-xl transition-all duration-300">
               <div 
-                onClick={() => setSelectedPhoto(photo)}
+                onClick={() => {
+                  setSelectedPhoto(photo);
+                  setCurrentImageIndex(0);
+                }}
                 className="aspect-square bg-slate-100 relative overflow-hidden cursor-pointer"
               >
                 <img 
-                  src={photo.url} 
-                  alt={photo.caption || 'Foto di caccia'} 
+                  src={photo.images[0]?.url} 
+                  alt={photo.albumCaption || photo.images[0]?.caption || 'Album di caccia'} 
                   className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                   referrerPolicy="no-referrer"
                 />
+
+                {photo.images.length > 1 && (
+                  <div className="absolute top-2 right-2 bg-lake-green/80 backdrop-blur-sm text-white text-[10px] font-black px-2 py-1 rounded-full flex items-center gap-1 shadow-lg border border-white/20">
+                    <ImageIcon size={10} /> {photo.images.length} FOTO
+                  </div>
+                )}
 
                 {/* Plus Overlay for viewing */}
                 <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
@@ -291,7 +403,7 @@ export function Gallery() {
                     )}
                   </div>
                   <p className="text-xs font-bold text-slate-700 leading-snug line-clamp-2 mb-3">
-                    {photo.caption || <em className="text-slate-300 font-normal">Senza descrizione</em>}
+                    {photo.albumCaption || photo.images[0]?.caption || <em className="text-slate-300 font-normal">Senza descrizione</em>}
                   </p>
                   <div className="flex items-center justify-between text-[10px] font-medium text-slate-400 border-t border-slate-50 pt-3">
                     <div className="flex items-center gap-1.5">
@@ -306,74 +418,118 @@ export function Gallery() {
         </div>
       )}
 
-      {/* Photo Detail Modal */}
-      {selectedPhoto && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/95 backdrop-blur-sm p-4">
-          <button 
+      {/* Photo Detail Modal (Slideshow) */}
+      <AnimatePresence>
+        {selectedPhoto && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[999] flex items-center justify-center bg-black overflow-hidden"
             onClick={() => setSelectedPhoto(null)}
-            className="absolute top-6 right-6 text-white p-2 bg-white/10 rounded-full hover:bg-white/20 transition-all z-[210]"
           >
-            <X size={32} />
-          </button>
-          
-          <div className="max-w-5xl w-full h-full flex flex-col items-center justify-center">
-            <div className="relative w-full h-[70vh] flex items-center justify-center mb-6">
-              <img 
-                src={selectedPhoto.url} 
-                alt={selectedPhoto.caption || 'Dettaglio foto'} 
-                className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
-                referrerPolicy="no-referrer"
-              />
-            </div>
+            {/* Hidden button for accessibility but also to ensure click-catch */}
+            <div className="sr-only">Modal Dettaglio Foto</div>
+
+            <button 
+              onClick={() => setSelectedPhoto(null)}
+              className="absolute top-6 right-6 text-white p-3 bg-white/10 rounded-full hover:bg-white/20 transition-all z-[1001] active:scale-95 border border-white/10 shadow-2xl"
+            >
+              <X size={32} />
+            </button>
             
-            <div className="text-center space-y-4 max-w-2xl">
-              <p className="text-white text-lg font-serif italic">
-                {selectedPhoto.caption || 'Nessuna descrizione'}
-              </p>
-              <div className="flex items-center justify-center gap-6">
-                <div className="flex items-center gap-2 text-white/60 text-xs font-black uppercase tracking-widest">
-                  <UserIcon size={14} className="text-accent-gold" />
-                  {selectedPhoto.userName}
-                </div>
-                <div className="flex items-center gap-2 text-white/60 text-xs font-medium">
-                  <CalendarIcon size={14} className="text-accent-gold" />
-                  {selectedPhoto.date ? format(new Date(selectedPhoto.date), 'dd MMMM yyyy', { locale: it }) : 'N/D'}
-                </div>
+            <div 
+              className="w-full h-full flex flex-col relative"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Main Image 영역 - Occupies most of the screen */}
+              <div className="relative flex-1 flex items-center justify-center overflow-hidden p-2 sm:p-4">
+                <AnimatePresence mode="wait">
+                  <motion.img 
+                    key={currentImageIndex}
+                    initial={{ opacity: 0, scale: 0.98 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 1.02 }}
+                    transition={{ duration: 0.3 }}
+                    src={selectedPhoto.images[currentImageIndex]?.url} 
+                    alt={selectedPhoto.images[currentImageIndex]?.caption || 'Dettaglio foto'} 
+                    className="max-w-full max-h-full object-contain"
+                    referrerPolicy="no-referrer"
+                  />
+                </AnimatePresence>
+
+                {/* Minimal Navigation Arrows */}
+                {selectedPhoto.images.length > 1 && (
+                  <>
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCurrentImageIndex(prev => prev === 0 ? selectedPhoto.images.length - 1 : prev - 1);
+                      }}
+                      className="absolute left-4 top-1/2 -translate-y-1/2 p-3 text-white/40 hover:text-white hover:bg-white/10 rounded-full transition-all"
+                    >
+                      <ChevronLeft size={64} strokeWidth={1} />
+                    </button>
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCurrentImageIndex(prev => (prev + 1) % selectedPhoto.images.length);
+                      }}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 p-3 text-white/40 hover:text-white hover:bg-white/10 rounded-full transition-all"
+                    >
+                      <ChevronRight size={64} strokeWidth={1} />
+                    </button>
+                  </>
+                )}
               </div>
               
-              {canManage(selectedPhoto) && (
-                <div className="pt-8 flex justify-center gap-6">
-                  <button 
-                    onClick={() => {
-                      setEditingPhoto(selectedPhoto);
-                      setShowEditModal(true);
-                      setSelectedPhoto(null);
-                    }}
-                    className="flex items-center justify-center p-4 bg-white/10 hover:bg-white/20 text-white rounded-full transition-all border border-white/20 shadow-2xl backdrop-blur-md hover:scale-110"
-                    title="Modifica Foto"
-                  >
-                    <Edit2 size={24} />
-                  </button>
-                  <button 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setPhotoToDelete(selectedPhoto);
-                    }}
-                    className="flex items-center justify-center p-4 bg-rose-500/30 hover:bg-rose-500/50 text-rose-100 rounded-full transition-all border border-rose-500/40 shadow-2xl backdrop-blur-md hover:scale-110"
-                    title="Elimina Foto"
-                  >
-                    <Trash2 size={24} />
-                  </button>
+              {/* Elegant Bottom Info Overay */}
+              <div className="w-full bg-gradient-to-t from-black/90 via-black/50 to-transparent pt-20 pb-10 px-6">
+                <div className="max-w-3xl mx-auto text-center space-y-4">
+                  {selectedPhoto.images.length > 1 && (
+                    <div className="flex justify-center gap-1.5 mb-6">
+                      {selectedPhoto.images.map((_, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => setCurrentImageIndex(idx)}
+                          className={cn(
+                            "h-0.5 rounded-full transition-all",
+                            idx === currentImageIndex ? "bg-accent-gold w-10" : "bg-white/20 w-4 hover:bg-white/40"
+                          )}
+                        />
+                      ))}
+                    </div>
+                  )}
+
+                  <h3 className="text-white text-xl sm:text-2xl font-serif italic leading-snug">
+                    {selectedPhoto.images[currentImageIndex]?.caption || selectedPhoto.albumCaption || 'Galleria di Caccia'}
+                  </h3>
+                  
+                  <div className="flex items-center justify-center gap-8 pt-2">
+                    <div className="flex items-center gap-2.5 text-white/40 text-[10px] font-black uppercase tracking-[0.25em]">
+                      <UserIcon size={12} className="text-accent-gold/60" />
+                      {selectedPhoto.userName}
+                    </div>
+                    <div className="flex items-center gap-2.5 text-white/40 text-[10px] font-black uppercase tracking-[0.25em]">
+                      <CalendarIcon size={12} className="text-accent-gold/60" />
+                      {selectedPhoto.date ? format(new Date(selectedPhoto.date), 'dd MMMM yyyy', { locale: it }) : 'N/D'}
+                    </div>
+                    {selectedPhoto.images.length > 1 && (
+                      <div className="text-accent-gold/60 text-[10px] font-black tracking-widest border border-accent-gold/20 px-2 py-0.5 rounded">
+                        {currentImageIndex + 1} / {selectedPhoto.images.length}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              )}
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+        </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Add Photo Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-lake-green/80 backdrop-blur-md">
+        <div className="fixed inset-0 z-[1100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
           <div className="bg-white rounded-lg p-6 sm:p-10 max-w-md w-full shadow-2xl border-t-8 border-accent-gold relative max-h-[90vh] overflow-y-auto">
             <button 
               onClick={() => setShowAddModal(false)}
@@ -399,25 +555,17 @@ export function Gallery() {
 
             <form onSubmit={handlePublishBatch} className="space-y-6">
               <div className="space-y-4">
-                <input 
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  multiple
-                  ref={fileInputRef}
-                  onChange={handleFileChange}
-                  className="hidden"
-                />
-                
-                <input 
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  ref={galleryInputRef}
-                  onChange={handleFileChange}
-                  className="hidden"
-                />
-                
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Descrizione dell'Album</label>
+                  <textarea 
+                    value={albumCaption}
+                    onChange={(e) => setAlbumCaption(e.target.value)}
+                    className="w-full bg-off-white border border-slate-200 rounded px-4 py-3 text-sm font-bold text-slate-900 outline-none focus:border-lake-green h-20 resize-none"
+                    placeholder="Descrivi questo set di foto..."
+                  />
+                </div>
+
+                {/* Inputs removed from here and moved to bottom */}
                 <div className="grid grid-cols-2 gap-4">
                   <button
                     type="button"
@@ -512,7 +660,7 @@ export function Gallery() {
 
       {/* Edit Photo Modal */}
       {showEditModal && editingPhoto && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-lake-green/80 backdrop-blur-md">
+        <div className="fixed inset-0 z-[1100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
           <div className="bg-white rounded-lg p-6 sm:p-10 max-w-md w-full shadow-2xl border-t-8 border-lake-green relative max-h-[90vh] overflow-y-auto">
             <button 
               onClick={() => { setShowEditModal(false); setEditingPhoto(null); }}
@@ -532,24 +680,75 @@ export function Gallery() {
             </div>
 
             <form onSubmit={handleEditPhoto} className="space-y-6">
-              <div className="aspect-video bg-off-white rounded border border-slate-100 overflow-hidden">
-                <img 
-                  src={editingPhoto.url} 
-                  alt="Current" 
-                  className="w-full h-full object-contain"
-                  referrerPolicy="no-referrer"
+              <div className="space-y-2">
+                <label className="text-[0.65rem] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                  <ImageIcon size={10} /> Titolo Album / Descrizione
+                </label>
+                <textarea 
+                  value={editingPhoto.albumCaption}
+                  onChange={(e) => setEditingPhoto({...editingPhoto, albumCaption: e.target.value})}
+                  className="w-full bg-off-white border border-slate-200 rounded px-4 py-3 text-sm font-bold text-slate-900 outline-none focus:border-lake-green h-20 resize-none"
                 />
+              </div>
+
+              <div className="space-y-4 max-h-[30vh] overflow-y-auto pr-2 custom-scrollbar">
+                {editingPhoto.images.map((img, idx) => (
+                  <div key={idx} className="flex gap-4 p-3 bg-off-white rounded-lg border border-slate-100 relative group">
+                    <button 
+                      type="button"
+                      onClick={() => removePhotoFromAlbum(idx)}
+                      className="absolute -top-2 -right-2 p-1.5 bg-rose-500 text-white rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                      title="Rimuovi Foto"
+                    >
+                      <X size={12} />
+                    </button>
+                    <div className="w-16 h-16 rounded overflow-hidden flex-shrink-0">
+                      <img src={img.url} alt={`img-${idx}`} className="w-full h-full object-cover" />
+                    </div>
+                    <div className="flex-1 space-y-1">
+                      <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Dascrizione Foto {idx + 1}</label>
+                      <input 
+                        type="text"
+                        value={img.caption || ''}
+                        onChange={(e) => {
+                          const newImages = [...editingPhoto.images];
+                          newImages[idx] = { ...newImages[idx], caption: e.target.value };
+                          setEditingPhoto({ ...editingPhoto, images: newImages });
+                        }}
+                        className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-xs font-bold"
+                      />
+                    </div>
+                  </div>
+                ))}
               </div>
 
               <div className="space-y-2">
                 <label className="text-[0.65rem] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
-                  <ImageIcon size={10} /> Descrizione
+                  <Plus size={10} /> Aggiungi nuove foto all'album
                 </label>
-                <textarea 
-                  value={editingPhoto.caption}
-                  onChange={(e) => setEditingPhoto({...editingPhoto, caption: e.target.value})}
-                  className="w-full bg-off-white border border-slate-200 rounded px-4 py-3 text-sm font-bold text-slate-900 outline-none focus:border-lake-green h-24 resize-none"
-                />
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="py-3 border-2 border-dashed border-slate-200 rounded-lg hover:border-lake-green hover:bg-slate-50 transition-all flex items-center justify-center gap-2 group"
+                  >
+                    <div className="p-1.5 bg-slate-100 rounded-full group-hover:bg-lake-green group-hover:text-white transition-colors">
+                      <Camera size={14} />
+                    </div>
+                    <p className="text-[8px] font-black text-slate-700 uppercase tracking-widest">Camera</p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => galleryInputRef.current?.click()}
+                    className="py-3 border-2 border-dashed border-slate-200 rounded-lg hover:border-lake-green hover:bg-slate-50 transition-all flex items-center justify-center gap-2 group"
+                  >
+                    <div className="p-1.5 bg-slate-100 rounded-full group-hover:bg-lake-green group-hover:text-white transition-colors">
+                      <ImagePlus size={14} />
+                    </div>
+                    <p className="text-[8px] font-black text-slate-700 uppercase tracking-widest">Galleria</p>
+                  </button>
+                </div>
+                {/* Inputs removed from here and moved to bottom */}
               </div>
 
               <div className="space-y-2">
@@ -587,7 +786,7 @@ export function Gallery() {
       {/* Delete Confirmation Modal */}
       <AnimatePresence>
         {photoToDelete && (
-          <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-rose-950/40 backdrop-blur-sm">
+          <div className="fixed inset-0 z-[1200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
             <motion.div
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -616,6 +815,25 @@ export function Gallery() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Shared Hidden Inputs for both Add and Edit modals */}
+      <input 
+        type="file"
+        accept="image/*"
+        capture="environment"
+        multiple
+        ref={fileInputRef}
+        onChange={showEditModal ? handleAddPhotosToAlbum : handleFileChange}
+        className="hidden"
+      />
+      <input 
+        type="file"
+        accept="image/*"
+        multiple
+        ref={galleryInputRef}
+        onChange={showEditModal ? handleAddPhotosToAlbum : handleFileChange}
+        className="hidden"
+      />
     </div>
   );
 }

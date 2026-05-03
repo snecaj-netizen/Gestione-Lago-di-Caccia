@@ -9,14 +9,21 @@ export interface UserProfile {
   assignedDaysOfWeek: number[]; // Array of 0-6
 }
 
-export interface HuntingPhoto {
-  id: string;
+export interface PhotoItem {
   url: string;
   caption?: string;
-  date?: string;
+}
+
+export interface HuntingPhoto {
+  id: string;
+  images: PhotoItem[];
+  date: string;
   userUid: string;
   userName: string;
   createdAt: string;
+  albumCaption?: string;
+  url?: string; // Legacy field
+  caption?: string; // Legacy field
 }
 
 export interface LakeSettings {

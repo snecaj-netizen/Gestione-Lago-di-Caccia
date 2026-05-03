@@ -57,20 +57,21 @@ export const subscribeToPhotos = (callback: (photos: HuntingPhoto[]) => void) =>
   }, (error) => handleFirestoreError(error, OperationType.LIST, 'photos'));
 };
 
-export const addPhoto = async (photo: Omit<HuntingPhoto, 'id' | 'userUid' | 'userName' | 'createdAt'>, user: UserProfile) => {
+export const addPhoto = async (album: Omit<HuntingPhoto, 'id' | 'userUid' | 'userName' | 'createdAt'>, user: UserProfile) => {
   try {
-    const photoData = {
-      ...photo,
+    const albumData = {
+      ...album,
       userUid: user.uid,
       userName: user.displayName,
       createdAt: new Date().toISOString()
     };
-    const docRef = await addDoc(collection(db, 'photos'), photoData);
+    const docRef = await addDoc(collection(db, 'photos'), albumData);
 
     // Notify admins and soci
+    const firstCaption = album.images[0]?.caption || album.albumCaption;
     await notifyAdminsAndSubscribers(
-      "Nuova Foto Gallery",
-      `${user.displayName} ha caricato una nuova foto${photo.caption ? ': ' + photo.caption : ''}`,
+      album.images.length > 1 ? "Nuovo Album Gallery" : "Nuova Foto Gallery",
+      `${user.displayName} ha caricato ${album.images.length > 1 ? `un album con ${album.images.length} foto` : 'una nuova foto'}${firstCaption ? ': ' + firstCaption : ''}`,
       'photo',
       `/galleria?view=${docRef.id}`,
       { photoId: docRef.id }
