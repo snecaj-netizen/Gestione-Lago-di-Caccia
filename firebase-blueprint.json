@@ -13,7 +13,8 @@
         "displayName": { "type": "string" },
         "role": { "type": "string", "enum": ["admin", "socio", "quotista"] },
         "isActive": { "type": "boolean" },
-        "assignedDaysOfWeek": { "type": "array", "items": { "type": "number" }, "description": "0-6 for recurring days" }
+        "assignedDaysOfWeek": { "type": "array", "items": { "type": "number" }, "description": "0-6 for recurring days" },
+        "seasonalQuota": { "type": "number", "description": "Total amount expected for the season for this user" }
       },
       "required": ["uid", "email", "role"]
     },
@@ -72,7 +73,9 @@
         "createdBy": { "type": "string" },
         "huntingDayId": { "type": "string", "description": "Optional link to a specific HuntingDay date string" },
         "payerUid": { "type": "string", "description": "Optional UID of the user paying" },
-        "payerName": { "type": "string", "description": "Optional name of the user paying" }
+        "payerName": { "type": "string", "description": "Optional name of the user paying" },
+        "memberUid": { "type": "string", "description": "UID of the socio who physically handled the money (cassa)" },
+        "memberName": { "type": "string", "description": "Name of the socio who physically handled the money (cassa)" }
       },
       "required": ["date", "type", "category", "amount"]
     },

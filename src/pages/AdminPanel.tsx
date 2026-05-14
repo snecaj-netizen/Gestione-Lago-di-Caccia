@@ -34,7 +34,8 @@ export function AdminPanel() {
     username: '',
     password: '',
     role: 'quotista',
-    assignedDaysOfWeek: []
+    assignedDaysOfWeek: [],
+    seasonalQuota: 0
   });
 
   useEffect(() => {
@@ -93,13 +94,14 @@ export function AdminPanel() {
       password: newUser.password?.trim() || '',
       role: newUser.role,
       isActive: true,
-      assignedDaysOfWeek: newUser.assignedDaysOfWeek
+      assignedDaysOfWeek: newUser.assignedDaysOfWeek || [],
+      seasonalQuota: newUser.seasonalQuota ?? 0
     });
     setUserCreatedStatus('success');
     setTimeout(() => {
       setShowAddModal(false);
       setUserCreatedStatus('idle');
-      setNewUser({ displayName: '', email: '', username: '', password: '', role: 'quotista', assignedDaysOfWeek: [] });
+      setNewUser({ displayName: '', email: '', username: '', password: '', role: 'quotista', assignedDaysOfWeek: [], seasonalQuota: 0 });
     }, 2000);
   };
 
@@ -109,10 +111,11 @@ export function AdminPanel() {
     await updateUserProfile(editingUser.uid, {
       displayName: editingUser.displayName.trim(),
       email: editingUser.email.trim(),
-      username: editingUser.username?.trim(),
-      password: editingUser.password?.trim(),
+      username: editingUser.username?.trim() || '',
+      password: editingUser.password?.trim() || '',
       role: editingUser.role,
-      assignedDaysOfWeek: editingUser.assignedDaysOfWeek
+      assignedDaysOfWeek: editingUser.assignedDaysOfWeek || [],
+      seasonalQuota: editingUser.seasonalQuota ?? 0
     });
     setShowEditModal(false);
     setEditingUser(null);
@@ -232,6 +235,7 @@ export function AdminPanel() {
                 <th className="px-3 sm:px-6 py-3">Utente</th>
                 <th className="px-3 sm:px-6 py-3 text-center hidden sm:table-cell">Stato</th>
                 <th className="px-3 sm:px-6 py-3">Ruolo</th>
+                <th className="px-3 sm:px-6 py-3 hidden lg:table-cell">Quota (€)</th>
                 <th className="px-3 sm:px-6 py-3 hidden md:table-cell">Giorno Fisso</th>
                 <th className="px-3 sm:px-6 py-3 text-right">Azioni</th>
               </tr>
@@ -239,7 +243,7 @@ export function AdminPanel() {
             <tbody className="divide-y divide-slate-50">
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-3 sm:px-6 py-10 text-center text-slate-300 italic font-medium">Caricamento utenti...</td>
+                  <td colSpan={6} className="px-3 sm:px-6 py-10 text-center text-slate-300 italic font-medium">Caricamento utenti...</td>
                 </tr>
               ) : users.map((user) => (
                 <tr key={user.uid || user.email} className="hover:bg-slate-50 transition-colors">
@@ -275,6 +279,11 @@ export function AdminPanel() {
                       <option value="socio">Socio</option>
                       <option value="admin">Admin</option>
                     </select>
+                  </td>
+                  <td className="px-3 sm:px-6 py-3 whitespace-nowrap hidden lg:table-cell">
+                    <span className="text-[10px] font-bold text-slate-600">
+                      {user.seasonalQuota ? `€${user.seasonalQuota.toLocaleString()}` : 'Calc.'}
+                    </span>
                   </td>
                   <td className="px-3 sm:px-6 py-3 whitespace-nowrap hidden md:table-cell">
                     <div className="flex gap-1">
@@ -685,6 +694,20 @@ export function AdminPanel() {
                 </div>
 
                 <div className="space-y-2">
+                  <label className="text-[0.65rem] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                    <Wallet size={12} /> Quota Stagionale (€)
+                  </label>
+                  <input 
+                    type="number"
+                    value={newUser.seasonalQuota}
+                    onChange={(e) => setNewUser({...newUser, seasonalQuota: parseFloat(e.target.value) || 0})}
+                    className="w-full bg-off-white border border-slate-200 rounded px-4 py-3 text-sm font-bold text-slate-900 outline-none focus:border-lake-green"
+                    placeholder="Es. 3500"
+                  />
+                  <p className="text-[9px] text-slate-400 italic font-medium tracking-tight">Verrà utilizzata come valore di riferimento per il calcolo del saldo.</p>
+                </div>
+
+                <div className="space-y-2">
                   <label className="text-[0.65rem] font-black text-slate-400 uppercase tracking-widest">Giornate Venatorie Fisse</label>
                   <div className="grid grid-cols-7 gap-1">
                     {itDays.map((day, idx) => (
@@ -819,6 +842,19 @@ export function AdminPanel() {
                   <option value="socio">Socio</option>
                   <option value="admin">Admin</option>
                 </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[0.65rem] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                  <Wallet size={12} /> Quota Stagionale (€)
+                </label>
+                <input 
+                  type="number"
+                  value={editingUser.seasonalQuota || 0}
+                  onChange={(e) => setEditingUser({...editingUser, seasonalQuota: parseFloat(e.target.value) || 0})}
+                  className="w-full bg-off-white border border-slate-200 rounded px-4 py-3 text-sm font-bold text-slate-900 outline-none focus:border-lake-green"
+                  placeholder="Es. 3500"
+                />
               </div>
 
               <div className="space-y-2">

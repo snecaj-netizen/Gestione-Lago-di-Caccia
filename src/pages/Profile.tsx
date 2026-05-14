@@ -1,7 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { updateUserProfile } from '../services';
-import { User, Mail, Shield, CheckCircle2, AlertCircle, Lock } from 'lucide-react';
+import { 
+  updateUserProfile, 
+  subscribeToTransactions, 
+  subscribeToUsers, 
+  subscribeToSettings 
+} from '../services';
+import { Transaction, UserProfile, LakeSettings } from '../types';
+import { User, Mail, Shield, CheckCircle2, AlertCircle, Lock, Wallet, Target, TrendingUp } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 export function Profile() {
@@ -11,6 +17,54 @@ export function Profile() {
   const [username, setUsername] = useState(profile?.username || '');
   const [password, setPassword] = useState(profile?.password || '');
   const [status, setStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
+
+  // Quota Data
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [users, setUsers] = useState<UserProfile[]>([]);
+  const [settings, setSettings] = useState<LakeSettings | null>(null);
+
+  useEffect(() => {
+    if (profile?.role === 'quotista' || profile?.role === 'socio') {
+      const unsub1 = subscribeToTransactions(setTransactions);
+      const unsub2 = subscribeToUsers(setUsers);
+      const unsub3 = subscribeToSettings(setSettings);
+      return () => { unsub1(); unsub2(); unsub3(); };
+    }
+  }, [profile?.role]);
+
+  const hunterStats = React.useMemo(() => {
+    if (!profile || (profile.role !== 'quotista' && profile.role !== 'socio')) return null;
+
+    // Calculate how many hunters per day to divide the quota
+    const activeHunters = users.filter(u => u.isActive && (u.role === 'quotista' || u.role === 'socio'));
+    const huntersPerDay: Record<number, number> = {};
+    activeHunters.forEach(u => {
+      (u.assignedDaysOfWeek || []).forEach(dayIdx => {
+        if (dayIdx !== 3 && dayIdx !== 6) {
+          huntersPerDay[dayIdx] = (huntersPerDay[dayIdx] || 0) + 1;
+        }
+      });
+    });
+
+    let targetQuota = profile.seasonalQuota || 0;
+    if (targetQuota === 0) {
+      (profile.assignedDaysOfWeek || []).forEach(dayIdx => {
+        if (dayIdx === 3 || dayIdx === 6) return;
+        const dayTotal = settings?.weekdaySeasonQuotas?.[dayIdx] || 0;
+        const participants = huntersPerDay[dayIdx] || 1;
+        targetQuota += dayTotal / participants;
+      });
+    }
+
+    const paid = transactions
+      .filter(t => t.type === 'entrata' && t.payerUid === profile.uid)
+      .reduce((acc, t) => acc + t.amount, 0);
+
+    const balance = targetQuota - paid;
+    const progress = targetQuota > 0 ? (paid / targetQuota) * 100 : 0;
+
+    return { targetQuota, paid, balance, progress };
+  }, [profile, users, settings, transactions]);
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,6 +114,58 @@ export function Profile() {
             </div>
           </div>
         </div>
+
+        {hunterStats && (
+          <div className="p-4 sm:p-8 bg-gradient-to-r from-lake-green/5 to-transparent border-b border-slate-100">
+            <div className="mb-4">
+              <h3 className="text-xs font-black text-lake-green uppercase tracking-widest flex items-center gap-2 mb-1">
+                <Wallet size={14} /> Stato Versamenti Quota
+              </h3>
+              <p className="text-[10px] text-slate-400 font-medium italic">Riepilogo della tua posizione contabile per la stagione corrente.</p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+              <div className="space-y-1">
+                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block">Quota Totale</span>
+                <p className="text-xl font-black text-slate-gray">€{hunterStats.targetQuota.toLocaleString()}</p>
+              </div>
+              <div className="space-y-1">
+                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block">Totale Versato</span>
+                <p className="text-xl font-black text-emerald-600">€{hunterStats.paid.toLocaleString()}</p>
+              </div>
+              <div className="space-y-1">
+                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block">Saldo Rimanente</span>
+                <p className={cn(
+                  "text-xl font-black",
+                  hunterStats.balance <= 0 ? "text-emerald-600" : "text-rose-600"
+                )}>
+                  {hunterStats.balance <= 0 ? 'Saldato' : `€${hunterStats.balance.toLocaleString()}`}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-6">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Avanzamento Pagamento</span>
+                <span className="text-[10px] font-black text-lake-green uppercase tracking-widest">{Math.round(hunterStats.progress)}%</span>
+              </div>
+              <div className="h-3 w-full bg-slate-100 rounded-full overflow-hidden border border-slate-200">
+                <div 
+                  className={cn(
+                    "h-full transition-all duration-1000",
+                    hunterStats.progress >= 100 ? "bg-emerald-500" : "bg-lake-green"
+                  )}
+                  style={{ width: `${Math.min(100, hunterStats.progress)}%` }}
+                />
+              </div>
+              {hunterStats.balance <= 0 && hunterStats.targetQuota > 0 && (
+                <div className="mt-3 flex items-center gap-2 text-emerald-600 text-[10px] font-bold uppercase tracking-widest">
+                  <CheckCircle2 size={14} /> Quota stagionale completata
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         <form onSubmit={handleUpdate} className="p-4 sm:p-8 space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

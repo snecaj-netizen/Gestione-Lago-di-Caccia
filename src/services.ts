@@ -35,7 +35,7 @@ export const addHuntingTime = async (time: Omit<HuntingTime, 'id'>) => {
 
 export const updateHuntingTime = async (id: string, updates: Partial<HuntingTime>) => {
   try {
-    await updateDoc(doc(db, 'hunting_times', id), updates);
+    await updateDoc(doc(db, 'hunting_times', id), cleanData(updates));
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, `hunting_times/${id}`);
   }
@@ -83,7 +83,7 @@ export const addPhoto = async (album: Omit<HuntingPhoto, 'id' | 'userUid' | 'use
 
 export const updatePhoto = async (photoId: string, updates: Partial<HuntingPhoto>) => {
   try {
-    await updateDoc(doc(db, 'photos', photoId), updates);
+    await updateDoc(doc(db, 'photos', photoId), cleanData(updates));
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, `photos/${photoId}`);
   }
@@ -119,7 +119,7 @@ export const subscribeToSettings = (callback: (settings: LakeSettings) => void) 
 
 export const updateSettings = async (updates: Partial<LakeSettings>) => {
   try {
-    await setDoc(doc(db, 'settings', 'global'), updates, { merge: true });
+    await setDoc(doc(db, 'settings', 'global'), cleanData(updates), { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, 'settings/global');
   }
@@ -173,9 +173,20 @@ export const subscribeToUsers = (callback: (users: UserProfile[]) => void) => {
   }, (error) => handleFirestoreError(error, OperationType.LIST, 'users'));
 };
 
+// Helper to strip undefined values from objects before Firestore operations
+const cleanData = (data: any) => {
+  const cleaned = { ...data };
+  Object.keys(cleaned).forEach(key => {
+    if (cleaned[key] === undefined) {
+      delete cleaned[key];
+    }
+  });
+  return cleaned;
+};
+
 export const updateUserProfile = async (uid: string, updates: Partial<UserProfile>) => {
   try {
-    await updateDoc(doc(db, 'users', uid), updates);
+    await updateDoc(doc(db, 'users', uid), cleanData(updates));
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, `users/${uid}`);
   }
@@ -265,16 +276,12 @@ export const subscribeToTransactions = (callback: (txs: Transaction[]) => void) 
   }, (error) => handleFirestoreError(error, OperationType.LIST, 'transactions'));
 };
 
-export const addTransaction = async (tx: Omit<Transaction, 'id' | 'createdBy'>) => {
+export const addTransaction = async (tx: Omit<Transaction, 'id'>) => {
   try {
-    const docRef = await addDoc(collection(db, 'transactions'), {
-      ...tx,
-      createdBy: auth.currentUser?.uid
-    });
+    const docRef = await addDoc(collection(db, 'transactions'), tx);
 
     // Notify admins
     const amount = tx.amount.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' });
-    const targetUid = tx.payerUid || auth.currentUser?.uid;
     const userName = tx.payerName || "Un utente";
 
     await notifyAdminsAndSubscribers(
@@ -307,7 +314,7 @@ export const addBudgetItem = async (item: Omit<BudgetItem, 'id'>) => {
 
 export const updateBudgetItem = async (itemId: string, updates: Partial<BudgetItem>) => {
   try {
-    await updateDoc(doc(db, 'budget_items', itemId), updates);
+    await updateDoc(doc(db, 'budget_items', itemId), cleanData(updates));
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, `budget_items/${itemId}`);
   }
@@ -380,7 +387,7 @@ export const updateHarvest = async (harvestId: string, updates: Partial<Harvest>
     const oldDoc = await getDoc(docRef);
     const oldData = oldDoc.data() as Harvest;
     
-    await updateDoc(docRef, updates);
+    await updateDoc(docRef, cleanData(updates));
 
     // Notify about the change
     const species = updates.species || oldData.species;

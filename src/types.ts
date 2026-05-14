@@ -7,6 +7,7 @@ export interface UserProfile {
   role: 'admin' | 'socio' | 'quotista';
   isActive: boolean;
   assignedDaysOfWeek: number[]; // Array of 0-6
+  seasonalQuota?: number;
 }
 
 export interface PhotoItem {
@@ -63,6 +64,8 @@ export interface Transaction {
   huntingDayId?: string;
   payerUid?: string;
   payerName?: string;
+  memberUid?: string;
+  memberName?: string;
 }
 
 export interface Harvest {

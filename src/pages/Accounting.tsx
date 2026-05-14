@@ -15,7 +15,7 @@ import { Transaction, HuntingDay, UserProfile, LakeSettings, BudgetItem } from '
 import { useAuth } from '../contexts/AuthContext';
 import { Plus, Wallet, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, X, User as UserIcon, Calendar as CalendarIcon, Settings, ChevronRight, CheckCircle2, BarChart3, Target, PieChart, Trash2, Edit2, Save } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { format } from 'date-fns';
+import { format, parseISO, getDay, isWithinInterval } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
@@ -30,27 +30,11 @@ export function Accounting() {
   const showQuotaConfig = searchParams.get('modal') === 'quota';
   const showBudgetConfig = searchParams.get('modal') === 'budget';
 
-  const setShowAdd = (val: boolean) => {
-    if (val) {
-      setSearchParams({ modal: 'add' });
-    } else {
+  const handleToggleModal = (modalName: 'quota' | 'budget' | 'add' | null) => {
+    if (!modalName) {
       setSearchParams({});
-    }
-  };
-
-  const setShowQuotaConfig = (val: boolean) => {
-    if (val) {
-      setSearchParams({ modal: 'quota' });
     } else {
-      setSearchParams({});
-    }
-  };
-
-  const setShowBudgetConfig = (val: boolean) => {
-    if (val) {
-      setSearchParams({ modal: 'budget' });
-    } else {
-      setSearchParams({});
+      setSearchParams({ modal: modalName });
     }
   };
 
@@ -75,7 +59,9 @@ export function Accounting() {
     description: '',
     huntingDayId: '',
     payerUid: '',
-    payerName: ''
+    payerName: '',
+    memberUid: '',
+    memberName: ''
   });
 
   useEffect(() => {
@@ -132,16 +118,20 @@ export function Accounting() {
 
     return activeHunters
       .map(u => {
-        // Calculate target quota based on assigned days of week divided by group size
-        let targetQuota = 0;
-        (u.assignedDaysOfWeek || []).forEach(dayIdx => {
-          // Explicitly zero for Wed (3) and Sat (6) as requested
-          if (dayIdx === 3 || dayIdx === 6) return;
-          
-          const dayTotal = settings?.weekdaySeasonQuotas?.[dayIdx] || 0;
-          const participants = huntersPerDay[dayIdx] || 1;
-          targetQuota += dayTotal / participants;
-        });
+        // Use seasonalQuota if defined (and not zero), otherwise fallback to period-based calculation
+        let targetQuota = u.seasonalQuota || 0;
+
+        if (targetQuota === 0) {
+          // Calculate target quota based on assigned days of week divided by group size
+          (u.assignedDaysOfWeek || []).forEach(dayIdx => {
+            // Explicitly zero for Wed (3) and Sat (6) as requested
+            if (dayIdx === 3 || dayIdx === 6) return;
+            
+            const dayTotal = settings?.weekdaySeasonQuotas?.[dayIdx] || 0;
+            const participants = huntersPerDay[dayIdx] || 1;
+            targetQuota += dayTotal / participants;
+          });
+        }
 
         const paid = items
           .filter(t => t.type === 'entrata' && t.payerUid === u.uid)
@@ -157,6 +147,52 @@ export function Accounting() {
       .sort((a, b) => b.balance - a.balance);
   };
 
+  // Logic to get participants for a specific day (re-using calendar logic)
+  const getParticipantsForDay = (dateStr: string) => {
+    if (!dateStr) return [];
+    const date = parseISO(dateStr);
+    const dayOfWeek = getDay(date);
+    
+    const list: { uid: string, displayName: string, type: 'socio' | 'quotista' }[] = [];
+    
+    // 1. Manual assignments
+    huntingDays.filter(d => d.date === dateStr).forEach(d => {
+      list.push({ uid: d.assignedToUid, displayName: d.assignedToName, type: d.type });
+    });
+
+    // 2. Automatic recurring assignments
+    const isInSeason = (d: Date) => {
+      if (!settings) return true;
+      try {
+        return isWithinInterval(d, {
+          start: parseISO(settings.seasonStart),
+          end: parseISO(settings.seasonEnd)
+        });
+      } catch (e) {
+        return true;
+      }
+    };
+
+    if (isInSeason(date)) {
+      users.filter(u => u.isActive && (u.assignedDaysOfWeek || []).includes(dayOfWeek)).forEach(u => {
+        if (!list.some(m => m.uid === u.uid)) {
+          list.push({
+            uid: u.uid,
+            displayName: u.displayName,
+            type: u.role === "quotista" ? "quotista" : "socio"
+          });
+        }
+      });
+    }
+    return list;
+  };
+
+  const getDayTotalExpenses = (dayId: string) => {
+    return items
+      .filter(t => t.type === 'uscita' && t.huntingDayId === dayId)
+      .reduce((acc, t) => acc + t.amount, 0);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!profile) return;
@@ -167,8 +203,21 @@ export function Accounting() {
       const u = users.find(user => user.uid === finalData.payerUid);
       if (u) finalData.payerName = u.displayName;
     }
+    
+    // Auto-populate memberName if memberUid is selected
+    if (finalData.memberUid) {
+      const u = users.find(user => user.uid === finalData.memberUid);
+      if (u) finalData.memberName = u.displayName;
+    } else if (profile.role === 'socio') {
+      // Default to current socio if not set
+      finalData.memberUid = profile.uid;
+      finalData.memberName = profile.displayName;
+    }
 
-    await addTransaction(finalData);
+    await addTransaction({
+      ...finalData,
+      createdBy: profile.uid
+    });
     setFormData({ 
       ...formData, 
       category: '', 
@@ -176,9 +225,11 @@ export function Accounting() {
       description: '',
       huntingDayId: '',
       payerUid: '',
-      payerName: ''
+      payerName: '',
+      memberUid: '',
+      memberName: ''
     });
-    setShowAdd(false);
+    handleToggleModal(null);
   };
 
   return (
@@ -192,10 +243,7 @@ export function Accounting() {
           {(profile?.role === 'socio' || profile?.role === 'admin') && (
             <>
               <button 
-                onClick={() => {
-                  setShowBudgetConfig(!showBudgetConfig);
-                  setShowQuotaConfig(false);
-                }}
+                onClick={() => handleToggleModal(showBudgetConfig ? null : 'budget')}
                 className={cn(
                   "px-4 py-2.5 rounded font-black text-xs uppercase tracking-widest flex items-center gap-2 transition-all border shadow-sm",
                   showBudgetConfig ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-600 border-slate-200 hover:border-lake-green hover:text-lake-green"
@@ -205,10 +253,7 @@ export function Accounting() {
                 {showBudgetConfig ? 'Chiudi Budget' : 'Budget Preventivo'}
               </button>
               <button 
-                onClick={() => {
-                  setShowQuotaConfig(!showQuotaConfig);
-                  setShowBudgetConfig(false);
-                }}
+                onClick={() => handleToggleModal(showQuotaConfig ? null : 'quota')}
                 className={cn(
                   "px-4 py-2.5 rounded font-black text-xs uppercase tracking-widest flex items-center gap-2 transition-all border shadow-sm",
                   showQuotaConfig ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-600 border-slate-200 hover:border-lake-green hover:text-lake-green"
@@ -446,7 +491,12 @@ export function Accounting() {
               )}>
                 <div className="flex justify-between items-start">
                   <div>
-                    <h4 className="text-sm font-bold text-slate-900">{hunter.displayName}</h4>
+                    <h4 className="text-sm font-bold text-slate-900 flex items-center gap-1">
+                      {hunter.displayName}
+                      {hunter.seasonalQuota ? (
+                        <span className="text-[7px] bg-amber-100 text-amber-700 font-black px-1 rounded uppercase tracking-tighter">Fissa</span>
+                      ) : null}
+                    </h4>
                     <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">
                       {(hunter.assignedDaysOfWeek || []).map(d => ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'][d]).join(', ')}
                     </p>
@@ -487,9 +537,10 @@ export function Accounting() {
                       type: 'entrata',
                       category: 'Quota Stagionale',
                       payerUid: hunter.uid,
-                      payerName: hunter.displayName
+                      payerName: hunter.displayName,
+                      memberUid: profile?.role === 'socio' ? profile.uid : ''
                     });
-                    setShowAdd(true);
+                    handleToggleModal('add');
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                   }}
                   className="mt-1 w-full text-[9px] font-black text-lake-green uppercase tracking-widest flex items-center justify-center gap-1 hover:bg-lake-green/5 py-1.5 rounded transition-colors"
@@ -575,11 +626,17 @@ export function Accounting() {
       {/* Floating Action Button */}
       {(profile?.role === 'socio' || profile?.role === 'admin') && (
         <button
-          onClick={() => setShowAdd(true)}
-          className="fixed bottom-6 right-6 w-14 h-14 bg-accent-gold text-lake-green rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-40 border-4 border-white"
-        >
-          <Plus size={32} />
-        </button>
+        onClick={() => {
+          setFormData({
+            ...formData,
+            memberUid: profile?.role === 'socio' ? profile.uid : ''
+          });
+          handleToggleModal('add');
+        }}
+        className="fixed bottom-6 right-6 w-14 h-14 bg-accent-gold text-lake-green rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-40 border-4 border-white"
+      >
+        <Plus size={32} />
+      </button>
       )}
 
       {/* Add Transaction Modal */}
@@ -593,7 +650,7 @@ export function Accounting() {
               className="bg-white rounded-lg p-6 sm:p-8 max-w-2xl w-full shadow-2xl border-t-8 border-accent-gold relative max-h-[90vh] overflow-y-auto"
             >
               <button 
-                onClick={() => setShowAdd(false)}
+                onClick={() => handleToggleModal(null)}
                 className="absolute top-4 right-4 text-slate-400 hover:text-lake-green transition-colors"
               >
                 <X size={24} />
@@ -695,12 +752,17 @@ export function Accounting() {
                         onChange={e => {
                           const hDayId = e.target.value;
                           const hDay = huntingDays.find(d => d.id === hDayId);
+                          const participants = getParticipantsForDay(hDayId);
+                          const dayExpenses = getDayTotalExpenses(hDayId);
+                          const suggestedAmount = participants.length > 0 ? dayExpenses / participants.length : 0;
+
                           setFormData({ 
                             ...formData, 
                             huntingDayId: hDayId,
-                            payerUid: hDay?.assignedToUid || '',
-                            payerName: hDay?.assignedToName || '',
-                            category: hDay ? 'Quota Stagionale' : formData.category
+                            payerUid: hDay?.assignedToUid || (participants.length === 1 ? participants[0].uid : ''),
+                            payerName: hDay?.assignedToName || (participants.length === 1 ? participants[0].displayName : ''),
+                            category: hDay ? 'Quota Giornaliera' : formData.category,
+                            amount: suggestedAmount > 0 ? parseFloat(suggestedAmount.toFixed(2)) : formData.amount
                           });
                         }}
                         className="w-full bg-white border border-slate-200 rounded px-3 py-2 text-sm font-bold text-slate-gray outline-none focus:border-lake-green"
@@ -720,11 +782,109 @@ export function Accounting() {
                       </label>
                       <select 
                         value={formData.payerUid}
-                        onChange={e => setFormData({ ...formData, payerUid: e.target.value })}
+                        onChange={e => {
+                          const u = users.find(user => user.uid === e.target.value);
+                          setFormData({ ...formData, payerUid: e.target.value, payerName: u?.displayName || '' });
+                        }}
                         className="w-full bg-white border border-slate-200 rounded px-3 py-2 text-sm font-bold text-slate-gray outline-none focus:border-lake-green"
                       >
                         <option value="">Seleziona Utente...</option>
-                        {users.filter(u => u.isActive).map(user => (
+                        {formData.huntingDayId && getParticipantsForDay(formData.huntingDayId).length > 0 ? (
+                          <optgroup label="Partecipanti Giornata">
+                            {getParticipantsForDay(formData.huntingDayId).map(p => (
+                              <option key={p.uid} value={p.uid}>{p.displayName} ({p.type})</option>
+                            ))}
+                          </optgroup>
+                        ) : null}
+                        <optgroup label="Tutti gli Utenti">
+                          {users.filter(u => u.isActive).map(user => (
+                            <option key={user.uid} value={user.uid}>{user.displayName}</option>
+                          ))}
+                        </optgroup>
+                      </select>
+
+                      {formData.huntingDayId && (
+                        <div className="mt-3 p-3 bg-white rounded-lg border border-emerald-100 shadow-sm space-y-3">
+                          <div className="flex justify-between items-center border-b border-emerald-50 pb-2">
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Dettaglio Giornata</span>
+                            <span className="text-[10px] font-bold text-lake-green">Spesa: €{getDayTotalExpenses(formData.huntingDayId).toLocaleString()}</span>
+                          </div>
+                          
+                          <div className="space-y-2">
+                            {getParticipantsForDay(formData.huntingDayId).map(p => {
+                              const alreadyPaid = items
+                                .filter(t => t.type === 'entrata' && t.huntingDayId === formData.huntingDayId && t.payerUid === p.uid)
+                                .reduce((acc, t) => acc + t.amount, 0);
+                              
+                              return (
+                                <button
+                                  key={p.uid}
+                                  type="button"
+                                  onClick={() => setFormData({ ...formData, payerUid: p.uid, payerName: p.displayName })}
+                                  className={cn(
+                                    "w-full flex justify-between items-center p-2 rounded border transition-all text-left",
+                                    formData.payerUid === p.uid 
+                                      ? "bg-emerald-50 border-emerald-500 ring-1 ring-emerald-500" 
+                                      : "bg-off-white border-slate-100 hover:border-emerald-200"
+                                  )}
+                                >
+                                  <div className="flex flex-col">
+                                    <span className="text-[10px] font-bold text-slate-700">{p.displayName}</span>
+                                    {alreadyPaid > 0 && <span className="text-[8px] text-emerald-600 font-bold uppercase">Versato: €{alreadyPaid.toLocaleString()}</span>}
+                                  </div>
+                                  <div className="text-right">
+                                    <span className="text-[9px] font-black text-slate-300 uppercase tracking-tighter">{p.type}</span>
+                                    {formData.payerUid === p.uid && <div className="text-[8px] font-black text-emerald-600 uppercase tracking-widest mt-0.5">Selezionato</div>}
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          <div className="pt-1">
+                            <p className="text-[8px] text-slate-400 italic">
+                              Clicca su un nome per impostarlo come pagatore. Puoi sovrascrivere l'importo manualmente se le quote non sono uguali.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[0.65rem] font-black text-emerald-600 uppercase tracking-widest flex items-center gap-1">
+                        <Wallet size={12} /> Ricevuto Da (Cassa)
+                      </label>
+                      <select 
+                        required={formData.type === 'entrata'}
+                        disabled={profile?.role === 'socio'}
+                        value={formData.memberUid || (profile?.role === 'socio' ? profile.uid : '')}
+                        onChange={e => setFormData({ ...formData, memberUid: e.target.value })}
+                        className="w-full bg-white border border-slate-200 rounded px-3 py-2 text-sm font-bold text-slate-gray outline-none focus:border-lake-green disabled:bg-slate-50"
+                      >
+                        <option value="">Seleziona Socio...</option>
+                        {users.filter(u => u.isActive && (u.role === 'socio' || u.role === 'admin')).map(user => (
+                          <option key={user.uid} value={user.uid}>{user.displayName}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+                {formData.type === 'uscita' && (
+                  <div className="p-4 bg-rose-50/50 rounded border border-rose-100">
+                    <div className="space-y-2">
+                      <label className="text-[0.65rem] font-black text-rose-600 uppercase tracking-widest flex items-center gap-1">
+                        <Wallet size={12} /> Pagato Da (Cassa)
+                      </label>
+                      <select 
+                        required={formData.type === 'uscita'}
+                        disabled={profile?.role === 'socio'}
+                        value={formData.memberUid || (profile?.role === 'socio' ? profile.uid : '')}
+                        onChange={e => setFormData({ ...formData, memberUid: e.target.value })}
+                        className="w-full bg-white border border-slate-200 rounded px-3 py-2 text-sm font-bold text-slate-gray outline-none focus:border-lake-green disabled:bg-slate-50"
+                      >
+                        <option value="">Seleziona Socio...</option>
+                        {users.filter(u => u.isActive && (u.role === 'socio' || u.role === 'admin')).map(user => (
                           <option key={user.uid} value={user.uid}>{user.displayName}</option>
                         ))}
                       </select>
@@ -746,7 +906,7 @@ export function Accounting() {
                 <div className="flex gap-4 pt-2">
                   <button 
                     type="button"
-                    onClick={() => setShowAdd(false)}
+                    onClick={() => handleToggleModal(null)}
                     className="flex-1 py-3 px-6 rounded bg-slate-100 text-slate-500 font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all"
                   >
                     Annulla
@@ -801,6 +961,11 @@ export function Accounting() {
                         <div className="flex items-center gap-1 text-[9px] text-slate-400 font-bold uppercase tracking-tighter">
                           <UserIcon size={10} /> {item.payerName}
                           {item.huntingDayId && <span className="text-accent-gold">• {format(new Date(item.huntingDayId), 'dd/MM')}</span>}
+                        </div>
+                      )}
+                      {item.memberName && (
+                        <div className="flex items-center gap-1 text-[9px] text-lake-green font-bold uppercase tracking-tighter mt-0.5">
+                          <Wallet size={10} className="opacity-70" /> {item.type === 'entrata' ? 'In cassa a' : 'Pagato da'}: {item.memberName}
                         </div>
                       )}
                     </div>

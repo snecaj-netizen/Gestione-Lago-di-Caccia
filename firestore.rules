@@ -10,6 +10,8 @@
 //   - displayName: string (optional) - name
 //   - role: string (required) - 'admin', 'socio', 'quotista'
 //   - isActive: bool (required) - access control toggle
+//   - assignedDaysOfWeek: list (optional) - days of week (0-6)
+//   - seasonalQuota: number (optional) - manual seasonal quota
 //
 // Collection: hunting_days
 // Document ID: {dateString} (YYYY-MM-DD)
@@ -111,6 +113,7 @@ service cloud.firestore {
                data.role in ["admin", "socio", "quotista"] &&
                data.isActive is bool &&
                (!("assignedDaysOfWeek" in data) || (data.assignedDaysOfWeek is list && data.assignedDaysOfWeek.size() <= 7)) &&
+               (!("seasonalQuota" in data) || (data.seasonalQuota is number)) &&
                (!("username" in data) || (data.username is string && data.username.size() <= 100)) &&
                (!("password" in data) || (data.password is string && data.password.size() <= 100)) &&
                data.keys().hasAll(["uid", "email", "role", "isActive", "displayName"]);
