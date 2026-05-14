@@ -17,7 +17,20 @@ import {
 import { UserProfile, HuntingDay, Transaction, Harvest, LakeSettings, HuntingPhoto, BudgetItem, Notification, HuntingTime } from './types';
 import { format } from 'date-fns';
 
-// Hunting Times & Periods
+// Helper to strip undefined values from objects before Firestore operations
+const cleanData = (data: any) => {
+  const cleaned = { ...data };
+  Object.keys(cleaned).forEach(key => {
+    if (cleaned[key] === undefined) {
+      delete cleaned[key];
+    }
+    // Also handle nested cleaning if necessary, but keep it simple for now
+    if (cleaned[key] !== null && typeof cleaned[key] === 'object' && !Array.isArray(cleaned[key])) {
+      cleaned[key] = cleanData(cleaned[key]);
+    }
+  });
+  return cleaned;
+};
 export const subscribeToHuntingTimes = (callback: (times: HuntingTime[]) => void) => {
   const q = query(collection(db, 'hunting_times'), orderBy('startDate'));
   return onSnapshot(q, (snapshot) => {
@@ -65,7 +78,7 @@ export const addPhoto = async (album: Omit<HuntingPhoto, 'id' | 'userUid' | 'use
       userName: user.displayName,
       createdAt: new Date().toISOString()
     };
-    const docRef = await addDoc(collection(db, 'photos'), albumData);
+    const docRef = await addDoc(collection(db, 'photos'), cleanData(albumData));
 
     // Notify admins and soci
     const firstCaption = album.images[0]?.caption || album.albumCaption;
@@ -141,9 +154,10 @@ export const ensureUserProfile = async (user: any): Promise<UserProfile> => {
         displayName: user.displayName || 'Utente',
         role: isAdmin ? 'admin' : 'quotista', // Default to quotista, admin must approve
         isActive: isAdmin, // Stefano is active, others wait for approval
-        assignedDaysOfWeek: []
+        assignedDaysOfWeek: [],
+        seasonalQuota: 0
       };
-      await setDoc(userDocRef, newProfile);
+      await setDoc(userDocRef, cleanData(newProfile));
       return newProfile;
     }
     
@@ -154,7 +168,7 @@ export const ensureUserProfile = async (user: any): Promise<UserProfile> => {
         username: data.username || 'snecaj@gmail.com', 
         password: data.password || 'admin' 
       };
-      await updateDoc(userDocRef, updates);
+      await updateDoc(userDocRef, cleanData(updates));
       return { ...data, ...updates };
     }
     
@@ -173,17 +187,6 @@ export const subscribeToUsers = (callback: (users: UserProfile[]) => void) => {
   }, (error) => handleFirestoreError(error, OperationType.LIST, 'users'));
 };
 
-// Helper to strip undefined values from objects before Firestore operations
-const cleanData = (data: any) => {
-  const cleaned = { ...data };
-  Object.keys(cleaned).forEach(key => {
-    if (cleaned[key] === undefined) {
-      delete cleaned[key];
-    }
-  });
-  return cleaned;
-};
-
 export const updateUserProfile = async (uid: string, updates: Partial<UserProfile>) => {
   try {
     await updateDoc(doc(db, 'users', uid), cleanData(updates));
@@ -196,11 +199,11 @@ export const addUserManually = async (user: Omit<UserProfile, 'uid'>) => {
   try {
     const usersRef = collection(db, 'users');
     const newDocRef = doc(usersRef); // Generate a ID first
-    await setDoc(newDocRef, {
+    await setDoc(newDocRef, cleanData({
       ...user,
       uid: newDocRef.id, // Include UID in initial creation
       isActive: true
-    });
+    }));
   } catch (error) {
     handleFirestoreError(error, OperationType.CREATE, 'users');
   }
@@ -254,7 +257,7 @@ export const subscribeToHuntingDays = (callback: (days: HuntingDay[]) => void) =
 export const assignHuntingDay = async (day: HuntingDay) => {
   try {
     const id = `${day.date}_${day.assignedToUid}`;
-    await setDoc(doc(db, 'hunting_days', id), { ...day, id });
+    await setDoc(doc(db, 'hunting_days', id), cleanData({ ...day, id }));
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `hunting_days/${day.date}`);
   }
@@ -278,7 +281,7 @@ export const subscribeToTransactions = (callback: (txs: Transaction[]) => void) 
 
 export const addTransaction = async (tx: Omit<Transaction, 'id'>) => {
   try {
-    const docRef = await addDoc(collection(db, 'transactions'), tx);
+    const docRef = await addDoc(collection(db, 'transactions'), cleanData(tx));
 
     // Notify admins
     const amount = tx.amount.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' });
@@ -306,7 +309,7 @@ export const subscribeToBudgetItems = (callback: (items: BudgetItem[]) => void) 
 
 export const addBudgetItem = async (item: Omit<BudgetItem, 'id'>) => {
   try {
-    await addDoc(collection(db, 'budget_items'), item);
+    await addDoc(collection(db, 'budget_items'), cleanData(item));
   } catch (error) {
     handleFirestoreError(error, OperationType.CREATE, 'budget_items');
   }
@@ -366,7 +369,7 @@ const notifyAdminsAndSubscribers = async (title: string, body: string, type: Not
 
 export const addHarvest = async (harvest: Omit<Harvest, 'id'>) => {
   try {
-    const docRef = await addDoc(collection(db, 'harvests'), harvest);
+    const docRef = await addDoc(collection(db, 'harvests'), cleanData(harvest));
     
     // Notify admins and soci
     await notifyAdminsAndSubscribers(
@@ -433,11 +436,11 @@ export const subscribeToUserNotifications = (uid: string, callback: (notificatio
 
 export const createNotification = async (notif: Omit<Notification, 'id' | 'createdAt' | 'read'>) => {
   try {
-    await addDoc(collection(db, 'notifications'), {
+    await addDoc(collection(db, 'notifications'), cleanData({
       ...notif,
       read: false,
       createdAt: new Date().toISOString()
-    });
+    }));
   } catch (error) {
     console.error("Error creating manual notification:", error);
   }
