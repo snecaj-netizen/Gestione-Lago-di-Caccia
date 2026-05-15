@@ -96,6 +96,14 @@ service cloud.firestore {
       return dateStr is string && dateStr.matches("^\\d{4}-\\d{2}-\\d{2}$");
     }
 
+    function isValidRecipe(data) {
+      return data.title is string && data.title.size() <= 200 &&
+             data.ingredients is list && data.ingredients.size() <= 100 &&
+             data.instructions is string && data.instructions.size() <= 10000 &&
+             data.authorUid is string && data.authorUid.size() <= 128 &&
+             data.courseType in ["Antipasto", "Primo", "Secondo", "Altro"];
+    }
+
     // ===============================================================
     // Collection Rules
     // ===============================================================
@@ -198,6 +206,11 @@ service cloud.firestore {
 
     // Notifications
     match /notifications/{notificationId} {
+      allow read, write: if true;
+    }
+
+    // Recipes
+    match /recipes/{recipeId} {
       allow read, write: if true;
     }
   }

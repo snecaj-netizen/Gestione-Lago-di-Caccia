@@ -14,7 +14,7 @@ import {
   Timestamp,
   getDocs
 } from 'firebase/firestore';
-import { UserProfile, HuntingDay, Transaction, Harvest, LakeSettings, HuntingPhoto, BudgetItem, Notification, HuntingTime } from './types';
+import { UserProfile, HuntingDay, Transaction, Harvest, LakeSettings, HuntingPhoto, BudgetItem, Notification, HuntingTime, Recipe } from './types';
 import { format } from 'date-fns';
 
 // Helper to strip undefined values from objects before Firestore operations
@@ -151,7 +151,7 @@ export const ensureUserProfile = async (user: any): Promise<UserProfile> => {
         email: user.email || '',
         username: isAdmin ? 'snecaj@gmail.com' : (user.email || ''),
         password: isAdmin ? 'admin' : '',
-        displayName: user.displayName || 'Utente',
+        displayName: user.displayName || (isAdmin ? 'Stefano Necaj' : 'Utente'),
         role: isAdmin ? 'admin' : 'quotista', // Default to quotista, admin must approve
         isActive: isAdmin, // Stefano is active, others wait for approval
         assignedDaysOfWeek: [],
@@ -161,15 +161,22 @@ export const ensureUserProfile = async (user: any): Promise<UserProfile> => {
       return newProfile;
     }
     
-    const data = userDoc.data() as UserProfile;
-    // Ensure admin has the requested credentials if not set
-    if (data.email === 'snecaj@gmail.com' && (!data.username || !data.password)) {
-      const updates = { 
-        username: data.username || 'snecaj@gmail.com', 
-        password: data.password || 'admin' 
-      };
-      await updateDoc(userDocRef, cleanData(updates));
-      return { ...data, ...updates };
+    let data = userDoc.data() as UserProfile;
+    
+    // Safety check: ensure Stefano is ALWAYS admin and active if he signs in
+    if (data.email === 'snecaj@gmail.com') {
+      let needsUpdate = false;
+      const updates: any = {};
+      
+      if (!data.isActive) { updates.isActive = true; needsUpdate = true; }
+      if (data.role !== 'admin') { updates.role = 'admin'; needsUpdate = true; }
+      if (data.username !== 'snecaj@gmail.com') { updates.username = 'snecaj@gmail.com'; needsUpdate = true; }
+      if (data.password !== 'admin') { updates.password = 'admin'; needsUpdate = true; }
+
+      if (needsUpdate) {
+        await updateDoc(userDocRef, cleanData(updates));
+        data = { ...data, ...updates };
+      }
     }
     
     return data;
@@ -235,8 +242,21 @@ export const seedUsers = async () => {
         displayName: 'Stefano Necaj',
         role: 'admin',
         isActive: true,
-        assignedDaysOfWeek: []
+        assignedDaysOfWeek: [],
+        seasonalQuota: 0
       });
+    } else {
+      // Ensure admin has correct credentials
+      const adminDoc = adminSnap.docs[0];
+      const data = adminDoc.data();
+      if (data.username !== adminEmail || data.password !== 'admin' || !data.isActive || data.role !== 'admin') {
+        await updateDoc(doc(db, 'users', adminDoc.id), {
+          username: adminEmail,
+          password: 'admin',
+          isActive: true,
+          role: 'admin'
+        });
+      }
     }
 
     console.log("Users seeded successfully");
@@ -458,5 +478,37 @@ export const deleteNotification = async (id: string) => {
     await deleteDoc(doc(db, 'notifications', id));
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, `notifications/${id}`);
+  }
+};
+
+// Recipes
+export const subscribeToRecipes = (callback: (recipes: Recipe[]) => void) => {
+  const q = query(collection(db, 'recipes'), orderBy('createdAt', 'desc'));
+  return onSnapshot(q, (snapshot) => {
+    callback(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Recipe)));
+  }, (error) => handleFirestoreError(error, OperationType.LIST, 'recipes'));
+};
+
+export const addRecipe = async (recipe: Omit<Recipe, 'id'>) => {
+  try {
+    await addDoc(collection(db, 'recipes'), cleanData(recipe));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, 'recipes');
+  }
+};
+
+export const updateRecipe = async (id: string, updates: Partial<Recipe>) => {
+  try {
+    await updateDoc(doc(db, 'recipes', id), cleanData(updates));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `recipes/${id}`);
+  }
+};
+
+export const deleteRecipe = async (id: string) => {
+  try {
+    await deleteDoc(doc(db, 'recipes', id));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `recipes/${id}`);
   }
 };

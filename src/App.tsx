@@ -26,7 +26,8 @@ import {
   Bird,
   Download,
   Waves,
-  Fish
+  Fish,
+  Utensils
 } from 'lucide-react';
 import { cn } from './lib/utils';
 
@@ -39,6 +40,7 @@ import { Harvests } from './pages/Harvests';
 import { AdminPanel } from './pages/AdminPanel';
 import { Profile } from './pages/Profile';
 import { Gallery } from './pages/Gallery';
+import { Recipes } from './pages/Recipes';
 import { NotificationCenter } from './components/NotificationCenter';
 import { it } from 'date-fns/locale';
 import { format } from 'date-fns';
@@ -83,6 +85,7 @@ function Sidebar({ isOpen, setIsOpen }: { isOpen: boolean, setIsOpen: (val: bool
     { name: 'Meteo Lago', path: '/meteo', icon: CloudSun },
     { name: 'Abbattimenti', path: '/abbattimenti', icon: Target },
     { name: 'Galleria Foto', path: '/galleria', icon: Camera },
+    { name: 'Selvaggina in Cucina', path: '/ricette', icon: Utensils },
   ];
 
   if (profile?.role === 'admin' || profile?.role === 'socio') {
@@ -300,6 +303,14 @@ function Login() {
               <Lock size={14} /> {error}
             </div>
           )}
+          
+          <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-lg mb-6">
+            <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest mb-1">Accesso Amministratore</p>
+            <p className="text-[11px] text-indigo-400 font-medium leading-relaxed">
+              Usa <span className="font-bold text-indigo-600">snecaj@gmail.com</span> / <span className="font-bold text-indigo-600">admin</span> o accedi direttamente con Google.
+            </p>
+          </div>
+
           <div className="space-y-2">
             <label className="text-[0.65rem] font-black text-slate-400 uppercase tracking-widest">Nome Utente</label>
             <input 
@@ -332,6 +343,24 @@ function Login() {
           </button>
         </form>
 
+        <div className="relative my-8">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-slate-100"></div>
+          </div>
+          <div className="relative flex justify-center text-xs uppercase">
+            <span className="bg-white px-4 text-slate-400 font-bold tracking-widest">Oppure</span>
+          </div>
+        </div>
+
+        <button 
+          type="button"
+          onClick={signIn}
+          className="w-full bg-white text-slate-700 border border-slate-200 font-bold py-4 px-6 rounded-lg transition-all shadow-sm active:scale-95 flex items-center justify-center gap-3 hover:bg-slate-50 text-xs uppercase tracking-widest group"
+        >
+          <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/pwa/google.svg" className="w-5 h-5 group-hover:scale-110 transition-transform" alt="Google" />
+          Accedi con Google
+        </button>
+
         {deferredPrompt && (
           <div className="mt-8 pt-6 border-t border-slate-100 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Installazione Consigliata</p>
@@ -360,21 +389,34 @@ function PrivateRoute({ children, allowPending = false }: { children: React.Reac
   
   if (!user) return <Login />;
 
+  if (user?.email === 'snecaj@gmail.com' || profile?.role === 'admin') return children;
+
   if (!profile?.isActive && !allowPending) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
-        <div className="max-w-md w-full glass-card p-8 text-center bg-slate-900 border border-slate-800 rounded-2xl">
-          <Lock className="text-amber-500 mx-auto mb-4" size={48} />
-          <h2 className="text-2xl font-bold text-white mb-2">Accesso Riservato</h2>
-          <p className="text-slate-400 mb-6 font-light leading-relaxed">
-            Ciao <span className="text-indigo-400 font-medium">{profile?.displayName}</span>, il tuo account è in attesa di approvazione dall'Amministratore (Stefano).
+        <div className="max-w-md w-full glass-card p-8 text-center bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl">
+          <Lock className="text-amber-500 mx-auto mb-6" size={56} />
+          <h2 className="text-2xl font-black text-white mb-3 uppercase tracking-tight">Accesso Riservato</h2>
+          <p className="text-slate-400 mb-8 font-medium leading-relaxed text-sm">
+            Ciao <span className="text-indigo-400 font-bold">{profile?.displayName || 'Utente'}</span>, il tuo account è in attesa di approvazione dall'Amministratore (Stefano).
           </p>
-          <button 
-            onClick={() => window.location.reload()}
-            className="text-sm font-medium text-indigo-400 hover:text-indigo-300 underline underline-offset-4"
-          >
-            Controlla di nuovo
-          </button>
+          <div className="flex flex-col gap-3">
+            <button 
+              onClick={() => window.location.reload()}
+              className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-black transition-all shadow-lg active:scale-95 text-xs uppercase tracking-[0.2em]"
+            >
+              Controlla Stato
+            </button>
+            <button 
+              onClick={() => {
+                localStorage.removeItem('lake_app_user');
+                window.location.href = '/login';
+              }}
+              className="w-full py-4 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-bold transition-all shadow-sm active:scale-95 text-xs uppercase tracking-widest border border-slate-700"
+            >
+              Cambia Account / Login
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -712,6 +754,7 @@ function MainLayout() {
                   <Route path="/meteo" element={<WeatherPage />} />
                   <Route path="/abbattimenti" element={<Harvests />} />
                   <Route path="/galleria" element={<Gallery />} />
+                  <Route path="/ricette" element={<Recipes />} />
                   <Route path="/admin" element={<AdminPanel />} />
                   <Route path="/profilo" element={<Profile />} />
                   <Route path="*" element={<Navigate to="/" replace />} />

@@ -84,6 +84,20 @@ export interface BudgetItem {
   type: 'entrata' | 'uscita';
 }
 
+export interface Recipe {
+  id: string;
+  title: string;
+  description: string;
+  ingredients: string[];
+  instructions: string;
+  imageUrl?: string;
+  authorUid: string;
+  authorName: string;
+  createdAt: string;
+  category: string;
+  courseType: 'Antipasto' | 'Primo' | 'Secondo' | 'Altro';
+}
+
 export interface HourlyForecast {
   time: string;
   temp: number;

@@ -18,6 +18,24 @@
       },
       "required": ["uid", "email", "role"]
     },
+    "recipe": {
+      "title": "Recipe",
+      "description": "Wild game recipes shared by users",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "ingredients": { "type": "array", "items": { "type": "string" } },
+        "instructions": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "authorUid": { "type": "string" },
+        "authorName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "category": { "type": "string" },
+        "courseType": { "type": "string", "enum": ["Antipasto", "Primo", "Secondo", "Altro"] }
+      },
+      "required": ["title", "ingredients", "instructions", "authorUid", "courseType"]
+    },
     "settings": {
       "title": "Settings",
       "description": "Global application and lake configuration.",
@@ -169,6 +187,10 @@
     "/hunting_times/{timeId}": {
       "schema": "huntingTime",
       "description": "Hunting periods and times table."
+    },
+    "/recipes/{recipeId}": {
+      "schema": "recipe",
+      "description": "Shared recipes for wild game."
     }
   }
 }
