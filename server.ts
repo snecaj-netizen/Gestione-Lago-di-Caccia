@@ -35,7 +35,97 @@ async function startServer() {
 
   // AI Proxy API
   app.use(express.json());
-  
+
+  app.post("/api/ai/generate-recipe", async (req, res) => {
+    const { prompt } = req.body;
+    const apiKey = process.env.GEMINI_API_KEY;
+
+    if (!apiKey) {
+      return res.status(500).json({ error: "GEMINI_API_KEY is not configured on the server" });
+    }
+
+    try {
+      const { GoogleGenAI } = await import("@google/genai");
+      const client = new GoogleGenAI({ apiKey });
+      const systemPrompt = `Sei uno chef stellato specializzato in selvaggina (cinghiale, anatra, lepre, ecc.).
+      L'utente ti chiede una ricetta o un'idea: "${prompt}".
+      Genera una ricetta completa e professionale in lingua italiana.
+      
+      Le categorie ammesse sono: "Cinghiale", "Anatra", "Beccaccia", "Fagiano", "Lepre", "Altro".
+      I tipi di portata ammessi sono: "Antipasto", "Primo", "Secondo", "Altro".
+      
+      Restituisci un oggetto JSON con questi campi:
+      {
+        "title": "Titolo della ricetta",
+        "description": "Una breve descrizione accattivante",
+        "category": "Una delle categorie sopra",
+        "courseType": "Uno dei tipi di portata sopra",
+        "ingredients": ["ingrediente 1", "ingrediente 2", ...],
+        "instructions": "Istruzioni dettagliate passo dopo passo",
+        "imageUrl": ""
+      }
+      
+      IMPORTANTE: Restituisci SOLO il JSON valido.`;
+
+      const result = await client.models.generateContent({
+        model: "gemini-2.0-flash",
+        contents: [{ role: 'user', parts: [{ text: systemPrompt }] }]
+      });
+
+      const text = result.text.trim();
+      const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
+      res.json(JSON.parse(cleaned || '{}'));
+    } catch (error) {
+      console.error("AI Generation Proxy Error:", error);
+      res.status(500).json({ error: "Failed to generate recipe with AI" });
+    }
+  });
+
+  app.post("/api/ai/search", async (req, res) => {
+    const { query, recipes } = req.body;
+    const apiKey = process.env.GEMINI_API_KEY;
+
+    if (!apiKey) {
+      return res.status(500).json({ error: "GEMINI_API_KEY is not configured on the server" });
+    }
+
+    try {
+      const { GoogleGenAI } = await import("@google/genai");
+      const client = new GoogleGenAI({ apiKey });
+      
+      const recipesSummary = recipes.map((r: any) => ({
+        id: r.id,
+        title: r.title,
+        description: r.description,
+        category: r.category,
+        courseType: r.courseType,
+        ingredients: r.ingredients
+      }));
+
+      const prompt = `Sei un esperto di cucina di selvaggina. Un utente sta cercando una ricetta con questa query: "${query}".
+      Di seguito hai un elenco di ricette disponibili in formato JSON. 
+      Il tuo compito è analizzare la query e restituire un elenco degli ID delle ricette che meglio corrispondono alla ricerca, ordinati per rilevanza.
+      
+      Ricette:
+      ${JSON.stringify(recipesSummary)}
+      
+      Rispondi ESCLUSIVAMENTE con un array JSON di stringhe contenente gli ID delle ricette, in questo formato: ["id1", "id2", ...]
+      Se nessuna ricetta è pertinente, restituisci un array vuoto [].`;
+
+      const result = await client.models.generateContent({
+        model: "gemini-2.0-flash",
+        contents: [{ role: 'user', parts: [{ text: prompt }] }]
+      });
+
+      const text = result.text.trim();
+      const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
+      res.json(JSON.parse(cleaned || '[]'));
+    } catch (error) {
+      console.error("AI Search Proxy Error:", error);
+      res.status(500).json({ error: "Failed to perform AI search" });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

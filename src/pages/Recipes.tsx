@@ -232,10 +232,10 @@ export function Recipes() {
             L'arte della selvaggina: ricette tramandate, segreti della valle e ispirazione stellata.
           </p>
         </div>
-        <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto items-stretch sm:items-center">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full md:w-auto items-center">
           <button
             onClick={() => setIsAdding(true)}
-            className="flex-1 sm:flex-none sm:w-52 h-14 bg-lake-green text-white px-6 rounded-xl font-black text-xs uppercase tracking-[0.15em] flex items-center justify-center gap-2 hover:bg-lake-green/90 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-xl shadow-lake-green/20 group"
+            className="h-14 bg-lake-green text-white px-6 rounded-xl font-black text-xs uppercase tracking-[0.15em] flex items-center justify-center gap-2 hover:bg-lake-green/90 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-xl shadow-lake-green/20 group"
           >
             <Plus size={18} className="group-hover:rotate-90 transition-transform duration-300" /> 
             Nuova Ricetta
@@ -243,7 +243,7 @@ export function Recipes() {
           <button
             onClick={() => setShowAiPromptModal(true)}
             disabled={isGenerating}
-            className="flex-1 sm:flex-none sm:w-52 h-14 bg-accent-gold text-white px-6 rounded-xl font-black text-xs uppercase tracking-[0.15em] flex items-center justify-center gap-2 hover:bg-accent-gold/90 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-xl shadow-accent-gold/20 disabled:opacity-50"
+            className="h-14 bg-accent-gold text-white px-6 rounded-xl font-black text-xs uppercase tracking-[0.15em] flex items-center justify-center gap-2 hover:bg-accent-gold/90 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-xl shadow-accent-gold/20 disabled:opacity-50"
           >
             {isGenerating ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />}
             Chef AI
@@ -332,7 +332,7 @@ export function Recipes() {
                     }}
                   />
 
-                  <div className="space-y-3">
+                  <div className="space-y-4">
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">Suggerimenti dello Chef:</p>
                     <div className="flex flex-wrap gap-2">
                       {[
@@ -340,12 +340,15 @@ export function Recipes() {
                         "Anatra all'arancia con riduzione di balsamico",
                         "Pappardelle alla lepre in salmì",
                         "Fagiano alla cacciatora con porcini",
-                        "Beccaccia al forno con crostoni"
+                        "Beccaccia al forno con crostoni",
+                        "Spezzatino di cervo con polenta",
+                        "Risotto alla folaga del lago",
+                        "Petto d'anatra ai frutti di bosco"
                       ].map((suggestion, i) => (
                         <button
                           key={i}
                           onClick={() => setAiPromptValue(suggestion)}
-                          className="px-3 py-2 rounded-full border border-slate-100 bg-slate-50 text-[10px] font-bold text-slate-500 hover:border-accent-gold hover:text-accent-gold hover:bg-accent-gold/5 transition-all"
+                          className="px-4 py-2.5 rounded-xl border border-slate-100 bg-slate-50 text-[11px] font-bold text-slate-600 hover:border-accent-gold hover:text-accent-gold hover:bg-accent-gold/5 transition-all shadow-sm"
                         >
                           {suggestion}
                         </button>
