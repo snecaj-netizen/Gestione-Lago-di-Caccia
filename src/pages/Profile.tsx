@@ -24,7 +24,7 @@ export function Profile() {
   const [settings, setSettings] = useState<LakeSettings | null>(null);
 
   useEffect(() => {
-    if (profile?.role === 'quotista' || profile?.role === 'socio') {
+    if (profile?.role === 'quotista') {
       const unsub1 = subscribeToTransactions(setTransactions);
       const unsub2 = subscribeToUsers(setUsers);
       const unsub3 = subscribeToSettings(setSettings);
@@ -33,10 +33,10 @@ export function Profile() {
   }, [profile?.role]);
 
   const hunterStats = React.useMemo(() => {
-    if (!profile || (profile.role !== 'quotista' && profile.role !== 'socio')) return null;
+    if (!profile || profile.role !== 'quotista') return null;
 
     // Calculate how many hunters per day to divide the quota
-    const activeHunters = users.filter(u => u.isActive && (u.role === 'quotista' || u.role === 'socio'));
+    const activeHunters = users.filter(u => u.isActive && u.role === 'quotista');
     const huntersPerDay: Record<number, number> = {};
     activeHunters.forEach(u => {
       (u.assignedDaysOfWeek || []).forEach(dayIdx => {

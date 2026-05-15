@@ -103,7 +103,7 @@ export function Accounting() {
   };
 
   const getHuntersSummary = () => {
-    const activeHunters = users.filter(u => u.isActive && (u.role === 'quotista' || u.role === 'socio'));
+    const activeHunters = users.filter(u => u.isActive && u.role === 'quotista');
     
     // Calculate how many hunters per day to divide the quota
     const huntersPerDay: Record<number, number> = {};
@@ -284,7 +284,7 @@ export function Accounting() {
             {['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'].map((day, idx) => {
               const isSilence = idx === 2 || idx === 5;
               const isSocioDay = idx === 3 || idx === 6;
-              const huntersCount = users.filter(u => u.isActive && (u.assignedDaysOfWeek || []).includes(idx)).length;
+              const huntersCount = users.filter(u => u.isActive && u.role === 'quotista' && (u.assignedDaysOfWeek || []).includes(idx)).length;
               const dayTotal = settings?.weekdaySeasonQuotas?.[idx] || 0;
               const quotaPerHunter = huntersCount > 0 ? dayTotal / huntersCount : 0;
 
