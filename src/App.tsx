@@ -42,6 +42,7 @@ import { Profile } from './pages/Profile';
 import { Gallery } from './pages/Gallery';
 import { Recipes } from './pages/Recipes';
 import { NotificationCenter } from './components/NotificationCenter';
+import { PWAUpdatePrompt } from './components/PWAUpdatePrompt';
 import { it } from 'date-fns/locale';
 import { format } from 'date-fns';
 import { db } from './firebase';
@@ -772,6 +773,7 @@ export default function App() {
   return (
     <Router>
       <AuthProvider>
+        <PWAUpdatePrompt />
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/*" element={

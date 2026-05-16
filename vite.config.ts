@@ -11,7 +11,21 @@ export default defineConfig(({mode}) => {
   return {
     plugins: [
       react(), 
-      tailwindcss()
+      tailwindcss(),
+      VitePWA({
+        registerType: 'prompt',
+        includeAssets: ['favicon.ico'],
+        manifest: {
+          name: 'Gestione Lago',
+          short_name: 'LagoSoci',
+          description: 'Gestione Lago di Caccia - Soci e Quotisti',
+          theme_color: '#ffffff',
+        },
+        workbox: {
+          globPatterns: ['**/*.{js,css,html,ico,png,svg,json,webmanifest}'],
+          globIgnores: ['**/firebase-applet-config.json'],
+        }
+      })
     ],
     define: {
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
