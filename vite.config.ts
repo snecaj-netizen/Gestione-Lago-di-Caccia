@@ -11,56 +11,7 @@ export default defineConfig(({mode}) => {
   return {
     plugins: [
       react(), 
-      tailwindcss(),
-      VitePWA({
-        registerType: 'autoUpdate',
-        includeAssets: [],
-        manifestFilename: 'manifest.json',
-        manifest: {
-          name: 'Gestione Lago',
-          short_name: 'LagoSoci',
-          description: 'Gestione Lago di Caccia - Soci e Quotisti',
-          lang: 'it',
-          theme_color: '#0a2e2a',
-          background_color: '#ffffff',
-          display: 'standalone',
-          orientation: 'portrait',
-          start_url: '/',
-          scope: '/',
-          icons: [
-            {
-              src: 'https://placehold.co/192x192/0a2e2a/ffffff/png?text=LAGO',
-              sizes: '192x192',
-              type: 'image/png',
-              purpose: 'any'
-            },
-            {
-              src: 'https://placehold.co/512x512/0a2e2a/ffffff/png?text=LAGO',
-              sizes: '512x512',
-              type: 'image/png',
-              purpose: 'any'
-            },
-            {
-              src: 'https://placehold.co/512x512/0a2e2a/ffffff/png?text=LAGO',
-              sizes: '512x512',
-              type: 'image/png',
-              purpose: 'maskable'
-            }
-          ]
-        },
-        workbox: {
-          globPatterns: ['**/*.{js,css,html,ico,png,svg,json,webmanifest}'],
-          globIgnores: ['**/firebase-applet-config.json'],
-          cleanupOutdatedCaches: true,
-          clientsClaim: true,
-          skipWaiting: true,
-          navigateFallback: 'index.html'
-        },
-        devOptions: {
-          enabled: true,
-          type: 'module'
-        }
-      })
+      tailwindcss()
     ],
     define: {
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
