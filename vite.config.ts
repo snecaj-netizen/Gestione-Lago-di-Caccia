@@ -50,6 +50,7 @@ export default defineConfig(({mode}) => {
         },
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,json,webmanifest}'],
+          globIgnores: ['**/firebase-applet-config.json'],
           cleanupOutdatedCaches: true,
           clientsClaim: true,
           skipWaiting: true,
