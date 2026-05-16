@@ -2,5 +2,5 @@
   "name": "Gestione Lago di Caccia",
   "description": "App per la gestione di un lago di caccia: calendario venatorio, meteo, contabilità e abbattimenti.",
   "requestFramePermissions": ["camera", "microphone"],
-  "majorCapabilities": []
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

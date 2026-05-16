@@ -1,27 +1,42 @@
-import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
-import { initializeFirestore, doc, getDocFromServer } from 'firebase/firestore';
-import firebaseConfig from '@/firebase-applet-config.json';
+import { initializeApp, FirebaseApp } from 'firebase/app';
+import { getAuth, Auth } from 'firebase/auth';
+import { getFirestore, Firestore } from 'firebase/firestore';
 
-const app = initializeApp(firebaseConfig);
-export const db = initializeFirestore(app, {
-  experimentalForceLongPolling: true,
-}, (firebaseConfig as any).firestoreDatabaseId || '(default)');
-export const auth = getAuth(app);
+// Firebase configuration
+// We prioritize VITE_ prefixed environment variables which are exposed via vite.config.ts
+const firebaseConfig = {
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  firestoreDatabaseId: import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || '(default)',
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+};
 
-async function testConnection() {
+const isConfigured = !!firebaseConfig.projectId && !!firebaseConfig.appId;
+
+let db: Firestore | null = null;
+let auth: Auth | null = null;
+
+if (isConfigured) {
   try {
-    // CRITICAL: Call getDocFromServer to test the connection on boot
-    await getDocFromServer(doc(db, 'test', 'connection'));
+    const app = initializeApp(firebaseConfig);
+    const dbId = firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== '(default)' 
+      ? firebaseConfig.firestoreDatabaseId 
+      : undefined;
+    
+    db = getFirestore(app, dbId);
+    auth = getAuth(app);
+    console.log("Firebase initialized successfully with Project ID:", firebaseConfig.projectId, dbId ? `and Database ID: ${dbId}` : "");
   } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.error("Please check your Firebase configuration: the client appears to be offline.");
-    }
-    // We don't throw here to avoid blocking initialization if it's transient
-    console.warn("Firestore connection test result:", error);
+    console.error("Firebase initialization failed:", error);
   }
+} else {
+  console.warn("Firebase is not configured. Please set the required environment variables.");
 }
-testConnection();
+
+export { db, auth };
 
 export enum OperationType {
   CREATE = 'create',
@@ -55,12 +70,12 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
-      isAnonymous: auth.currentUser?.isAnonymous,
-      tenantId: auth.currentUser?.tenantId,
-      providerInfo: auth.currentUser?.providerData.map(provider => ({
+      userId: auth?.currentUser?.uid,
+      email: auth?.currentUser?.email,
+      emailVerified: auth?.currentUser?.emailVerified,
+      isAnonymous: auth?.currentUser?.isAnonymous,
+      tenantId: auth?.currentUser?.tenantId,
+      providerInfo: auth?.currentUser?.providerData.map(provider => ({
         providerId: provider.providerId,
         displayName: provider.displayName,
         email: provider.email,

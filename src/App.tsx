@@ -460,7 +460,7 @@ function MainLayout() {
 
   // Monitor new notifications for browser alert
   React.useEffect(() => {
-    if (!profile?.uid) return;
+    if (!profile?.uid || !db) return;
 
     const q = query(
       collection(db, 'notifications'),
@@ -498,7 +498,7 @@ function MainLayout() {
 
   // Check for tomorrow's hunt reminder
   React.useEffect(() => {
-    if (!profile?.uid) return;
+    if (!profile?.uid || !db) return;
 
     const checkReminders = async () => {
       const tomorrow = new Date();
