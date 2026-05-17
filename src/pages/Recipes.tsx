@@ -235,17 +235,17 @@ export function Recipes() {
         <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto items-stretch sm:items-center">
           <button
             onClick={() => setIsAdding(true)}
-            className="flex-1 sm:flex-none sm:w-52 h-14 bg-lake-green text-white px-6 rounded-xl font-black text-xs uppercase tracking-[0.15em] flex items-center justify-center gap-2 hover:bg-lake-green/90 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-xl shadow-lake-green/20 group"
+            className="flex-1 sm:flex-none sm:w-56 h-16 bg-lake-green text-white px-8 rounded-2xl font-black text-xs uppercase tracking-[0.15em] flex items-center justify-center gap-3 hover:bg-lake-green/90 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-xl shadow-lake-green/20 group"
           >
-            <Plus size={18} className="group-hover:rotate-90 transition-transform duration-300" /> 
+            <Plus size={20} className="group-hover:rotate-90 transition-transform duration-300" /> 
             Nuova Ricetta
           </button>
           <button
             onClick={() => setShowAiPromptModal(true)}
             disabled={isGenerating}
-            className="flex-1 sm:flex-none sm:w-52 h-14 bg-accent-gold text-white px-6 rounded-xl font-black text-xs uppercase tracking-[0.15em] flex items-center justify-center gap-2 hover:bg-accent-gold/90 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-xl shadow-accent-gold/20 disabled:opacity-50"
+            className="flex-1 sm:flex-none sm:w-56 h-16 bg-accent-gold text-white px-8 rounded-2xl font-black text-xs uppercase tracking-[0.15em] flex items-center justify-center gap-3 hover:bg-accent-gold/90 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-xl shadow-accent-gold/20 disabled:opacity-50"
           >
-            {isGenerating ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />}
+            {isGenerating ? <Loader2 size={20} className="animate-spin" /> : <Sparkles size={20} />}
             Chef AI
           </button>
         </div>
@@ -263,10 +263,10 @@ export function Recipes() {
               </div>
               <input
                 type="text"
-                placeholder="Cerca tra le tue ricette per titolo, ingrediente o categoria..."
+                placeholder="Cerca tra le tue ricette..."
                 value={search}
                 onChange={handleSearch}
-                className="w-full bg-white border-2 border-slate-100 rounded-2xl pl-14 pr-6 py-5 text-slate-800 font-sans font-bold placeholder:text-slate-300 outline-none focus:border-lake-green/30 focus:ring-4 focus:ring-lake-green/5 transition-all shadow-sm"
+                className="w-full bg-white border-2 border-slate-100 rounded-2xl pl-16 pr-8 py-6 text-slate-800 font-sans font-bold placeholder:text-slate-300 outline-none focus:border-lake-green/30 focus:ring-4 focus:ring-lake-green/5 transition-all shadow-sm"
               />
             </div>
           </div>
@@ -403,66 +403,61 @@ export function Recipes() {
               onClick={() => setSelectedRecipe(recipe)}
               className="group bg-white rounded-[2.5rem] overflow-hidden border border-slate-100/50 shadow-sm hover:shadow-2xl hover:-translate-y-2 transition-all duration-500 cursor-pointer flex flex-col h-full relative"
             >
-              <div className="aspect-[4/3] relative overflow-hidden bg-slate-100 flex-shrink-0">
-                {recipe.imageUrl ? (
+              {recipe.imageUrl ? (
+                <div className="aspect-[4/3] relative overflow-hidden bg-slate-100 flex-shrink-0">
                   <img 
                     src={recipe.imageUrl} 
                     alt={recipe.title}
                     className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
                   />
-                ) : (
-                  <div className="w-full h-full flex flex-col items-center justify-center text-slate-200 bg-slate-50 gap-2">
-                    <ImageIcon size={64} strokeWidth={1} />
-                    <span className="text-[10px] uppercase font-black tracking-widest opacity-40">Creatività in corso</span>
+                  
+                  {/* Overlay Tags */}
+                  <div className="absolute top-6 left-6 flex flex-col gap-2 z-10">
+                    <span className="bg-white/90 backdrop-blur-md text-lake-green text-[9px] font-black px-4 py-2 rounded-full uppercase tracking-widest shadow-xl self-start border border-lake-green/10">
+                      {recipe.category}
+                    </span>
+                    <span className="bg-accent-gold text-white text-[8px] font-black px-3 py-1.5 rounded-full uppercase tracking-widest shadow-xl self-start">
+                      {recipe.courseType}
+                    </span>
                   </div>
-                )}
-                
-                {/* Overlay Tags */}
-                <div className="absolute top-6 left-6 flex flex-col gap-2 z-10">
-                  <span className="bg-white/90 backdrop-blur-md text-lake-green text-[9px] font-black px-4 py-2 rounded-full uppercase tracking-widest shadow-xl self-start border border-lake-green/10">
-                    {recipe.category}
-                  </span>
-                  <span className="bg-accent-gold text-white text-[8px] font-black px-3 py-1.5 rounded-full uppercase tracking-widest shadow-xl self-start">
-                    {recipe.courseType}
-                  </span>
-                </div>
 
-                {/* Quick Actions - Floating */}
-                {(profile?.uid === recipe.authorUid || profile?.role === 'admin' || profile?.role === 'socio') && (
-                  <div className="absolute top-6 right-6 flex flex-col gap-2 opacity-0 group-hover:opacity-100 translate-x-4 group-hover:translate-x-0 transition-all duration-300 z-20">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setEditingRecipe(recipe);
-                        setFormData({
-                          title: recipe.title,
-                          description: recipe.description,
-                          category: recipe.category,
-                          courseType: recipe.courseType as any,
-                          ingredients: recipe.ingredients,
-                          instructions: recipe.instructions,
-                          imageUrl: recipe.imageUrl || ''
-                        });
-                        setIsAdding(true);
-                      }}
-                      className="w-10 h-10 rounded-full bg-white text-slate-600 shadow-xl flex items-center justify-center hover:bg-lake-green hover:text-white transition-all transform hover:rotate-12"
-                    >
-                      <Edit3 size={16} />
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (window.confirm('Sei sicuro di voler eliminare questa preziosa ricetta?')) {
-                          deleteRecipe(recipe.id);
-                        }
-                      }}
-                      className="w-10 h-10 rounded-full bg-white text-rose-500 shadow-xl flex items-center justify-center hover:bg-rose-500 hover:text-white transition-all transform hover:-rotate-12"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                )}
-              </div>
+                  {/* Quick Actions - Floating */}
+                  {(profile?.uid === recipe.authorUid || profile?.role === 'admin' || profile?.role === 'socio') && (
+                    <div className="absolute top-6 right-6 flex flex-col gap-2 opacity-0 group-hover:opacity-100 translate-x-4 group-hover:translate-x-0 transition-all duration-300 z-20">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingRecipe(recipe);
+                          setFormData({
+                            title: recipe.title,
+                            description: recipe.description,
+                            category: recipe.category,
+                            courseType: recipe.courseType as any,
+                            ingredients: recipe.ingredients,
+                            instructions: recipe.instructions,
+                            imageUrl: recipe.imageUrl || ''
+                          });
+                          setIsAdding(true);
+                        }}
+                        className="w-10 h-10 rounded-full bg-white text-slate-600 shadow-xl flex items-center justify-center hover:bg-lake-green hover:text-white transition-all transform hover:rotate-12"
+                      >
+                        <Edit3 size={16} />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (window.confirm('Sei sicuro di voler eliminare questa preziosa ricetta?')) {
+                            deleteRecipe(recipe.id);
+                          }
+                        }}
+                        className="w-10 h-10 rounded-full bg-white text-rose-500 shadow-xl flex items-center justify-center hover:bg-rose-500 hover:text-white transition-all transform hover:-rotate-12"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : null}
 
               <div className="p-8 flex flex-col flex-grow">
                 <div className="flex items-center gap-3 mb-6">
