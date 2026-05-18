@@ -304,11 +304,42 @@ export function WeatherPage() {
                     <XAxis 
                       dataKey="time" 
                       stroke="#94a3b8" 
-                      fontSize={window.innerWidth < 640 ? 6 : 8} 
+                      fontSize={10} 
                       tickLine={false} 
                       axisLine={false}
                       interval={0}
-                      tickFormatter={(value) => value.split(':')[0]}
+                      height={40}
+                      tick={(props) => {
+                        const { x, y, payload } = props;
+                        const hour = payload.value.split(':')[0];
+                        // Show only even hours on small screens, or rotate
+                        return (
+                          <g transform={`translate(${x},${y})`}>
+                            <text 
+                              x={0} 
+                              y={0} 
+                              dy={16} 
+                              textAnchor="middle" 
+                              fill="#94a3b8" 
+                              fontSize={9}
+                              className="hidden sm:block"
+                            >
+                              {hour}:00
+                            </text>
+                            <text 
+                              x={0} 
+                              y={0} 
+                              dy={16} 
+                              textAnchor="middle" 
+                              fill="#94a3b8" 
+                              fontSize={8}
+                              className="block sm:hidden"
+                            >
+                              {hour}
+                            </text>
+                          </g>
+                        );
+                      }}
                     />
                     <YAxis 
                       type="number"

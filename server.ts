@@ -11,8 +11,14 @@ function getAiClient() {
   if (!aiClientInstance) {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
+      console.warn("GEMINI_API_KEY is not defined in environment variables.");
       return null;
     }
+    
+    // Debug log to help user verify the key (only shows first/last 4 chars)
+    const maskedKey = `${apiKey.substring(0, 4)}...${apiKey.substring(apiKey.length - 4)}`;
+    console.log(`Initializing Gemini client with API Key: ${maskedKey}`);
+
     aiClientInstance = new GoogleGenAI({ 
       apiKey,
       httpOptions: { headers: { "User-Agent": "aistudio-build" } }
