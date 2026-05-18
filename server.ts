@@ -50,7 +50,7 @@ async function startServer() {
         model: "gemini-3-flash-preview",
         contents: `Analizza rigorosamente i dati meteo per prevedere la probabilità di successo della caccia alle anatre in Italia.
         
-        Dati meteo per i prossimi giorni: ${JSON.stringify(weatherSummary)}
+        Dati meteo per i primi 3 giorni disponibili: ${JSON.stringify(weatherSummary)}
         
         La risposta DEVE contenere solo il JSON:
         {
@@ -91,6 +91,91 @@ async function startServer() {
     } catch (error) {
       console.error("AI Prediction Error:", error);
       res.status(500).json({ error: "Failed to generate prediction" });
+    }
+  });
+
+  app.post("/api/ai/recipe-generate", async (req, res) => {
+    const { prompt } = req.body;
+    
+    if (!process.env.GEMINI_API_KEY) {
+      return res.status(500).json({ error: "AI capability not configured" });
+    }
+
+    try {
+      const { GoogleGenAI } = await import("@google/genai");
+      const ai = new GoogleGenAI({ 
+        apiKey: process.env.GEMINI_API_KEY,
+        httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
+      });
+      
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: `Genera una ricetta completa e professionale in lingua italiana per: "${prompt}".`,
+        config: {
+          systemInstruction: `Sei uno chef stellato specializzato in selvaggina (cinghiale, anatra, lepre, ecc.).
+          Genera una ricetta completa e professionale in lingua italiana.
+          
+          Le categorie ammesse sono: "Cinghiale", "Anatra", "Beccaccia", "Fagiano", "Lepre", "Altro".
+          I tipi di portata ammessi sono: "Antipasto", "Primo", "Secondo", "Altro".
+          
+          Restituisci un oggetto JSON con questi campi:
+          {
+            "title": "Titolo della ricetta",
+            "description": "Una breve descrizione accattivante",
+            "category": "Una delle categorie sopra",
+            "courseType": "Uno dei tipi di portata sopra",
+            "ingredients": ["ingrediente 1", "ingrediente 2", ...],
+            "instructions": "Istruzioni dettagliate passo dopo passo",
+            "imageUrl": ""
+          }
+          REGOLE: Restituisci SOLO il JSON valido.`,
+          temperature: 0.7,
+          responseMimeType: "application/json",
+        }
+      });
+
+      const text = response.text || "{}";
+      const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
+      res.json(JSON.parse(cleaned));
+    } catch (error) {
+      console.error("AI Recipe Error:", error);
+      res.status(500).json({ error: "Failed to generate recipe" });
+    }
+  });
+
+  app.post("/api/ai/recipe-search", async (req, res) => {
+    const { query, recipes } = req.body;
+    
+    if (!process.env.GEMINI_API_KEY) {
+      return res.status(500).json({ error: "AI capability not configured" });
+    }
+
+    try {
+      const { GoogleGenAI } = await import("@google/genai");
+      const ai = new GoogleGenAI({ 
+        apiKey: process.env.GEMINI_API_KEY,
+        httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
+      });
+      
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: `Ricerca ricette per la query: "${query}". Ricette disponibili: ${JSON.stringify(recipes)}`,
+        config: {
+          systemInstruction: `Sei un esperto di cucina di selvaggina. Analizza la query dell'utente e l'elenco di ricette.
+          Restituisci ESCLUSIVAMENTE un array JSON di stringhe contenente gli ID delle ricette che meglio corrispondono alla ricerca, ordinati per rilevanza.
+          Esempio: ["id1", "id2", ...]
+          Se nessuna ricetta è pertinente, restituisci [].`,
+          temperature: 0.1,
+          responseMimeType: "application/json",
+        }
+      });
+
+      const text = response.text || "[]";
+      const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
+      res.json(JSON.parse(cleaned));
+    } catch (error) {
+      console.error("AI Search Error:", error);
+      res.status(500).json({ error: "Failed to search recipes" });
     }
   });
   

@@ -65,10 +65,17 @@ function DuckHuntAI({ latitude, longitude }: { latitude?: number, longitude?: nu
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ weatherSummary: summary })
           });
+          
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || "Failed to fetch prediction");
+          }
+
           const data = await response.json();
           setPrediction(data);
-        } catch (e) {
+        } catch (e: any) {
           console.error(e);
+          setPrediction({ error: e.message });
         } finally {
           setLoading(false);
         }
@@ -158,7 +165,9 @@ function DuckHuntAI({ latitude, longitude }: { latitude?: number, longitude?: nu
                   </div>
                 </div>
               ) : (
-                <div className="py-4 text-center text-[10px] text-slate-500 font-bold uppercase">Impossibile ottenere la previsione</div>
+                <div className="py-4 text-center text-[10px] text-rose-400 font-bold uppercase">
+                  {prediction?.error ? `Errore: ${prediction.error}` : "Impossibile ottenere la previsione"}
+                </div>
               )}
             </div>
           </motion.div>

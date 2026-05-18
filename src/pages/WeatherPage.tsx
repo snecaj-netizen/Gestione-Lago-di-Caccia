@@ -65,41 +65,41 @@ const ColorLegend = () => {
   const tempScale = [-5, 5, 15, 25, 35];
 
   return (
-    <div className="flex flex-row justify-between items-start gap-1 p-1 bg-slate-50 border border-slate-100 rounded-md overflow-x-auto scrollbar-hide">
+    <div className="flex flex-row justify-between items-start gap-2 sm:gap-4 p-2 bg-slate-50 border border-slate-100 rounded-lg overflow-x-auto scrollbar-hide">
       {/* Wind Legend */}
-      <div className="flex flex-col gap-0 min-w-max">
-        <span className="text-[6px] font-black text-slate-400 uppercase tracking-tighter shrink-0">🌬️ Vento</span>
+      <div className="flex flex-col gap-1 min-w-max">
+        <span className="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-tighter shrink-0">🌬️ Vento</span>
         <div className="flex items-center">
           {windScale.map(v => (
             <div key={v} className="flex flex-col items-center">
-              <div className="w-1.5 h-1 sm:w-4 sm:h-2" style={{ backgroundColor: getWindColor(v) }} />
-              <span className="text-[5px] font-bold text-slate-400 leading-none mt-0.5">{v}</span>
+              <div className="w-2.5 h-1.5 sm:w-5 sm:h-2.5" style={{ backgroundColor: getWindColor(v) }} />
+              <span className="text-[7px] sm:text-[8px] font-bold text-slate-400 leading-none mt-1">{v}</span>
             </div>
           ))}
         </div>
       </div>
 
       {/* Rain Legend */}
-      <div className="flex flex-col gap-0 min-w-max">
-        <span className="text-[6px] font-black text-slate-400 uppercase tracking-tighter shrink-0">🌧️ Pioggia</span>
+      <div className="flex flex-col gap-1 min-w-max">
+        <span className="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-tighter shrink-0">🌧️ Pioggia</span>
         <div className="flex items-center">
           {rainScale.map(v => (
             <div key={v} className="flex flex-col items-center">
-              <div className="w-1.5 h-1 sm:w-4 sm:h-2" style={{ backgroundColor: getRainColor(v) }} />
-              <span className="text-[5px] font-bold text-slate-400 leading-none mt-0.5">{v}</span>
+              <div className="w-2.5 h-1.5 sm:w-5 sm:h-2.5" style={{ backgroundColor: getRainColor(v) }} />
+              <span className="text-[7px] sm:text-[8px] font-bold text-slate-400 leading-none mt-1">{v}</span>
             </div>
           ))}
         </div>
       </div>
 
       {/* Temp Legend */}
-      <div className="flex flex-col gap-0 min-w-max">
-        <span className="text-[6px] font-black text-slate-400 uppercase tracking-tighter shrink-0">🌡️ Temp</span>
+      <div className="flex flex-col gap-1 min-w-max">
+        <span className="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-tighter shrink-0">🌡️ Temp</span>
         <div className="flex items-center">
           {tempScale.map(v => (
             <div key={v} className="flex flex-col items-center">
-              <div className="w-1.5 h-1 sm:w-4 sm:h-2" style={{ backgroundColor: getTempColor(v) }} />
-              <span className="text-[5px] font-bold text-slate-400 leading-none mt-0.5">{v}</span>
+              <div className="w-2.5 h-1.5 sm:w-5 sm:h-2.5" style={{ backgroundColor: getTempColor(v) }} />
+              <span className="text-[7px] sm:text-[8px] font-bold text-slate-400 leading-none mt-1">{v}</span>
             </div>
           ))}
         </div>
