@@ -28,9 +28,145 @@ import {
   differenceInSeconds
 } from 'date-fns';
 import { it } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, User as UserIcon, Calendar as CalendarIcon, Info, Plus, X, Clock, Trash2, Filter, ArrowRight, ArrowLeftRight, ChevronDown, ShieldAlert } from 'lucide-react';
+import { ChevronLeft, ChevronRight, User as UserIcon, Calendar as CalendarIcon, Info, Plus, X, Clock, Trash2, Filter, ArrowRight, ArrowLeftRight, ChevronDown, ShieldAlert, Target, Bird } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Link } from 'react-router-dom';
+import { useWeather } from '../hooks/useWeather';
+
+function DuckHuntAI({ latitude, longitude }: { latitude?: number, longitude?: number }) {
+  const { weather, loading: weatherLoading } = useWeather(latitude, longitude);
+  const [prediction, setPrediction] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
+
+  useEffect(() => {
+    if (isOpen && weather.length >= 3 && !prediction && !loading) {
+      const getPrediction = async () => {
+        setLoading(true);
+        try {
+          const summary = weather
+            .filter(d => {
+              const day = getDay(new Date(d.date));
+              return day !== 2 && day !== 5; // Skip Tue and Fri
+            })
+            .slice(0, 3)
+            .map(d => ({
+            date: d.date,
+            temp: d.temp,
+            wind: d.windSpeed,
+            windDir: d.windDirection,
+            rainSum: d.rainAmount,
+            prob: d.rainProb,
+            condition: d.condition
+          }));
+          
+          const response = await fetch('/api/ai/hunt-prediction', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ weatherSummary: summary })
+          });
+          const data = await response.json();
+          setPrediction(data);
+        } catch (e) {
+          console.error(e);
+        } finally {
+          setLoading(false);
+        }
+      };
+      getPrediction();
+    }
+  }, [weather, prediction, loading, isOpen]);
+
+  return (
+    <div className="bg-slate-900 text-white rounded-xl overflow-hidden border border-slate-800 shadow-lg animate-in fade-in slide-in-from-top-2 duration-500 mb-6 group">
+      <button 
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full px-3 py-2.5 bg-gradient-to-r from-accent-gold/20 to-transparent border-b border-white/5 flex items-center justify-between hover:bg-white/5 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <div className="bg-accent-gold p-1 rounded-sm shadow-lg shadow-accent-gold/20">
+            <Target size={12} className="text-slate-900" />
+          </div>
+          <span className="text-[9px] font-black uppercase tracking-[0.2em] text-accent-gold">IA Previsione Caccia</span>
+        </div>
+        <div className="flex items-center gap-3">
+          {(!prediction && !loading) && <span className="text-[7px] font-bold uppercase text-slate-500 animate-pulse">Analisi disponibile</span>}
+          <div className={cn("transition-transform duration-300", isOpen ? "rotate-180" : "")}>
+            <ChevronDown size={14} className="text-slate-500" />
+          </div>
+        </div>
+      </button>
+      
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div 
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="p-3">
+              {loading || weatherLoading ? (
+                <div className="flex flex-col items-center justify-center py-6 gap-3">
+                  <div className="w-6 h-6 border-2 border-accent-gold border-t-transparent rounded-full animate-spin" />
+                  <span className="text-[9px] font-black uppercase tracking-widest text-accent-gold/50">Consultando l'Intelligenza Artificiale...</span>
+                </div>
+              ) : prediction && prediction.days ? (
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
+                  <div className="md:col-span-1 border-b md:border-b-0 md:border-r border-white/10 pb-2 md:pb-0 md:pr-4">
+                    <p className="text-[10px] font-bold italic text-slate-200 leading-tight mb-2">
+                      "{prediction.prediction}"
+                    </p>
+                    <div className="flex items-center gap-1 opacity-60">
+                      <Bird size={10} className="text-accent-gold" />
+                      <span className="text-[7px] font-black uppercase tracking-widest text-slate-400">Analisi Fenologica (ISPRA)</span>
+                    </div>
+                  </div>
+                  
+                  <div className="md:col-span-3">
+                    <div className="flex justify-between gap-1 sm:gap-4 overflow-x-auto scrollbar-hide">
+                      {prediction.days.map((day: any) => (
+                        <div key={day.date} className="flex flex-1 items-center gap-2 sm:gap-3 min-w-max px-2 py-1 bg-white/5 rounded-lg border border-white/5">
+                          <div className="flex flex-col items-center min-w-[30px]">
+                            <span className="text-[8px] font-black text-slate-500 uppercase tracking-tighter">
+                              {format(new Date(day.date), 'EEE', { locale: it })}
+                            </span>
+                            <span className="text-[10px] font-bold text-white leading-none">
+                              {format(new Date(day.date), 'dd')}
+                            </span>
+                          </div>
+                          
+                          <div className="flex flex-col items-center">
+                            <div className={cn(
+                              "text-base font-black tabular-nums drop-shadow-[0_0_8px_rgba(255,255,255,0.2)]",
+                              day.probability > 70 ? "text-emerald-400" : day.probability > 40 ? "text-accent-gold" : "text-rose-400"
+                            )}>
+                              {day.probability}%
+                            </div>
+                          </div>
+
+                          <div className="hidden sm:flex flex-col">
+                            <p className={cn(
+                              "text-[8px] font-black uppercase tracking-tight leading-none mb-0.5",
+                              day.probability > 70 ? "text-emerald-400" : day.probability > 40 ? "text-accent-gold" : "text-rose-400"
+                            )}>{day.label}</p>
+                            <p className="text-[8px] text-slate-300 font-medium leading-none truncate max-w-[90px]">{day.reason}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="py-4 text-center text-[10px] text-slate-500 font-bold uppercase">Impossibile ottenere la previsione</div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
 
 function Countdown({ targetDate }: { targetDate: string }) {
   const [timeLeft, setTimeLeft] = useState<{ d: number, h: number, m: number, s: number } | null>(null);
@@ -319,12 +455,11 @@ export function HuntingCalendar() {
           <p className="text-slate-gray font-medium">Assegnazione giornate ai soci e quotisti</p>
         </div>
         <div className="flex flex-col items-end gap-2">
-          <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded border border-slate-200 shadow-sm text-xs font-bold text-lake-green uppercase tracking-wide">
-            <Info size={14} className="text-accent-gold" />
-            Martedì e Venerdì: Chiuso
-          </div>
         </div>
       </header>
+      
+      {/* AI Hunting Prediction element */}
+      <DuckHuntAI latitude={settings?.latitude} longitude={settings?.longitude} />
 
       {/* Countdown or Today's Status based on season start */}
       {settings && settings.seasonStart && parseISO(settings.seasonStart).toString() !== 'Invalid Date' && (

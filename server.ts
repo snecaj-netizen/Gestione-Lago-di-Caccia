@@ -31,6 +31,68 @@ async function startServer() {
 
   // AI Proxy API
   app.use(express.json());
+
+  app.post("/api/ai/hunt-prediction", async (req, res) => {
+    const { weatherSummary } = req.body;
+    
+    if (!process.env.GEMINI_API_KEY) {
+      return res.status(500).json({ error: "AI capability not configured" });
+    }
+
+    try {
+      const { GoogleGenAI } = await import("@google/genai");
+      const ai = new GoogleGenAI({ 
+        apiKey: process.env.GEMINI_API_KEY,
+        httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
+      });
+      
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: `Analizza rigorosamente i dati meteo per prevedere la probabilità di successo della caccia alle anatre in Italia.
+        
+        Dati meteo per i prossimi giorni: ${JSON.stringify(weatherSummary)}
+        
+        La risposta DEVE contenere solo il JSON:
+        {
+          "prediction": "Sintesi tecnica profonda su meteo e flussi migratori (max 20 parole)",
+          "days": [
+            {
+              "date": "YYYY-MM-DD",
+              "probability": 0-100,
+              "label": "Ottima / Buona / Discreta / Scarsa / Nulla",
+              "reason": "Dettaglio tecnico (es. Picco migratorio + Vento 20km/h NE + Pioggia)",
+              "icon": "Lucide icon (Sun, CloudRain, Wind, Cloud)"
+            }
+          ]
+        }`,
+        config: {
+          systemInstruction: `Analizza rigorosamente i dati meteo e i fattori migratori per la caccia in Italia.
+          
+          CONTEXTO MIGRATORIO (ISPRA):
+          - Agosto/Settembre: Inizio (Marzaiola, Alzavola).
+          - Ottobre (PICCO): Massimo flusso (Alzavola, Codone, Mestolone, Fischione).
+          - Novembre-Febbraio: Svernamento e ripasso.
+          
+          CRITERI RIGIDI:
+          1. Vento: Nord/Est > 15km/h = BONUS. Vento assente = PENALITÀ.
+          2. Stagione: Ottobre ha probabilità base più alta.
+          3. Coerenza: Stessi dati = stessa probabilità.
+          4. Severità: Non essere generoso.`,
+          temperature: 0.1,
+          topP: 0.95,
+          topK: 40,
+          responseMimeType: "application/json",
+        }
+      });
+
+      const text = response.text || "{}";
+      const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
+      res.json(JSON.parse(cleaned));
+    } catch (error) {
+      console.error("AI Prediction Error:", error);
+      res.status(500).json({ error: "Failed to generate prediction" });
+    }
+  });
   
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
