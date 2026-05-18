@@ -2,19 +2,24 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import fs from "fs";
-import dotenv from "dotenv";
-
-dotenv.config();
-
 import { GoogleGenAI } from "@google/genai";
 
-const aiClient = () => {
-  if (!process.env.GEMINI_API_KEY) return null;
-  return new GoogleGenAI({ 
-    apiKey: process.env.GEMINI_API_KEY,
-    httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
-  });
-};
+// Initialize Gemini client lazily to avoid crashing if key is missing at startup
+let aiClientInstance: GoogleGenAI | null = null;
+
+function getAiClient() {
+  if (!aiClientInstance) {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return null;
+    }
+    aiClientInstance = new GoogleGenAI({ 
+      apiKey,
+      httpOptions: { headers: { "User-Agent": "aistudio-build" } }
+    });
+  }
+  return aiClientInstance;
+}
 
 // Simple in-memory cache
 const cache = new Map<string, { data: any, timestamp: number }>();
@@ -64,7 +69,7 @@ async function startServer() {
   app.post("/api/ai/hunt-prediction", async (req, res) => {
     const { weatherSummary } = req.body;
     
-    const client = aiClient();
+    const client = getAiClient();
     if (!client) {
       console.error("Gemini API key is missing");
       return res.status(500).json({ error: "AI capability not configured (missing API key)" });
@@ -135,7 +140,7 @@ async function startServer() {
   app.post("/api/ai/recipe-generate", async (req, res) => {
     const { prompt } = req.body;
     
-    const client = aiClient();
+    const client = getAiClient();
     if (!client) {
       console.error("Gemini API key is missing");
       return res.status(500).json({ error: "AI capability not configured (missing API key)" });
@@ -193,7 +198,7 @@ async function startServer() {
   app.post("/api/ai/recipe-search", async (req, res) => {
     const { query, recipes } = req.body;
     
-    const client = aiClient();
+    const client = getAiClient();
     if (!client) {
       console.error("Gemini API key is missing");
       return res.status(500).json({ error: "AI capability not configured (missing API key)" });
