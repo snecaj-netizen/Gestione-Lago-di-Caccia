@@ -304,10 +304,11 @@ export function WeatherPage() {
                     <XAxis 
                       dataKey="time" 
                       stroke="#94a3b8" 
-                      fontSize={8} 
+                      fontSize={window.innerWidth < 640 ? 6 : 8} 
                       tickLine={false} 
                       axisLine={false}
-                      interval={window.innerWidth < 640 ? 4 : 2}
+                      interval={0}
+                      tickFormatter={(value) => value.split(':')[0]}
                     />
                     <YAxis 
                       type="number"
