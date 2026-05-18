@@ -467,8 +467,6 @@ export function HuntingCalendar() {
         </div>
       </header>
       
-      {/* AI Hunting Prediction element */}
-      <DuckHuntAI latitude={settings?.latitude} longitude={settings?.longitude} />
 
       {/* Countdown or Today's Status based on season start */}
       {settings && settings.seasonStart && parseISO(settings.seasonStart).toString() !== 'Invalid Date' && (
@@ -482,6 +480,9 @@ export function HuntingCalendar() {
               isSilenced={!isHuntingDay(new Date())} 
             />
           )}
+
+          {/* AI Hunting Prediction element */}
+          <DuckHuntAI latitude={settings?.latitude} longitude={settings?.longitude} />
           
           {huntingTimes.length > 0 && (
             <div className="card-polish overflow-hidden !p-0 border-t-4 border-lake-green">
