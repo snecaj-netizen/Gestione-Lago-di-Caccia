@@ -150,7 +150,7 @@ export function Recipes() {
       if (error.message === "API_KEY_MISSING") {
         alert("Configurazione AI mancante: Inserisci la chiave GEMINI_API_KEY nei 'Settings > Secrets' per generare ricette.");
       } else {
-        alert("Errore nella generazione della ricetta con AI. Assicurati che la chiave API sia configurata correttamente.");
+        alert(`Errore nella generazione: ${error.message || "Errore sconosciuto"}`);
       }
     } finally {
       setIsGenerating(false);

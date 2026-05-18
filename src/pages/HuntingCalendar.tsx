@@ -165,7 +165,7 @@ function DuckHuntAI({ latitude, longitude }: { latitude?: number, longitude?: nu
                   </div>
                 </div>
               ) : (
-                <div className="py-4 text-center text-[10px] text-rose-400 font-bold uppercase">
+                <div className="py-4 text-center text-[10px] text-rose-400 font-bold uppercase whitespace-pre-wrap px-4">
                   {prediction?.error ? `Errore: ${prediction.error}` : "Impossibile ottenere la previsione"}
                 </div>
               )}

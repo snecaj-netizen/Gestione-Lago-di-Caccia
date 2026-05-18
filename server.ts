@@ -2,6 +2,35 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import fs from "fs";
+import dotenv from "dotenv";
+
+dotenv.config();
+
+import { GoogleGenAI } from "@google/genai";
+
+const aiClient = () => {
+  if (!process.env.GEMINI_API_KEY) return null;
+  return new GoogleGenAI({ 
+    apiKey: process.env.GEMINI_API_KEY,
+    httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
+  });
+};
+
+// Simple in-memory cache
+const cache = new Map<string, { data: any, timestamp: number }>();
+const CACHE_TTL = 1000 * 60 * 60 * 24; // 24 hours for daily predictions
+
+function getCached(key: string) {
+  const cached = cache.get(key);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached.data;
+  }
+  return null;
+}
+
+function setCached(key: string, data: any) {
+  cache.set(key, { data, timestamp: Date.now() });
+}
 
 async function startServer() {
   const app = express();
@@ -35,18 +64,18 @@ async function startServer() {
   app.post("/api/ai/hunt-prediction", async (req, res) => {
     const { weatherSummary } = req.body;
     
-    if (!process.env.GEMINI_API_KEY) {
-      return res.status(500).json({ error: "AI capability not configured" });
+    const client = aiClient();
+    if (!client) {
+      console.error("Gemini API key is missing");
+      return res.status(500).json({ error: "AI capability not configured (missing API key)" });
     }
 
+    const cacheKey = `hunt_${JSON.stringify(weatherSummary)}`;
+    const cached = getCached(cacheKey);
+    if (cached) return res.json(cached);
+
     try {
-      const { GoogleGenAI } = await import("@google/genai");
-      const ai = new GoogleGenAI({ 
-        apiKey: process.env.GEMINI_API_KEY,
-        httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
-      });
-      
-      const response = await ai.models.generateContent({
+      const response = await client.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: `Analizza rigorosamente i dati meteo per prevedere la probabilità di successo della caccia alle anatre in Italia.
         
@@ -85,30 +114,39 @@ async function startServer() {
         }
       });
 
-      const text = response.text || "{}";
+      const text = response.text;
+      if (!text) throw new Error("Empty response from AI");
       const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
-      res.json(JSON.parse(cleaned));
-    } catch (error) {
+      const result = JSON.parse(cleaned);
+      setCached(cacheKey, result);
+      res.json(result);
+    } catch (error: any) {
       console.error("AI Prediction Error:", error);
-      res.status(500).json({ error: "Failed to generate prediction" });
+      let message = "Failed to generate prediction";
+      if (error.message?.includes("RESOURCE_EXHAUSTED") || error.status === "RESOURCE_EXHAUSTED" || error.code === 429) {
+        message = "Quota AI superata per oggi. Riprova tra un po'.";
+      } else if (error.message) {
+        message = error.message;
+      }
+      res.status(500).json({ error: message });
     }
   });
 
   app.post("/api/ai/recipe-generate", async (req, res) => {
     const { prompt } = req.body;
     
-    if (!process.env.GEMINI_API_KEY) {
-      return res.status(500).json({ error: "AI capability not configured" });
+    const client = aiClient();
+    if (!client) {
+      console.error("Gemini API key is missing");
+      return res.status(500).json({ error: "AI capability not configured (missing API key)" });
     }
 
+    const cacheKey = `recipe_gen_${prompt}`;
+    const cached = getCached(cacheKey);
+    if (cached) return res.json(cached);
+
     try {
-      const { GoogleGenAI } = await import("@google/genai");
-      const ai = new GoogleGenAI({ 
-        apiKey: process.env.GEMINI_API_KEY,
-        httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
-      });
-      
-      const response = await ai.models.generateContent({
+      const response = await client.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: `Genera una ricetta completa e professionale in lingua italiana per: "${prompt}".`,
         config: {
@@ -134,30 +172,39 @@ async function startServer() {
         }
       });
 
-      const text = response.text || "{}";
+      const text = response.text;
+      if (!text) throw new Error("Empty response from AI");
       const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
-      res.json(JSON.parse(cleaned));
-    } catch (error) {
+      const result = JSON.parse(cleaned);
+      setCached(cacheKey, result);
+      res.json(result);
+    } catch (error: any) {
       console.error("AI Recipe Error:", error);
-      res.status(500).json({ error: "Failed to generate recipe" });
+      let message = "Failed to generate recipe";
+      if (error.message?.includes("RESOURCE_EXHAUSTED") || error.status === "RESOURCE_EXHAUSTED" || error.code === 429) {
+        message = "Quota AI superata per oggi. Riprova più tardi.";
+      } else if (error.message) {
+        message = error.message;
+      }
+      res.status(500).json({ error: message });
     }
   });
 
   app.post("/api/ai/recipe-search", async (req, res) => {
     const { query, recipes } = req.body;
     
-    if (!process.env.GEMINI_API_KEY) {
-      return res.status(500).json({ error: "AI capability not configured" });
+    const client = aiClient();
+    if (!client) {
+      console.error("Gemini API key is missing");
+      return res.status(500).json({ error: "AI capability not configured (missing API key)" });
     }
 
+    const cacheKey = `recipe_search_${query}_${JSON.stringify(recipes.map((r: any) => r.id))}`;
+    const cached = getCached(cacheKey);
+    if (cached) return res.json(cached);
+
     try {
-      const { GoogleGenAI } = await import("@google/genai");
-      const ai = new GoogleGenAI({ 
-        apiKey: process.env.GEMINI_API_KEY,
-        httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
-      });
-      
-      const response = await ai.models.generateContent({
+      const response = await client.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: `Ricerca ricette per la query: "${query}". Ricette disponibili: ${JSON.stringify(recipes)}`,
         config: {
@@ -170,12 +217,21 @@ async function startServer() {
         }
       });
 
-      const text = response.text || "[]";
+      const text = response.text;
+      if (!text) throw new Error("Empty response from AI");
       const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
-      res.json(JSON.parse(cleaned));
-    } catch (error) {
+      const result = JSON.parse(cleaned);
+      setCached(cacheKey, result);
+      res.json(result);
+    } catch (error: any) {
       console.error("AI Search Error:", error);
-      res.status(500).json({ error: "Failed to search recipes" });
+      let message = "Failed to search recipes";
+      if (error.message?.includes("RESOURCE_EXHAUSTED") || error.status === "RESOURCE_EXHAUSTED" || error.code === 429) {
+        message = "Quota AI superata per oggi. Riprova tra un po'.";
+      } else if (error.message) {
+        message = error.message;
+      }
+      res.status(500).json({ error: message });
     }
   });
   
