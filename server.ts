@@ -3,7 +3,6 @@
 process.env.NODE_ENV = process.env.NODE_ENV ?? "production";
 
 import express from "express";
-import { createServer as createViteServer } from "vite";
 import path from "path";
 import fs from "fs";
 import multer from "multer";
@@ -489,8 +488,10 @@ async function startServer() {
   const publicDir = path.join(process.cwd(), 'public');
   app.use(express.static(publicDir));
 
-  // Vite middleware for development
+  // Vite middleware for development — loaded dynamically so the bundled
+  // production server (dist/server.cjs) never attempts to import Vite.
   if (process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
