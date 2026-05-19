@@ -1,5 +1,4 @@
 import express from "express";
-import { createServer as createViteServer } from "vite";
 import path from "path";
 import fs from "fs";
 import multer from "multer";
@@ -78,12 +77,15 @@ function setCached(key: string, data: any) {
 }
 
 async function startServer() {
+  console.log("SERVER: starting startServer() block...");
   const app = express();
   const PORT = 3000;
 
+  console.log("SERVER: setting up middlewares...");
   app.use(express.json());
 
   // API Routes
+  console.log("SERVER: defining API routes...");
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok" });
   });
@@ -176,23 +178,29 @@ async function startServer() {
     }
   });
 
+  console.log("SERVER: API routes defined. Setting up frontend serving...");
   // Static files and Vite
   if (process.env.NODE_ENV !== "production") {
+    console.log("VITE: Starting Vite dev server middleware...");
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
     app.use(vite.middlewares);
+    console.log("VITE: Middleware integrated.");
   } else {
     // In production, build output is in `dist/`.
-    app.use(express.static(path.join(process.cwd(), 'dist')));
+    const distPath = path.join(process.cwd(), 'dist');
+    console.log("PRODUCTION: Serving static files from:", distPath);
+    app.use(express.static(distPath));
     app.get("*", (req, res) => {
-      res.sendFile(path.join(process.cwd(), 'dist', 'index.html'));
+      res.sendFile(path.join(distPath, "index.html"));
     });
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server successfully listening on port ${PORT}`);
+    console.log(`SERVER: Successfully listening on 0.0.0.0:${PORT} (NODE_ENV=${process.env.NODE_ENV})`);
   });
 }
 
