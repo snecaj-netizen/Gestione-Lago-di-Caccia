@@ -183,6 +183,9 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.resolve(process.cwd(), 'dist');
+    console.log("PRODUCTION: Serving static files from:", distPath);
+    console.log("PRODUCTION: Dist exists:", fs.existsSync(distPath));
+    console.log("PRODUCTION: Dist contents:", fs.existsSync(distPath) ? fs.readdirSync(distPath) : "n/a");
     app.use(express.static(distPath));
     app.get("*", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
