@@ -77,17 +77,14 @@ function setCached(key: string, data: any) {
 }
 
 async function startServer() {
-  console.log("SERVER: starting startServer() block...");
   const app = express();
   const PORT = 3000;
 
-  console.log("SERVER: setting up middlewares...");
   app.use(express.json());
 
   // API Routes
-  console.log("SERVER: defining API routes...");
   app.get("/api/health", (req, res) => {
-    res.json({ status: "ok" });
+    res.json({ status: "ok", env: process.env.NODE_ENV });
   });
 
   app.get("/api/weather", async (req, res) => {
@@ -96,7 +93,6 @@ async function startServer() {
 
     try {
       const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&hourly=temperature_2m,precipitation_probability,precipitation,wind_speed_10m,wind_direction_10m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,wind_speed_10m_max,wind_direction_10m_dominant,precipitation_probability_max,precipitation_sum&timezone=auto`;
-      console.log("Fetching weather from:", url);
       const response = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
       if (!response.ok) throw new Error(`Status ${response.status}`);
       const data = await response.json();
@@ -107,7 +103,6 @@ async function startServer() {
     }
   });
 
-  // AI Proxy API
   app.post("/api/ai/hunt-prediction", async (req, res) => {
     const { weatherSummary } = req.body;
     const client = getAiClient();
@@ -178,21 +173,16 @@ async function startServer() {
     }
   });
 
-  console.log("SERVER: API routes defined. Setting up frontend serving...");
-  // Static files and Vite
+  // Serve static files and handle SPA fallback
   if (process.env.NODE_ENV !== "production") {
-    console.log("VITE: Starting Vite dev server middleware...");
     const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
     app.use(vite.middlewares);
-    console.log("VITE: Middleware integrated.");
   } else {
-    // In production, build output is in `dist/`.
-    const distPath = path.join(process.cwd(), 'dist');
-    console.log("PRODUCTION: Serving static files from:", distPath);
+    const distPath = path.resolve(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get("*", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
@@ -200,9 +190,10 @@ async function startServer() {
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`SERVER: Successfully listening on 0.0.0.0:${PORT} (NODE_ENV=${process.env.NODE_ENV})`);
+    console.log(`Server listening on port ${PORT}`);
   });
 }
+
 
 startServer().catch((err) => {
   console.error("Critical error starting server:", err);
