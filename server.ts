@@ -9,21 +9,17 @@ import { GoogleGenAI } from "@google/genai";
 const pdfStorage = multer.diskStorage({
   destination: function (_req, _file, cb) {
     const publicDir = path.join(process.cwd(), 'public');
-    console.log("MULTER: Target directory for PDF:", publicDir);
     try {
       if (!fs.existsSync(publicDir)) {
-        console.log("MULTER: Creating directory:", publicDir);
         fs.mkdirSync(publicDir, { recursive: true });
       }
       cb(null, publicDir);
     } catch (err) {
-      console.error("MULTER DEST ERROR:", err);
       cb(err as Error, publicDir);
     }
   },
   filename: function (_req, _file, cb) {
-    console.log("MULTER: Saving file as regulation.pdf");
-    cb(null, 'regulation.pdf'); // Fixed name for easy linking
+    cb(null, 'regulation.pdf');
   }
 });
 
@@ -357,22 +353,6 @@ async function startServer() {
       
       let fullText = "";
       let extractionSource = "none";
-
-      // Attempt Local Extraction first (if modulo is available and functional)
-      let pdfParse;
-      // Temporarily disabled to check if this is the cause of the crash
-      console.log("Local PDF extraction module disabled for testing.");
-
-      if (typeof pdfParse === 'function') {
-        try {
-          const data = await pdfParse(dataBuffer);
-          fullText = data.text;
-          extractionSource = "local";
-          console.log("PDF extraction successful via local pdf-parse, text length:", fullText.length);
-        } catch (parseError: any) {
-          console.warn("Local pdf-parse function call failed:", parseError?.message || parseError);
-        }
-      }
 
       // If local failed or wasn't available, jump to Gemini Direct PDF Analysis
       if (!fullText) {
