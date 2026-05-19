@@ -4,8 +4,6 @@ import fs from "fs";
 import multer from "multer";
 import { GoogleGenAI } from "@google/genai";
 
-console.log("SERVER_STARTING: Initializing...");
-
 // Configure multer for PDF uploads
 const pdfStorage = multer.diskStorage({
   destination: function (_req, _file, cb) {
@@ -183,9 +181,6 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.resolve(process.cwd(), 'dist');
-    console.log("PRODUCTION: Serving static files from:", distPath);
-    console.log("PRODUCTION: Dist exists:", fs.existsSync(distPath));
-    console.log("PRODUCTION: Dist contents:", fs.existsSync(distPath) ? fs.readdirSync(distPath) : "n/a");
     app.use(express.static(distPath));
     app.get("*", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
