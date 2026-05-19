@@ -5,6 +5,8 @@ import fs from "fs";
 import multer from "multer";
 import { GoogleGenAI } from "@google/genai";
 
+console.log("SERVER_STARTING: Initializing...");
+
 // Configure multer for PDF uploads
 const pdfStorage = multer.diskStorage({
   destination: function (_req, _file, cb) {
@@ -190,7 +192,7 @@ async function startServer() {
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`Server successfully listening on port ${PORT}`);
   });
 }
 
