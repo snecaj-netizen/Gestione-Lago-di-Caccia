@@ -1,32 +1,33 @@
-// Default to production so the bundled server (dist/server.cjs) always serves
-// pre-built static files instead of attempting to start a Vite dev server.
-process.env.NODE_ENV = process.env.NODE_ENV ?? "production";
-
 import express from "express";
+import { createServer as createViteServer } from "vite";
 import path from "path";
 import fs from "fs";
 import multer from "multer";
-import { GoogleGenAI } from "@google/genai";
+import { createRequire } from "module";
 
-// Lazily loaded via dynamic import so the app starts even if pdf-parse is unavailable
-let pdfParse: ((buffer: Buffer, options?: any) => Promise<{ text: string }>) | null = null;
+// Safely initialize a require function for both ESM (development) and CJS (production bundle)
+const localRequire = typeof require !== 'undefined' 
+  ? require 
+  : createRequire(import.meta.url);
 
-async function loadPdfParse(): Promise<typeof pdfParse> {
-  if (pdfParse !== null) return pdfParse;
-  try {
-    const mod = await import("pdf-parse");
-    const fn = mod.default ?? (mod as any);
-    if (typeof fn === "function") {
-      pdfParse = fn as typeof pdfParse;
-      console.log("pdf-parse loaded successfully.");
-    } else {
-      console.warn("pdf-parse module loaded but default export is not a function — PDF parsing disabled.");
-    }
-  } catch (e: any) {
-    console.warn("pdf-parse failed to load — PDF parsing disabled:", e?.message ?? e);
+let pdfParse: any;
+try {
+  // Try to load as a function first (standard CommonJS behavior)
+  const mod = localRequire('pdf-parse');
+  if (typeof mod === 'function') {
+    pdfParse = mod;
+  } else if (mod && typeof mod.default === 'function') {
+    pdfParse = mod.default;
+  } else if (mod && typeof mod.pdfParse === 'function') {
+    pdfParse = mod.pdfParse;
+  } else {
+    // If it's an object (maybe it's the module itself or pdfjs)
+    pdfParse = mod;
   }
-  return pdfParse;
+} catch (e) {
+  console.error("pdf-parse requirement failed:", e);
 }
+import { GoogleGenAI } from "@google/genai";
 
 // Configure multer for PDF uploads
 const pdfStorage = multer.diskStorage({
@@ -381,11 +382,10 @@ async function startServer() {
       let fullText = "";
       let extractionSource = "none";
 
-      // Attempt Local Extraction first (if pdf-parse is available and functional)
-      const pdfParseFunc = await loadPdfParse();
-      if (typeof pdfParseFunc === 'function') {
+      // Attempt Local Extraction first (if modulo is available and functional)
+      if (typeof pdfParse === 'function') {
         try {
-          const data = await pdfParseFunc(dataBuffer);
+          const data = await pdfParse(dataBuffer);
           fullText = data.text;
           extractionSource = "local";
           console.log("PDF extraction successful via local pdf-parse, text length:", fullText.length);
@@ -488,10 +488,8 @@ async function startServer() {
   const publicDir = path.join(process.cwd(), 'public');
   app.use(express.static(publicDir));
 
-  // Vite middleware for development — loaded dynamically so the bundled
-  // production server (dist/server.cjs) never attempts to import Vite.
+  // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
-    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
