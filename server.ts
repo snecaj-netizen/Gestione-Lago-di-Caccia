@@ -1,3 +1,7 @@
+// Default to production so the bundled server (dist/server.cjs) always serves
+// pre-built static files instead of attempting to start a Vite dev server.
+process.env.NODE_ENV = process.env.NODE_ENV ?? "production";
+
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
