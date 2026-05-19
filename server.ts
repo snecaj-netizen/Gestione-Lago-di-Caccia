@@ -76,22 +76,25 @@ function setCached(key: string, data: any) {
 }
 
 async function startServer() {
-  const app = express();
-  const PORT = 3000;
+  try {
+    const app = express();
+    const PORT = 3000;
 
-  // Health check for debugging
-  app.get("/api/health", (req, res) => {
-    const publicDir = path.join(process.cwd(), 'public');
-    const pdfPath = path.join(publicDir, 'regulation.pdf');
-    res.json({
-      status: "ok",
-      cwd: process.cwd(),
-      node_env: process.env.NODE_ENV,
-      publicDir,
-      pdfExists: fs.existsSync(pdfPath),
-      publicContents: fs.existsSync(publicDir) ? fs.readdirSync(publicDir) : 'not found'
+    // Health check for debugging
+    app.get("/api/health", (req, res) => {
+      const publicDir = path.join(process.cwd(), 'public');
+      const pdfPath = path.join(publicDir, 'regulation.pdf');
+      res.json({
+        status: "ok",
+        cwd: process.cwd(),
+        node_env: process.env.NODE_ENV,
+        publicDir,
+        pdfExists: fs.existsSync(pdfPath),
+        publicContents: fs.existsSync(publicDir) ? fs.readdirSync(publicDir) : 'not found'
+      });
     });
-  });
+
+    // ... (keep all existing routes)
 
   // Weather Proxy API
   app.get("/api/weather", async (req, res) => {
@@ -456,7 +459,8 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.resolve(process.cwd(), "dist");
+    // In production, server.cjs is bundled inside `dist`, so `dist` itself is the static directory.
+    const distPath = process.cwd();
     
     app.use(express.static(distPath));
     
@@ -468,6 +472,13 @@ async function startServer() {
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
+  } catch (e) {
+    console.error("Critical error in startServer:", e);
+    throw e;
+  }
 }
 
-startServer();
+startServer().catch((err) => {
+  console.error("Critical error starting server:", err);
+  process.exit(1);
+});
