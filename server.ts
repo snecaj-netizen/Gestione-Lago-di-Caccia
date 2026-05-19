@@ -360,12 +360,8 @@ async function startServer() {
 
       // Attempt Local Extraction first (if modulo is available and functional)
       let pdfParse;
-      try {
-        const mod = await import('pdf-parse');
-        pdfParse = (mod as any).default || mod;
-      } catch (e) {
-        console.warn("Local PDF extraction module failed to load:", e);
-      }
+      // Temporarily disabled to check if this is the cause of the crash
+      console.log("Local PDF extraction module disabled for testing.");
 
       if (typeof pdfParse === 'function') {
         try {
