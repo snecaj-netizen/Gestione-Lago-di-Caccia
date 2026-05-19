@@ -6,20 +6,6 @@ import multer from "multer";
 import { createRequire } from "module";
 import { GoogleGenAI } from "@google/genai";
 
-// Safely lazy-load pdf-parse for both CJS (production) and ESM (development/tsx)
-let pdfParse: any;
-try {
-  const req = typeof require !== 'undefined' 
-    ? require 
-    : (typeof import.meta !== 'undefined' && import.meta.url ? createRequire(import.meta.url) : null);
-  if (req) {
-    const mod = req('pdf-parse');
-    pdfParse = mod.default || mod;
-  }
-} catch (e) {
-  console.error("Failed to load pdf-parse:", e);
-}
-
 // Configure multer for PDF uploads
 const pdfStorage = multer.diskStorage({
   destination: function (_req, _file, cb) {
@@ -374,6 +360,14 @@ async function startServer() {
       let extractionSource = "none";
 
       // Attempt Local Extraction first (if modulo is available and functional)
+      let pdfParse;
+      try {
+        const mod = await import('pdf-parse');
+        pdfParse = (mod as any).default || mod;
+      } catch (e) {
+        console.warn("Local PDF extraction module failed to load:", e);
+      }
+
       if (typeof pdfParse === 'function') {
         try {
           const data = await pdfParse(dataBuffer);
