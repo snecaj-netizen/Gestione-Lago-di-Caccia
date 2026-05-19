@@ -3,7 +3,6 @@ import { createServer as createViteServer } from "vite";
 import path from "path";
 import fs from "fs";
 import multer from "multer";
-import { createRequire } from "module";
 import { GoogleGenAI } from "@google/genai";
 
 // Configure multer for PDF uploads
