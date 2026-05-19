@@ -3,8 +3,22 @@ import { createServer as createViteServer } from "vite";
 import path from "path";
 import fs from "fs";
 import multer from "multer";
-import * as pdfParse from "pdf-parse";
+import { createRequire } from "module";
 import { GoogleGenAI } from "@google/genai";
+
+// Safely lazy-load pdf-parse for both CJS (production) and ESM (development/tsx)
+let pdfParse: any;
+try {
+  const req = typeof require !== 'undefined' 
+    ? require 
+    : (typeof import.meta !== 'undefined' && import.meta.url ? createRequire(import.meta.url) : null);
+  if (req) {
+    const mod = req('pdf-parse');
+    pdfParse = mod.default || mod;
+  }
+} catch (e) {
+  console.error("Failed to load pdf-parse:", e);
+}
 
 // Configure multer for PDF uploads
 const pdfStorage = multer.diskStorage({
@@ -360,10 +374,9 @@ async function startServer() {
       let extractionSource = "none";
 
       // Attempt Local Extraction first (if modulo is available and functional)
-      const pdfParser = (pdfParse as any).default || pdfParse;
-      if (typeof pdfParser === 'function') {
+      if (typeof pdfParse === 'function') {
         try {
-          const data = await pdfParser(dataBuffer);
+          const data = await pdfParse(dataBuffer);
           fullText = data.text;
           extractionSource = "local";
           console.log("PDF extraction successful via local pdf-parse, text length:", fullText.length);
