@@ -4,23 +4,32 @@ import path from "path";
 import fs from "fs";
 import multer from "multer";
 import { createRequire } from "module";
-const require = createRequire(import.meta.url);
+
+// Safely initialize require for both ESM (development) and CJS (production bundle)
+const require = (typeof import.meta !== 'undefined' && import.meta.url)
+  ? createRequire(import.meta.url)
+  : (typeof (globalThis as any).require === 'function' ? (globalThis as any).require : undefined);
+
 let pdfParse: any;
-try {
-  // Try to load as a function first (standard CommonJS behavior)
-  const mod = require('pdf-parse');
-  if (typeof mod === 'function') {
-    pdfParse = mod;
-  } else if (mod && typeof mod.default === 'function') {
-    pdfParse = mod.default;
-  } else if (mod && typeof mod.pdfParse === 'function') {
-    pdfParse = mod.pdfParse;
-  } else {
-    // If it's an object (maybe it's the module itself or pdfjs)
-    pdfParse = mod;
+if (require) {
+  try {
+    // Try to load as a function first (standard CommonJS behavior)
+    const mod = require('pdf-parse');
+    if (typeof mod === 'function') {
+      pdfParse = mod;
+    } else if (mod && typeof mod.default === 'function') {
+      pdfParse = mod.default;
+    } else if (mod && typeof mod.pdfParse === 'function') {
+      pdfParse = mod.pdfParse;
+    } else {
+      // If it's an object (maybe it's the module itself or pdfjs)
+      pdfParse = mod;
+    }
+  } catch (e) {
+    console.error("pdf-parse requirement failed:", e);
   }
-} catch (e) {
-  console.error("pdf-parse requirement failed:", e);
+} else {
+  console.error("require is not available in this environment.");
 }
 import { GoogleGenAI } from "@google/genai";
 
