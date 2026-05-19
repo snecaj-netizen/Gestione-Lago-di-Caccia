@@ -8,6 +8,10 @@ export interface UserProfile {
   isActive: boolean;
   assignedDaysOfWeek: number[]; // Array of 0-6
   seasonalQuota?: number;
+  bio?: string;
+  location?: string;
+  photoURL?: string;
+  createdAt?: string;
 }
 
 export interface PhotoItem {
@@ -132,4 +136,14 @@ export interface Notification {
   createdAt: string;
   link?: string;
   metadata?: any;
+}
+
+export interface HuntingLimit {
+  id: string;
+  species: string;
+  dailyLimit: number;
+  seasonalLimit: number;
+  huntingPeriod?: string;
+  notes?: string;
+  updatedAt: string;
 }

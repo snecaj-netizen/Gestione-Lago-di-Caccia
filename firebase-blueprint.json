@@ -149,6 +149,20 @@
         "metadata": { "type": "object" }
       },
       "required": ["title", "body", "targetUid", "read", "createdAt"]
+    },
+    "huntingLimit": {
+      "title": "Hunting Limit",
+      "description": "Daily and seasonal hunting limits per species.",
+      "type": "object",
+      "properties": {
+        "species": { "type": "string" },
+        "dailyLimit": { "type": "number" },
+        "seasonalLimit": { "type": "number" },
+        "huntingPeriod": { "type": "string" },
+        "notes": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["species", "dailyLimit", "seasonalLimit"]
     }
   },
   "firestore": {
@@ -191,6 +205,10 @@
     "/recipes/{recipeId}": {
       "schema": "recipe",
       "description": "Shared recipes for wild game."
+    },
+    "/hunting_limits/{limitId}": {
+      "schema": "huntingLimit",
+      "description": "Hunting limits extracted from regulations."
     }
   }
 }

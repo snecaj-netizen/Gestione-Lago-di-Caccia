@@ -27,7 +27,8 @@ import {
   Download,
   Waves,
   Fish,
-  Utensils
+  Utensils,
+  FileText
 } from 'lucide-react';
 import { cn } from './lib/utils';
 
@@ -41,6 +42,7 @@ import { AdminPanel } from './pages/AdminPanel';
 import { Profile } from './pages/Profile';
 import { Gallery } from './pages/Gallery';
 import { Recipes } from './pages/Recipes';
+import { Regulation } from './pages/Regulation';
 import { NotificationCenter } from './components/NotificationCenter';
 import { PWAUpdatePrompt } from './components/PWAUpdatePrompt';
 import { it } from 'date-fns/locale';
@@ -82,8 +84,9 @@ function Sidebar({ isOpen, setIsOpen }: { isOpen: boolean, setIsOpen: (val: bool
   };
 
   const navItems = [
-    { name: 'Calendario Venatorio', path: '/', icon: CalendarIcon },
+    { name: 'Oggi al Lago', path: '/', icon: CalendarIcon },
     { name: 'Meteo Lago', path: '/meteo', icon: CloudSun },
+    { name: 'Regolamento PDF', path: '/regolamento', icon: FileText },
     { name: 'Abbattimenti', path: '/abbattimenti', icon: Target },
     { name: 'Galleria Foto', path: '/galleria', icon: Camera },
     { name: 'Selvaggina in Cucina', path: '/ricette', icon: Utensils },
@@ -756,6 +759,7 @@ function MainLayout() {
                   <Route path="/abbattimenti" element={<Harvests />} />
                   <Route path="/galleria" element={<Gallery />} />
                   <Route path="/ricette" element={<Recipes />} />
+                  <Route path="/regolamento" element={<Regulation />} />
                   <Route path="/admin" element={<AdminPanel />} />
                   <Route path="/profilo" element={<Profile />} />
                   <Route path="*" element={<Navigate to="/" replace />} />

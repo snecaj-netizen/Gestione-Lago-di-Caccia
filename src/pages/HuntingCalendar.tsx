@@ -6,9 +6,10 @@ import {
   unassignHuntingDay,
   subscribeToSettings,
   subscribeToTransactions,
-  subscribeToHuntingTimes
+  subscribeToHuntingTimes,
+  subscribeToHuntingLimits
 } from '../services';
-import { HuntingDay, UserProfile, LakeSettings, Transaction, HuntingTime } from '../types';
+import { HuntingDay, UserProfile, LakeSettings, Transaction, HuntingTime, HuntingLimit } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -275,7 +276,7 @@ function TodayInfo({ day, assignments, isSilenced, title }: { day: Date, assignm
           {assignments.length > 0 ? (
             assignments.map(a => (
               <span key={a.id} className="bg-white/10 px-3 py-1 rounded border border-white/20 text-[10px] sm:text-xs font-black text-accent-gold uppercase tracking-widest whitespace-nowrap">
-                {a.assignedToName}
+                {a.assignedToName.split(' ')[0]}
               </span>
             ))
           ) : (
@@ -295,9 +296,12 @@ export function HuntingCalendar() {
   const [availableUsers, setAvailableUsers] = useState<UserProfile[]>([]);
   const [settings, setSettings] = useState<LakeSettings | null>(null);
   const [huntingTimes, setHuntingTimes] = useState<HuntingTime[]>([]);
+  const [huntingLimits, setHuntingLimits] = useState<HuntingLimit[]>([]);
   const [showAllTimes, setShowAllTimes] = useState(false);
+  const [showAllLimits, setShowAllLimits] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
   const [hideSilence, setHideSilence] = useState(true);
-  const [selectedDay, setSelectedDay] = useState<Date | null>(null);
+  const [selectedDay, setSelectedDay] = useState<Date | null>(new Date());
   const [isAssigning, setIsAssigning] = useState(false);
   const [showSwapModal, setShowSwapModal] = useState(false);
   const [swapTargetDate, setSwapTargetDate] = useState<string>('');
@@ -314,10 +318,102 @@ export function HuntingCalendar() {
       subscribeToHuntingDays(setHuntingDays),
       subscribeToUsers(setAvailableUsers),
       subscribeToSettings(setSettings),
-      subscribeToHuntingTimes(setHuntingTimes)
+      subscribeToHuntingTimes(setHuntingTimes),
+      subscribeToHuntingLimits(setHuntingLimits)
     ];
     return () => unsubs.forEach(u => u());
   }, []);
+
+  const formatShortPeriod = (period: string | undefined): string => {
+    if (!period) return '-';
+    let p = period
+      .toLowerCase()
+      .replace(/dal|al/gi, '')
+      .replace(/gennaio/gi, '/01')
+      .replace(/febbraio/gi, '/02')
+      .replace(/marzo/gi, '/03')
+      .replace(/aprile/gi, '/04')
+      .replace(/maggio/gi, '/05')
+      .replace(/giugno/gi, '/06')
+      .replace(/luglio/gi, '/07')
+      .replace(/agosto/gi, '/08')
+      .replace(/settembre/gi, '/09')
+      .replace(/ottobre/gi, '/10')
+      .replace(/novembre/gi, '/11')
+      .replace(/dicembre/gi, '/12')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    // Remove "20" from years like 2026 -> 26
+    p = p.replace(/\/20(\d{2})/g, '/$1').replace(/\b20(\d{2})\b/g, '/$1');
+
+    // Clean up spaces around slashes
+    p = p.replace(/\s*\/\s*/g, '/');
+
+    // Extract potential date blocks (e.g., 01/09, 31/01/25)
+    // We look for patterns like DD/MM or DD/MM/YY
+    const dateRegex = /\d{1,2}\/\d{1,2}(?:\/\d{2,4})?/g;
+    const dates = p.match(dateRegex);
+
+    if (dates && dates.length >= 2) {
+      // Just take the first and last date found and join them with a dash
+      return `${dates[0]} - ${dates[dates.length - 1]}`;
+    }
+
+    // Fallback: just ensure dashes are formatted nicely if they exist
+    return p.replace(/\s*[-–]\s*/g, ' - ');
+  };
+
+  const isSpeciesHuntable = (period: string | undefined): boolean => {
+    if (!period) return true;
+    try {
+      const now = new Date();
+      const currentMonth = now.getMonth() + 1;
+      const currentDay = now.getDate();
+
+      const parts = period.split('-').map(p => p.trim());
+      if (parts.length !== 2) return true;
+
+      const [startDay, startMonth] = parts[0].split('/').map(Number);
+      const [endDay, endMonth] = parts[1].split('/').map(Number);
+
+      const currentVal = currentMonth * 100 + currentDay;
+      const startVal = startMonth * 100 + startDay;
+      const endVal = endMonth * 100 + endDay;
+
+      if (startVal <= endVal) {
+        return currentVal >= startVal && currentVal <= endVal;
+      } else {
+        return currentVal >= startVal || currentVal <= endVal;
+      }
+    } catch (e) {
+      return true;
+    }
+  };
+
+  const WATERFOWL_KEYWORDS = [
+    'alzavola', 'canapiglia', 'codone', 'fischione', 'germano', 
+    'marzaiola', 'mestolone', 'moriglione', 'moretta', 'folaga', 
+    'gallinella', 'porciglione', 'beccaccino', 'frullino', 'pavoncella', 
+    'volpoca', 'anatra'
+  ];
+
+  const isWaterfowl = (species: string) => {
+    const s = species.toLowerCase();
+    return WATERFOWL_KEYWORDS.some(w => s.includes(w));
+  };
+
+  const huntableSpecies = huntingLimits
+    .filter(l => isSpeciesHuntable(l.huntingPeriod))
+    .filter(l => l.species.toLowerCase().includes(searchTerm.toLowerCase()))
+    .sort((a, b) => {
+      const aWater = isWaterfowl(a.species);
+      const bWater = isWaterfowl(b.species);
+      if (aWater && !bWater) return -1;
+      if (!aWater && bWater) return 1;
+      return a.species.localeCompare(b.species);
+    });
+
 
   useEffect(() => {
     if (settings?.seasonStart && !hasInitializedDate) {
@@ -329,6 +425,8 @@ export function HuntingCalendar() {
       }
     }
   }, [settings, hasInitializedDate]);
+
+  const getFirstName = (fullName: string) => fullName.split(' ')[0];
 
   const monthStart = startOfMonth(currentDate);
   const monthEnd = endOfMonth(monthStart);
@@ -460,8 +558,7 @@ export function HuntingCalendar() {
     <div className="space-y-6">
       <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-serif text-lake-green">Calendario Venatorio</h1>
-          <p className="text-slate-gray font-medium">Assegnazione giornate ai soci e quotisti</p>
+          <h1 className="text-3xl font-serif text-lake-green">Oggi al Lago</h1>
         </div>
         <div className="flex flex-col items-end gap-2">
         </div>
@@ -494,10 +591,6 @@ export function HuntingCalendar() {
                 <div className="flex items-center gap-2">
                   <Clock size={16} className="text-lake-green" />
                   <h3 className="text-xs font-black text-slate-gray uppercase tracking-widest">Tabella Orari e Periodi di Caccia</h3>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-lake-green animate-pulse" />
-                  <span className="text-[10px] font-black text-lake-green uppercase tracking-widest">Periodo Attivo</span>
                 </div>
               </motion.div>
               <div className="">
@@ -586,153 +679,275 @@ export function HuntingCalendar() {
               )}
             </div>
           )}
+
+          {huntableSpecies.length > 0 || searchTerm ? (
+            <div className="card-polish overflow-hidden !p-0 border-t-4 border-earth-brown animate-in fade-in slide-in-from-bottom-4 duration-700">
+              <div className="p-4 bg-off-white border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-2">
+                  <Bird size={16} className="text-earth-brown" />
+                  <h3 className="text-xs font-black text-slate-gray uppercase tracking-widest">Carniere e Specie Cacciabili Oggi</h3>
+                </div>
+                
+                <div className="flex items-center gap-3">
+                  <div className="relative group">
+                    <input 
+                      type="text"
+                      placeholder="Cerca specie..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="bg-white border border-slate-200 rounded-lg pl-8 pr-8 py-1.5 text-xs font-bold text-slate-700 outline-none focus:ring-1 focus:ring-earth-brown focus:border-earth-brown transition-all w-full sm:w-48"
+                    />
+                    <div className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400">
+                      <Bird size={14} className="group-focus-within:text-earth-brown transition-colors" />
+                    </div>
+                    {searchTerm && (
+                      <button 
+                        onClick={() => setSearchTerm('')}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-300 hover:text-earth-brown transition-colors"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+                  <span className="hidden sm:inline text-[9px] font-bold text-earth-brown/50 uppercase tracking-tighter">Stagione {new Date().getFullYear()}</span>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead className="bg-white border-b border-slate-100">
+                    <tr className="text-[0.6rem] font-black text-slate-400 uppercase tracking-widest">
+                      <th className="px-4 py-3">Specie</th>
+                      <th className="px-2 py-3 text-center">Periodo</th>
+                      <th className="px-2 py-3 text-center">In Giorno</th>
+                      <th className="px-2 py-3 text-center">In Stagione</th>
+                      <th className="px-4 py-3 text-right">Note</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {huntableSpecies.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="px-4 py-8 text-center">
+                          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest italic">Nessuna specie trovata per "{searchTerm}"</p>
+                        </td>
+                      </tr>
+                    )}
+                    {(showAllLimits ? huntableSpecies : huntableSpecies.slice(0, 5)).map((limit) => (
+                      <tr key={limit.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-4 py-3">
+                          <span className={cn(
+                            "text-xs font-bold uppercase tracking-tight",
+                            isWaterfowl(limit.species) ? "text-lake-green" : "text-slate-900"
+                          )}>
+                            {limit.species}
+                          </span>
+                        </td>
+                        <td className="px-2 py-3 text-center">
+                          <span className="text-[9px] font-bold text-slate-500 whitespace-nowrap">
+                            {formatShortPeriod(limit.huntingPeriod)}
+                          </span>
+                        </td>
+                        <td className="px-2 py-3 text-center">
+                          <span className={cn(
+                            "text-xs font-black px-2 py-1 rounded inline-block min-w-[30px]",
+                            limit.dailyLimit > 0 ? "bg-earth-brown text-white" : "bg-slate-100 text-slate-400"
+                          )}>
+                            {limit.dailyLimit > 0 ? limit.dailyLimit : '∞'}
+                          </span>
+                        </td>
+                        <td className="px-2 py-3 text-center">
+                          <span className={cn(
+                            "text-xs font-black px-2 py-1 rounded inline-block min-w-[30px]",
+                            limit.seasonalLimit > 0 ? "bg-accent-gold text-white" : "bg-slate-100 text-slate-400"
+                          )}>
+                            {limit.seasonalLimit > 0 ? limit.seasonalLimit : '∞'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <span className="text-[9px] font-medium text-slate-400 italic block leading-tight">
+                            {limit.notes || '-'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              
+              {huntableSpecies.length > 5 && (
+                <button
+                  onClick={() => setShowAllLimits(!showAllLimits)}
+                  className="w-full py-3 bg-white hover:bg-slate-50 border-t border-slate-100 flex items-center justify-center gap-2 transition-colors group"
+                >
+                  <span className="text-[10px] font-black text-slate-400 group-hover:text-earth-brown uppercase tracking-[0.2em]">
+                    {showAllLimits ? 'Mostra meno specie' : `Mostra altre ${huntableSpecies.length - 5} specie`}
+                  </span>
+                  <div className={cn("transition-transform duration-300", showAllLimits ? "rotate-180" : "")}>
+                    <ChevronDown size={14} className="text-slate-300 group-hover:text-earth-brown" />
+                  </div>
+                </button>
+              )}
+            </div>
+          ) : null}
         </div>
       )}
 
-      <section className="card-polish !p-0 overflow-hidden shadow-sm">
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 sm:p-6 bg-off-white border-b border-slate-100">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-            <h2 className="text-sm sm:text-lg font-bold text-slate-gray uppercase tracking-widest">
-              {format(currentDate, 'MMMM yyyy', { locale: it })}
-            </h2>
-            <button 
-              onClick={() => setHideSilence(!hideSilence)}
-              className={cn(
-                "hidden sm:flex items-center gap-2 px-3 py-1 rounded border text-[9px] font-black uppercase tracking-widest transition-all",
-                hideSilence ? "bg-lake-green text-white border-lake-green" : "bg-white text-slate-400 border-slate-200"
-              )}
-            >
-              <Filter size={12} /> {hideSilence ? 'Mostra Giorni Chiusi' : 'Nascondi Giorni Chiusi'}
-            </button>
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setHideSilence(!hideSilence)}
-              className={cn(
-                "sm:hidden p-2 rounded border transition-all",
-                hideSilence ? "bg-lake-green text-white border-lake-green" : "bg-white text-slate-400 border-slate-200"
-              )}
-            >
-              <Filter size={18} />
-            </button>
-            <button onClick={prevMonth} className="p-2 hover:bg-slate-200 rounded transition-colors text-lake-green">
-              <ChevronLeft size={20} />
-            </button>
-            <button onClick={nextMonth} className="p-2 hover:bg-slate-200 rounded transition-colors text-lake-green">
-              <ChevronRight size={20} />
-            </button>
-          </div>
-        </div>
 
-        {/* Days of week */}
-        <div className="overflow-x-auto scrollbar-hide">
-          <div className="min-w-[320px] lg:min-w-0">
-            <div className={cn(
-              "grid border-b border-slate-50",
-              hideSilence ? "grid-cols-5" : "grid-cols-7"
-            )}>
-              {visibleHeaders.map(d => (
-                <div key={d} className="py-4 text-center text-[0.6rem] font-black text-slate-400 uppercase tracking-widest">
-                  {d}
-                </div>
-              ))}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <section className="lg:col-span-7 card-polish !p-0 overflow-hidden shadow-sm self-start">
+          {/* Header */}
+          <div className="flex items-center justify-between p-4 bg-off-white border-b border-slate-100">
+            <div className="flex items-center gap-2">
+              <h2 className="text-xs font-black text-slate-gray uppercase tracking-widest">
+                {format(currentDate, 'MMMM yyyy', { locale: it })}
+              </h2>
+            </div>
+            <div className="flex gap-1">
+              <button onClick={prevMonth} className="p-1.5 hover:bg-slate-200 rounded transition-colors text-lake-green">
+                <ChevronLeft size={16} />
+              </button>
+              <button onClick={nextMonth} className="p-1.5 hover:bg-slate-200 rounded transition-colors text-lake-green">
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          </div>
+
+          {/* Days of week */}
+          <div className="overflow-x-auto scrollbar-hide">
+            <div className="min-w-[280px]">
+              <div className="grid grid-cols-7 border-b border-slate-50">
+                {itDays.map(d => (
+                  <div key={d} className="py-2 text-center text-[0.5rem] font-black text-slate-400 uppercase tracking-widest">
+                    {d}
+                  </div>
+                ))}
+              </div>
+
+              {/* Calendar Grid */}
+              <div className="grid grid-cols-7">
+                {allDays.map((day, idx) => {
+                  const assignments = dayAssignments(day);
+                  const canHunt = isHuntingDay(day);
+                  const inSeason = isInSeason(day);
+                  const isCurrentMonth = isSameMonth(day, monthStart);
+                  const isToday = isSameDay(day, new Date());
+                  const isSelected = selectedDay && isSameDay(day, selectedDay);
+
+                  const isSilenced = !canHunt || !inSeason;
+
+                  return (
+                    <div 
+                      key={day.toString()}
+                      onClick={() => setSelectedDay(day)}
+                      className={cn(
+                        "min-h-[60px] p-1 border-r border-b border-slate-50 transition-all cursor-pointer relative",
+                        !isCurrentMonth && "opacity-20",
+                        isSelected && "ring-2 ring-inset ring-accent-gold z-10",
+                        !isSilenced ? "bg-white" : "bg-rose-50/20"
+                      )}
+                    >
+                      <div className="flex justify-center mb-1">
+                        <span className={cn(
+                          "text-[9px] font-bold h-4 w-4 flex items-center justify-center rounded-xs",
+                          isToday ? "bg-accent-gold text-white" : "text-slate-400",
+                          isSilenced && !isToday && "text-rose-300"
+                        )}>
+                          {format(day, 'd')}
+                        </span>
+                      </div>
+
+                      <div className="flex flex-wrap justify-center gap-0.5 mt-0.5">
+                        {assignments.map(a => (
+                          <div 
+                            key={a.id} 
+                            className={cn(
+                              "w-1.5 h-1.5 rounded-full",
+                              a.type === 'socio' ? "bg-blue-500" : "bg-purple-500"
+                            )}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Hunters area (Right) */}
+        <section className="lg:col-span-5 flex flex-col gap-4">
+          <div className="card-polish bg-white p-4 h-full min-h-[300px]">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+              <div>
+                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Cacciatori del Giorno</h3>
+                <p className="text-sm font-bold text-lake-green capitalize">
+                  {selectedDay ? format(selectedDay, 'EEEE dd MMMM', { locale: it }) : 'Seleziona una data'}
+                </p>
+              </div>
+              {selectedDay && isHuntingDay(selectedDay) && isInSeason(selectedDay) && (
+                <button 
+                  onClick={() => setIsAssigning(true)}
+                  className="bg-lake-green text-white p-2 rounded-lg hover:bg-lake-green/90 active:scale-95 transition-all shadow-sm"
+                >
+                  <Plus size={16} />
+                </button>
+              )}
             </div>
 
-            {/* Calendar Grid */}
-            <div className={cn(
-              "grid",
-              hideSilence ? "grid-cols-5" : "grid-cols-7"
-            )}>
-              {visibleDays.map((day, idx) => {
-                const assignments = dayAssignments(day);
-                const canHunt = isHuntingDay(day);
-                const inSeason = isInSeason(day);
-                const isCurrentMonth = isSameMonth(day, monthStart);
-                const isToday = isSameDay(day, new Date());
-
-                const isSilenced = !canHunt || !inSeason;
-
-                return (
-                  <div 
-                    key={day.toString()}
-                    onClick={() => handleDayClick(day)}
-                    className={cn(
-                      "min-h-[80px] lg:min-h-[140px] p-1.5 sm:p-2 border-r border-b border-slate-50 transition-all group relative cursor-pointer",
-                      !isCurrentMonth && "opacity-30",
-                      !isSilenced ? "calendar-day-hunting" : "bg-rose-50/30",
-                      !isSilenced && isCurrentMonth && "hover:bg-accent-gold/5"
-                    )}
-                  >
-                    <div className="flex justify-between items-start mb-1">
-                      <span className={cn(
-                        "text-xs font-bold h-6 w-6 flex items-center justify-center rounded-sm",
-                        isToday ? "bg-accent-gold text-white" : "text-slate-gray",
-                        isSilenced && !isToday && "text-rose-400"
-                      )}>
-                        {format(day, 'd')}
-                      </span>
-                    </div>
-
-                    {!isSilenced ? (
-                      assignments.length > 0 ? (
-                        <div className="flex flex-col gap-1 mt-1">
-                          {/* Mobile View: Dots */}
-                          <div className="flex flex-wrap gap-1 lg:hidden">
-                            {assignments.map(assignment => (
-                              <div 
-                                key={assignment.id} 
-                                className={cn(
-                                  "w-2 h-2 rounded-full",
-                                  assignment.type === 'socio' ? "bg-blue-500" : "bg-purple-500"
-                                )}
-                                title={assignment.assignedToName}
-                              />
-                            ))}
-                          </div>
-                          
-                          {/* Desktop View: Names */}
-                          <div className="hidden lg:flex flex-col gap-1">
-                            {assignments.map(assignment => (
-                              <div key={assignment.id} className="flex flex-col items-center bg-white/50 p-1 rounded border border-slate-100 shadow-sm">
-                                <span className="text-[0.55rem] font-bold uppercase text-slate-600 truncate w-full text-center">
-                                  {assignment.assignedToName}
-                                </span>
-                                <div className="flex items-center gap-1">
-                                  <span className={cn(
-                                    "text-[7px] font-black px-1 rounded uppercase tracking-tighter",
-                                    assignment.type === 'socio' ? "bg-blue-100 text-blue-800" : "bg-purple-100 text-purple-800"
-                                  )}>
-                                    {assignment.type === 'socio' ? 'Socio' : 'Quota'}
-                                  </span>
-                                  {assignment.id.includes('recurring') && (
-                                    <span className="text-[7px] font-black text-accent-gold uppercase tracking-tighter">Fisso</span>
-                                  )}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="hidden group-hover:flex items-center justify-center opacity-20 h-8">
-                          {profile?.role === 'admin' || profile?.role === 'socio' ? <Plus size={16} className="text-lake-green" /> : null}
-                        </div>
-                      )
+            {selectedDay ? (
+              <div className="space-y-3">
+                {!isInSeason(selectedDay) || !isHuntingDay(selectedDay) ? (
+                  <div className="flex flex-col items-center justify-center py-10 opacity-40">
+                    <ShieldAlert size={32} className="text-rose-500 mb-2" />
+                    <p className="text-[10px] font-black uppercase tracking-widest text-rose-500">Silenzio Venatorio</p>
+                  </div>
+                ) : (
+                  <>
+                    {dayAssignments(selectedDay).length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-10 opacity-30">
+                        <UserIcon size={32} className="text-slate-300 mb-2" />
+                        <p className="text-xs font-bold uppercase tracking-widest">Nessun cacciatore</p>
+                      </div>
                     ) : (
-                      <div className="absolute inset-0 flex flex-col items-center justify-center opacity-20 pointer-events-none text-rose-800 text-center p-2">
-                        <span className="text-[0.55rem] font-bold uppercase tracking-widest leading-none mb-1">
-                          {!inSeason ? 'Fuori Stagione' : 'Silenzio'}
-                        </span>
-                        <span className="text-[10px] font-black italic uppercase">Chiuso</span>
+                      <div className="grid grid-cols-1 gap-2">
+                        {dayAssignments(selectedDay).map(a => (
+                          <div key={a.id} className="flex items-center justify-between p-3 bg-slate-50 border border-slate-100 rounded-lg group">
+                            <div className="flex items-center gap-3">
+                              <div className={cn(
+                                "w-2 h-2 rounded-full",
+                                a.type === 'socio' ? "bg-blue-500" : "bg-purple-500"
+                              )} />
+                              <span className="text-sm font-black text-slate-800 uppercase tracking-tight">
+                                {getFirstName(a.assignedToName)}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {a.id.includes('recurring') ? (
+                                <span className="text-[8px] font-black text-accent-gold uppercase tracking-widest">FISSO</span>
+                              ) : (
+                                (profile?.role === 'admin' || profile?.role === 'socio') && (
+                                  <button 
+                                    onClick={() => onUnassign(a.id)}
+                                    className="text-rose-400 hover:text-rose-600 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                )
+                              )}
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     )}
-                  </div>
-                );
-              })}
-            </div>
+                  </>
+                )}
+              </div>
+            ) : (
+              <p className="text-xs text-slate-400 italic text-center py-10">Tocca un giorno sul calendario per vedere i cacciatori.</p>
+            )}
           </div>
-        </div>
-      </section>
+        </section>
+      </div>
 
       {/* Assignment Modal */}
       <AnimatePresence>
@@ -788,7 +1003,7 @@ export function HuntingCalendar() {
                               "w-2 h-2 rounded-full",
                               a.type === 'socio' ? "bg-blue-500" : "bg-purple-500"
                             )} />
-                            <span className="text-sm font-bold text-slate-800">{a.assignedToName}</span>
+                            <span className="text-sm font-bold text-slate-800">{getFirstName(a.assignedToName)}</span>
                           </div>
                           <div className="flex items-center gap-2">
                             {a.id.includes('recurring') ? (
@@ -894,7 +1109,7 @@ export function HuntingCalendar() {
                             {user.displayName[0]}
                           </div>
                           <div>
-                            <p className="font-bold text-slate-800 text-xs">{user.displayName}</p>
+                            <p className="font-bold text-slate-800 text-xs">{getFirstName(user.displayName)}</p>
                             <p className="text-[9px] text-slate-400 uppercase font-bold tracking-widest leading-tight">{user.role}</p>
                           </div>
                         </div>

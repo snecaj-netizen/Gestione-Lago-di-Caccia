@@ -29,34 +29,97 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check local storage for persisted session
+    let mounted = true;
+
+    // Check local storage FIRST for immediate session recovery (useful for the custom admin login)
     const persistedUser = localStorage.getItem('lake_app_user');
-    
     if (persistedUser) {
-      const userData = JSON.parse(persistedUser);
-      setUser(userData);
-      const docRef = doc(db, 'users', userData.uid);
-      getDoc(docRef).then(snap => {
-        if (snap.exists()) {
-          setProfile(snap.data() as UserProfile);
-        }
-        setLoading(false);
-      });
-    } else {
-      const unsubscribe = onAuthStateChanged(auth, async (user) => {
-        setLoading(true);
-        if (user) {
-          setUser(user);
-          const userProfile = await ensureUserProfile(user);
-          setProfile(userProfile);
+      try {
+        const userData = JSON.parse(persistedUser);
+        setUser(userData);
+        
+        // Handle hardcoded admin profile immediately
+        if (userData.uid === 'admin-id' || userData.email === 'snecaj@gmail.com') {
+          const adminProfile: UserProfile = {
+            uid: userData.uid,
+            email: 'snecaj@gmail.com',
+            displayName: 'Admin User',
+            role: 'admin',
+            isActive: true,
+            username: 'snecaj@gmail.com',
+            assignedDaysOfWeek: [],
+            bio: 'Amministratore del sistema',
+            location: 'Lago',
+            photoURL: '',
+            createdAt: new Date().toISOString()
+          };
+          setProfile(adminProfile);
+          setLoading(false);
         } else {
-          setUser(null);
-          setProfile(null);
+          // Fetch real profile from Firestore for other credential users
+          const docRef = doc(db, 'users', userData.uid);
+          getDoc(docRef).then(snap => {
+            if (mounted && snap.exists()) {
+              setProfile(snap.data() as UserProfile);
+              setLoading(false);
+            } else if (mounted) {
+              setLoading(false);
+            }
+          }).catch(err => {
+            console.error("Error fetching persisted profile", err);
+            if (mounted) setLoading(false);
+          });
         }
+      } catch (e) {
+        console.error("Error parsing persisted user", e);
         setLoading(false);
-      });
-      return unsubscribe;
+      }
+    } else {
+      // If no persisted user, we still need to wait for onAuthStateChanged
+      // which is handled below.
     }
+
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (!mounted) return;
+      
+      if (firebaseUser) {
+        // Real Firebase Auth user (Google, etc)
+        setUser(firebaseUser);
+        const userProfile = await ensureUserProfile(firebaseUser);
+        
+        if (mounted) {
+          setProfile(userProfile);
+          // Persist user for faster recovery on refresh
+          localStorage.setItem('lake_app_user', JSON.stringify({ 
+            uid: firebaseUser.uid, 
+            email: firebaseUser.email,
+            displayName: firebaseUser.displayName,
+            photoURL: firebaseUser.photoURL
+          }));
+          setLoading(false);
+        }
+      } else {
+        // No Firebase user, check if we still have the local storage one (custom credentials or recently logged out)
+        const checkPersisted = localStorage.getItem('lake_app_user');
+        if (!checkPersisted) {
+          if (mounted) {
+            setUser(null);
+            setProfile(null);
+            setLoading(false);
+          }
+        } else {
+          // If we have a persisted user but Firebase says null, 
+          // we might be in the middle of a refresh for a custom credential user.
+          // Don't set user to null yet.
+          if (mounted) setLoading(false);
+        }
+      }
+    });
+
+    return () => {
+      mounted = false;
+      unsubscribe();
+    };
   }, []);
 
   const signIn = async () => {
@@ -67,6 +130,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signInWithCredentials = async (username: string, password: string) => {
     setLoading(true);
     try {
+      // Hardcoded fallback for admin login since Firestore might not be configured
+      if (username === 'snecaj@gmail.com' && password === 'admin') {
+        const adminProfile: UserProfile = {
+          uid: 'admin-id',
+          email: 'snecaj@gmail.com',
+          displayName: 'Admin User',
+          username: 'snecaj@gmail.com',
+          role: 'admin',
+          isActive: true,
+          assignedDaysOfWeek: [],
+          bio: 'Amministratore del sistema',
+          location: 'Lago',
+          photoURL: '',
+          createdAt: new Date().toISOString()
+        };
+        setUser({ uid: adminProfile.uid, email: adminProfile.email } as User);
+        setProfile(adminProfile);
+        localStorage.setItem('lake_app_user', JSON.stringify({ uid: adminProfile.uid, email: adminProfile.email }));
+        return;
+      }
+
+      if (!db) {
+        throw new Error('Database Firebase non configurato. Usa le credenziali admin di default.');
+      }
+
       // Find the profile with this username/password in Firestore
       const usersRef = collection(db, 'users');
       const q = query(usersRef, where('username', '==', username), where('password', '==', password));
@@ -78,13 +166,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       const userProfile = querySnapshot.docs[0].data() as UserProfile;
       
-      // For this specific app setup, we manage auth via Firestore profile state
-      // instead of standard Firebase Auth email/password, as requested by user.
-      // We set the profile manually to signify a successful login.
       setUser({ uid: userProfile.uid, email: userProfile.email } as User);
       setProfile(userProfile);
       
-      // Store session in localStorage to persist login
       localStorage.setItem('lake_app_user', JSON.stringify({
         uid: userProfile.uid,
         email: userProfile.email

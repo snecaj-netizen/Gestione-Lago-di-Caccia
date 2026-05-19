@@ -4,11 +4,12 @@ import {
   updateHarvest,
   deleteHarvest,
   subscribeToHarvests,
-  subscribeToUsers
+  subscribeToUsers,
+  subscribeToHuntingLimits
 } from '../services';
-import { Harvest, UserProfile } from '../types';
+import { Harvest, UserProfile, HuntingLimit } from '../types';
 import { useAuth } from '../contexts/AuthContext';
-import { Plus, Target, Trash2, Search, Filter, X, Edit2, User, ChevronDown } from 'lucide-react';
+import { Plus, Target, Trash2, Search, Filter, X, Edit2, User, ChevronDown, ShieldAlert } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -66,6 +67,7 @@ export function Harvests() {
   const [itemToDelete, setItemToDelete] = useState<Harvest | null>(null);
   const [showSpeciesList, setShowSpeciesList] = useState(false);
   const [users, setUsers] = useState<UserProfile[]>([]);
+  const [limits, setLimits] = useState<HuntingLimit[]>([]);
 
   const [formData, setFormData] = useState({
     date: format(new Date(), 'yyyy-MM-dd'),
@@ -86,9 +88,12 @@ export function Harvests() {
       setUsers(activeHunters);
     });
 
+    const unsubLimits = subscribeToHuntingLimits(setLimits);
+
     return () => {
       unsubHarvests();
       unsubUsers();
+      unsubLimits();
     };
   }, []);
 
@@ -173,6 +178,26 @@ export function Harvests() {
     if (!profile) return false;
     return profile.role === 'admin' || item.hunterUid === profile.uid;
   };
+
+  const currentLimit = limits.find(l => l.species.toLowerCase() === formData.species.toLowerCase());
+  
+  const dailyCount = items
+    .filter(h => h.date === formData.date && h.hunterUid === formData.hunterUid && h.species.toLowerCase() === formData.species.toLowerCase() && h.id !== editingItem?.id)
+    .reduce((acc, h) => acc + h.count, 0);
+
+  const seasonalCount = items
+    .filter(h => h.hunterUid === formData.hunterUid && h.species.toLowerCase() === formData.species.toLowerCase() && h.id !== editingItem?.id)
+    .reduce((acc, h) => acc + h.count, 0);
+
+  const isDailyLimitReached = currentLimit && currentLimit.dailyLimit > 0 && dailyCount >= currentLimit.dailyLimit;
+  const isSeasonalLimitReached = currentLimit && currentLimit.seasonalLimit > 0 && seasonalCount >= currentLimit.seasonalLimit;
+
+  // New total after adding current form count
+  const projectedDaily = dailyCount + (formData.count || 0);
+  const projectedSeasonal = seasonalCount + (formData.count || 0);
+
+  const isDailyLimitExceeded = currentLimit && currentLimit.dailyLimit > 0 && projectedDaily > currentLimit.dailyLimit;
+  const isSeasonalLimitExceeded = currentLimit && currentLimit.seasonalLimit > 0 && projectedSeasonal > currentLimit.seasonalLimit;
 
   return (
     <div className="space-y-8">
@@ -276,6 +301,42 @@ export function Harvests() {
                   </div>
                 </div>
                 
+                {/* Limit Warnings */}
+                {currentLimit && (
+                  <div className={cn(
+                    "p-3 rounded-lg flex gap-3 items-center transition-colors border",
+                    (isDailyLimitExceeded || isSeasonalLimitExceeded) 
+                      ? "bg-rose-50 border-rose-200 text-rose-800" 
+                      : "bg-slate-50 border-slate-200 text-slate-600"
+                  )}>
+                    {(isDailyLimitExceeded || isSeasonalLimitExceeded) ? (
+                      <ShieldAlert size={20} className="shrink-0 text-rose-600" />
+                    ) : (
+                      <Target size={20} className="shrink-0 text-slate-400" />
+                    )}
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-[10px] font-black uppercase tracking-widest leading-none">Status Carniere Regionale</p>
+                        {currentLimit.dailyLimit > 0 && (
+                          <span className="text-[9px] font-black bg-white/50 px-1.5 py-0.5 rounded border border-black/5">
+                            Max: {currentLimit.dailyLimit} G / {currentLimit.seasonalLimit || '∞'} S
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs font-bold leading-tight">
+                        {isDailyLimitExceeded 
+                          ? `ATTENZIONE: Hai superato il limite giornaliero (${currentLimit.dailyLimit}) per ${currentLimit.species}.` 
+                          : isSeasonalLimitExceeded 
+                          ? `ATTENZIONE: Hai superato il limite stagionale (${currentLimit.seasonalLimit}) per ${currentLimit.species}.`
+                          : `Stai registrando ${formData.count} capi. Totale oggi: ${projectedDaily}${currentLimit.dailyLimit > 0 ? ` / ${currentLimit.dailyLimit}` : ''}.`}
+                      </p>
+                      {currentLimit.notes && (
+                        <p className="text-[9px] mt-1 opacity-60 italic">{currentLimit.notes}</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 <div className="space-y-2 relative">
                   <label className="text-[0.65rem] font-black text-slate-400 uppercase tracking-widest">Specie</label>
                   <div className="relative">

@@ -208,6 +208,11 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // Hunting Limits
+    match /hunting_limits/{document=**} {
+      allow read, write: if true;
+    }
+
     // Notifications
     match /notifications/{notificationId} {
       allow read, write: if true;

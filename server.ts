@@ -2,22 +2,77 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import fs from "fs";
+import multer from "multer";
+import { createRequire } from "module";
+const require = createRequire(import.meta.url);
+let pdfParse: any;
+try {
+  // Try to load as a function first (standard CommonJS behavior)
+  const mod = require('pdf-parse');
+  if (typeof mod === 'function') {
+    pdfParse = mod;
+  } else if (mod && typeof mod.default === 'function') {
+    pdfParse = mod.default;
+  } else if (mod && typeof mod.pdfParse === 'function') {
+    pdfParse = mod.pdfParse;
+  } else {
+    // If it's an object (maybe it's the module itself or pdfjs)
+    pdfParse = mod;
+  }
+} catch (e) {
+  console.error("pdf-parse requirement failed:", e);
+}
 import { GoogleGenAI } from "@google/genai";
+
+// Configure multer for PDF uploads
+const pdfStorage = multer.diskStorage({
+  destination: function (_req, _file, cb) {
+    const publicDir = path.join(process.cwd(), 'public');
+    console.log("MULTER: Target directory for PDF:", publicDir);
+    try {
+      if (!fs.existsSync(publicDir)) {
+        console.log("MULTER: Creating directory:", publicDir);
+        fs.mkdirSync(publicDir, { recursive: true });
+      }
+      cb(null, publicDir);
+    } catch (err) {
+      console.error("MULTER DEST ERROR:", err);
+      cb(err as Error, publicDir);
+    }
+  },
+  filename: function (_req, _file, cb) {
+    console.log("MULTER: Saving file as regulation.pdf");
+    cb(null, 'regulation.pdf'); // Fixed name for easy linking
+  }
+});
+
+const uploadPdf = multer({ 
+  storage: pdfStorage,
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype === 'application/pdf') {
+      cb(null, true);
+    } else {
+      cb(new Error('Only PDF files are allowed'));
+    }
+  }
+});
 
 // Initialize Gemini client lazily to avoid crashing if key is missing at startup
 let aiClientInstance: GoogleGenAI | null = null;
 
 function getAiClient() {
   if (!aiClientInstance) {
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = process.env.GEMINI_API_KEY?.trim();
     if (!apiKey) {
-      console.warn("GEMINI_API_KEY is not defined in environment variables.");
+      console.warn("GEMINI_API_KEY is not defined in environment variables (or is empty).");
       return null;
     }
     
     // Debug log to help user verify the key (only shows first/last 4 chars)
-    const maskedKey = `${apiKey.substring(0, 4)}...${apiKey.substring(apiKey.length - 4)}`;
-    console.log(`Initializing Gemini client with API Key: ${maskedKey}`);
+    const maskedKey = apiKey.length > 8 
+      ? `${apiKey.substring(0, 4)}...${apiKey.substring(apiKey.length - 4)}`
+      : "****";
+    console.log(`Initializing Gemini client with API Key: ${maskedKey} (Length: ${apiKey.length})`);
 
     aiClientInstance = new GoogleGenAI({ 
       apiKey,
@@ -45,7 +100,21 @@ function setCached(key: string, data: any) {
 
 async function startServer() {
   const app = express();
-  const PORT = Number(process.env.PORT) || 3000;
+  const PORT = 3000;
+
+  // Health check for debugging
+  app.get("/api/health", (req, res) => {
+    const publicDir = path.join(process.cwd(), 'public');
+    const pdfPath = path.join(publicDir, 'regulation.pdf');
+    res.json({
+      status: "ok",
+      cwd: process.cwd(),
+      node_env: process.env.NODE_ENV,
+      publicDir,
+      pdfExists: fs.existsSync(pdfPath),
+      publicContents: fs.existsSync(publicDir) ? fs.readdirSync(publicDir) : 'not found'
+    });
+  });
 
   // Weather Proxy API
   app.get("/api/weather", async (req, res) => {
@@ -245,7 +314,175 @@ async function startServer() {
       res.status(500).json({ error: message });
     }
   });
+
+  app.get("/api/admin/check-regulation", (req, res) => {
+    const pdfPath = path.join(process.cwd(), 'public', 'regulation.pdf');
+    if (fs.existsSync(pdfPath)) {
+      const stats = fs.statSync(pdfPath);
+      res.json({ 
+        exists: true, 
+        name: 'regulation.pdf', 
+        size: stats.size,
+        updatedAt: stats.mtime
+      });
+    } else {
+      res.json({ exists: false });
+    }
+  });
+
+  app.delete("/api/admin/delete-regulation", (req, res) => {
+    const pdfPath = path.join(process.cwd(), 'public', 'regulation.pdf');
+    if (fs.existsSync(pdfPath)) {
+      fs.unlinkSync(pdfPath);
+      res.json({ success: true });
+    } else {
+      res.status(404).json({ error: "File not found" });
+    }
+  });
+
+  app.post("/api/admin/upload-regulation", uploadPdf.single('pdf'), (req, res) => {
+    if (!req.file) {
+      return res.status(400).json({ error: "No file uploaded" });
+    }
+    console.log("Regulation PDF uploaded successfully");
+    res.json({ success: true, path: '/regulation.pdf' });
+  });
+
+  app.post("/api/admin/extract-limits", async (req, res) => {
+    const publicDir = path.join(process.cwd(), 'public');
+    const pdfPath = path.join(publicDir, 'regulation.pdf');
+    
+    console.log("EXTRACTION: Current Working Directory:", process.cwd());
+    console.log("EXTRACTION: Looking for regulation.pdf at:", pdfPath);
+    
+    if (!fs.existsSync(pdfPath)) {
+      console.error("EXTRACTION ERROR: File not found at", pdfPath);
+      // List directory contents for debugging
+      const files = fs.existsSync(publicDir) ? fs.readdirSync(publicDir) : "Dir not found";
+      return res.status(404).json({ 
+        error: "Regulation PDF non trovato sul server.",
+        details: `Cercato in: ${pdfPath}. Contenuto cartella: ${JSON.stringify(files)}`
+      });
+    }
+
+    const client = getAiClient();
+    if (!client) {
+      return res.status(500).json({ error: "AI capability not configured" });
+    }
+
+    try {
+      const dataBuffer = fs.readFileSync(pdfPath);
+      console.log("PDF extraction starting, dataBuffer length:", dataBuffer.length);
+      
+      let fullText = "";
+      let extractionSource = "none";
+
+      // Attempt Local Extraction first (if modulo is available and functional)
+      if (typeof pdfParse === 'function') {
+        try {
+          const data = await pdfParse(dataBuffer);
+          fullText = data.text;
+          extractionSource = "local";
+          console.log("PDF extraction successful via local pdf-parse, text length:", fullText.length);
+        } catch (parseError: any) {
+          console.warn("Local pdf-parse function call failed:", parseError?.message || parseError);
+        }
+      }
+
+      // If local failed or wasn't available, jump to Gemini Direct PDF Analysis
+      if (!fullText) {
+        console.log("Attempting direct Gemini PDF analysis (no local text extracted)");
+        try {
+          const geminiResponse = await client.models.generateContent({
+            model: "gemini-3-flash-preview",
+            contents: {
+              parts: [
+                {
+                  inlineData: {
+                    data: dataBuffer.toString("base64"),
+                    mimeType: "application/pdf"
+                  }
+                },
+                {
+                  text: "Estrai integralmente i limiti di carniere (quantità massima prelevabile) e il periodo di caccia per ogni specie dal Calendario Venatorio fornito. Restituisci i dati ESCLUSIVAMENTE in formato JSON come un array di oggetti con i campi: species, dailyLimit (numero), seasonalLimit (numero), huntingPeriod (stringa), notes (stringa)."
+                }
+              ]
+            },
+            config: {
+              systemInstruction: "Sei un assistente esperto in normativa venatoria italiana. Estrai i limiti di carniere e i periodi di caccia dal PDF. Rispondi SOLO con l'array JSON.",
+              responseMimeType: "application/json",
+              temperature: 0.1,
+            }
+          });
+          
+          const geminiText = geminiResponse.text;
+          if (geminiText) {
+            const cleaned = geminiText.replace(/```json/g, "").replace(/```/g, "").trim();
+            const result = JSON.parse(cleaned);
+            console.log("Direct Gemini PDF analysis successful.");
+            return res.json(result);
+          } else {
+            throw new Error("Gemini ha restituito un testo vuoto per l'analisi PDF.");
+          }
+        } catch (geminiError: any) {
+          console.error("Gemini Direct PDF error:", geminiError);
+          // If we reach here, we've failed both local and direct Gemini PDF
+          throw new Error(`Impossibile estrarre i dati dal PDF: ${geminiError?.message || "Errore AI"}`);
+        }
+      }
+
+      // If we got here, we have fullText from local extraction, but we still need to structure it with Gemini
+      console.log(`Structuring local text (${fullText.length} chars) with Gemini...`);
+      const article4Index = fullText.toLowerCase().indexOf("articolo 4");
+      const relevantText = article4Index !== -1 ? fullText.substring(article4Index, article4Index + 12000) : fullText.substring(0, 15000);
+
+      const response = await client.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: {
+          parts: [
+            {
+              text: `Analizza il seguente testo del Calendario Venatorio ed estrai i limiti di carniere (quantità massima prelevabile) e il periodo di caccia per specie.
+              Focus: "Articolo 4 (Carniere)" e "Articolo 7 (Periodi di caccia)".
+              
+              Testo: ${relevantText}
+              
+              Restituisci un array JSON di oggetti con questi campi:
+              {
+                "species": "Nome della specie",
+                "dailyLimit": numero (0 se illimitato),
+                "seasonalLimit": numero (0 se nessun limite),
+                "huntingPeriod": "Periodo (es. 01/09 - 31/01)",
+                "notes": "Note eventuali"
+              }`
+            }
+          ]
+        },
+        config: {
+          systemInstruction: "Sei un assistente legale esperto in normativa venatoria italiana. Estrai dati precisi dal testo fornito. Rispondi SOLO in JSON.",
+          responseMimeType: "application/json",
+          temperature: 0.1,
+        }
+      });
+
+      const text = response.text;
+      if (!text) throw new Error("Empty response from AI structuring");
+      const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
+      const result = JSON.parse(cleaned);
+      res.json(result);
+    } catch (error: any) {
+      console.error("PDF Extraction/AI Error:", error);
+      if (error.status === "RESOURCE_EXHAUSTED" || error.code === 429) {
+        res.status(429).json({ error: "Limite giornaliero API Gemini raggiunto. Riprova domani." });
+      } else {
+        res.status(500).json({ error: error.message || "Failed to extract limits" });
+      }
+    }
+  });
   
+  // Serve static files from public directory (for uploaded PDFs etc)
+  const publicDir = path.join(process.cwd(), 'public');
+  app.use(express.static(publicDir));
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

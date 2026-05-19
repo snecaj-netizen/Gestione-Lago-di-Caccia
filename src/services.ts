@@ -14,7 +14,7 @@ import {
   Timestamp,
   getDocs
 } from 'firebase/firestore';
-import { UserProfile, HuntingDay, Transaction, Harvest, LakeSettings, HuntingPhoto, BudgetItem, Notification, HuntingTime, Recipe } from './types';
+import { UserProfile, HuntingDay, Transaction, Harvest, LakeSettings, HuntingPhoto, BudgetItem, Notification, HuntingTime, Recipe, HuntingLimit } from './types';
 import { format } from 'date-fns';
 
 // Helper to strip undefined values from objects before Firestore operations
@@ -510,5 +510,29 @@ export const deleteRecipe = async (id: string) => {
     await deleteDoc(doc(db, 'recipes', id));
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, `recipes/${id}`);
+  }
+};
+
+// Hunting Limits
+export const subscribeToHuntingLimits = (callback: (limits: HuntingLimit[]) => void) => {
+  const q = query(collection(db, 'hunting_limits'), orderBy('species'));
+  return onSnapshot(q, (snapshot) => {
+    callback(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as HuntingLimit)));
+  }, (error) => handleFirestoreError(error, OperationType.LIST, 'hunting_limits'));
+};
+
+export const saveHuntingLimit = async (limit: HuntingLimit) => {
+  try {
+    await setDoc(doc(db, 'hunting_limits', limit.id), cleanData(limit));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `hunting_limits/${limit.id}`);
+  }
+};
+
+export const deleteHuntingLimit = async (id: string) => {
+  try {
+    await deleteDoc(doc(db, 'hunting_limits', id));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `hunting_limits/${id}`);
   }
 };
