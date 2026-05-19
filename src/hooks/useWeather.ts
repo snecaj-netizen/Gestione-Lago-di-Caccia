@@ -32,7 +32,7 @@ export function useWeather(lat?: number, lon?: number) {
 
   useEffect(() => {
     // Check if we have valid-looking coordinates
-    if (!lat || !lon || isNaN(lat) || isNaN(lon)) return;
+    if (lat === undefined || lon === undefined || isNaN(lat) || isNaN(lon)) return;
 
     const fetchWeather = async () => {
       setLoading(true);
