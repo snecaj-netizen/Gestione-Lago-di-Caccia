@@ -6,26 +6,32 @@ import multer from "multer";
 import { createRequire } from "module";
 
 // Safely initialize a require function for both ESM (development) and CJS (production bundle)
-const localRequire = typeof require !== 'undefined' 
+const localRequire = typeof require === 'function' 
   ? require 
-  : createRequire(import.meta.url);
+  : (typeof import.meta !== 'undefined' && import.meta.url 
+      ? createRequire(import.meta.url) 
+      : null);
 
 let pdfParse: any;
-try {
-  // Try to load as a function first (standard CommonJS behavior)
-  const mod = localRequire('pdf-parse');
-  if (typeof mod === 'function') {
-    pdfParse = mod;
-  } else if (mod && typeof mod.default === 'function') {
-    pdfParse = mod.default;
-  } else if (mod && typeof mod.pdfParse === 'function') {
-    pdfParse = mod.pdfParse;
-  } else {
-    // If it's an object (maybe it's the module itself or pdfjs)
-    pdfParse = mod;
+if (localRequire) {
+  try {
+    // Try to load as a function first (standard CommonJS behavior)
+    const mod = localRequire('pdf-parse');
+    if (typeof mod === 'function') {
+      pdfParse = mod;
+    } else if (mod && typeof mod.default === 'function') {
+      pdfParse = mod.default;
+    } else if (mod && typeof mod.pdfParse === 'function') {
+      pdfParse = mod.pdfParse;
+    } else {
+      // If it's an object (maybe it's the module itself or pdfjs)
+      pdfParse = mod;
+    }
+  } catch (e) {
+    console.error("pdf-parse requirement failed:", e);
   }
-} catch (e) {
-  console.error("pdf-parse requirement failed:", e);
+} else {
+  console.warn("Could not initialize localRequire (neither require nor import.meta.url available). PDF extraction may fail.");
 }
 import { GoogleGenAI } from "@google/genai";
 
