@@ -610,13 +610,14 @@ export function HuntingCalendar() {
           <h1 className="text-3xl font-serif text-lake-green">Oggi al Lago</h1>
         </div>
         <div className="flex flex-col items-end gap-2">
-          <Link 
-            to="/regolamento"
-            className="text-[0.7rem] bg-white px-4 py-2 rounded-lg border border-slate-200 font-bold text-slate-gray shadow-sm hover:border-lake-green hover:text-lake-green transition-all flex items-center gap-2 group whitespace-nowrap"
+          <a 
+            href="/regulation.pdf"
+            download="regulation.pdf"
+            className="text-[0.7rem] bg-white px-4 py-2 rounded-lg border border-slate-200 font-bold text-slate-gray shadow-sm hover:border-lake-green hover:text-lake-green transition-all flex items-center gap-2 group whitespace-nowrap cursor-pointer"
           >
             <FileText size={14} className="text-slate-400 group-hover:text-lake-green transition-colors" />
-            Calendario Venatorio {seasonLabel}
-          </Link>
+            Scarica Calendario Venatorio {seasonLabel}
+          </a>
         </div>
       </header>
       

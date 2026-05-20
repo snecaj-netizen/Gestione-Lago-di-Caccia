@@ -43,7 +43,6 @@ import { AdminPanel } from './pages/AdminPanel';
 import { Profile } from './pages/Profile';
 import { Gallery } from './pages/Gallery';
 import { Recipes } from './pages/Recipes';
-import { Regulation } from './pages/Regulation';
 import { Tesserino } from './pages/Tesserino';
 import { NotificationCenter } from './components/NotificationCenter';
 import { PWAUpdatePrompt } from './components/PWAUpdatePrompt';
@@ -761,7 +760,6 @@ function MainLayout() {
                   <Route path="/abbattimenti" element={<Harvests />} />
                   <Route path="/galleria" element={<Gallery />} />
                   <Route path="/ricette" element={<Recipes />} />
-                  <Route path="/regolamento" element={<Regulation />} />
                   {profile?.role === 'admin' && (
                     <Route path="/tesserino" element={<Tesserino />} />
                   )}

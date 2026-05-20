@@ -658,7 +658,7 @@ export function AdminPanel() {
               </span>
             )}
           </div>
-          <p className="text-[10px] text-slate-400 mt-4 italic">Questo file verrà visualizzato nella sezione "Regolamento PDF" dell'App.</p>
+          <p className="text-[10px] text-slate-400 mt-4 italic">Questo file potrà essere scaricato direttamente dagli utenti tramite il tasto dedicato in "Oggi al Lago".</p>
         </div>
 
         {/* AI Limit Extraction */}
