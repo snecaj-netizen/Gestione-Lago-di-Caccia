@@ -536,3 +536,14 @@ export const deleteHuntingLimit = async (id: string) => {
     handleFirestoreError(error, OperationType.DELETE, `hunting_limits/${id}`);
   }
 };
+
+export const clearAllHuntingLimits = async () => {
+  try {
+    const q = query(collection(db, 'hunting_limits'));
+    const snapshot = await getDocs(q);
+    const promises = snapshot.docs.map(doc => deleteDoc(doc.ref));
+    await Promise.all(promises);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, 'hunting_limits_all');
+  }
+};

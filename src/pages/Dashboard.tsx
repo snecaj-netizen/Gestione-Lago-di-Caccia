@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { 
   subscribeToTransactions, 
   subscribeToHarvests,
-  subscribeToUsers
+  subscribeToUsers,
+  subscribeToHuntingLimits
 } from '../services';
-import { Transaction, Harvest, UserProfile } from '../types';
+import { Transaction, Harvest, UserProfile, HuntingLimit } from '../types';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -26,19 +27,56 @@ export function Dashboard() {
   const [txs, setTxs] = useState<Transaction[]>([]);
   const [harvests, setHarvests] = useState<Harvest[]>([]);
   const [users, setUsers] = useState<UserProfile[]>([]);
+  const [limits, setLimits] = useState<HuntingLimit[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const unsub1 = subscribeToTransactions(setTxs);
     const unsub2 = subscribeToHarvests(setHarvests);
     const unsub3 = subscribeToUsers(setUsers);
+    const unsub4 = subscribeToHuntingLimits(setLimits);
     setLoading(false);
-    return () => { unsub1(); unsub2(); unsub3(); };
+    return () => { unsub1(); unsub2(); unsub3(); unsub4(); };
   }, []);
 
   const totalIncome = txs.filter(i => i.type === 'entrata').reduce((acc, i) => acc + i.amount, 0);
   const totalExpense = txs.filter(i => i.type === 'uscita').reduce((acc, i) => acc + i.amount, 0);
   const totalBirds = harvests.reduce((acc, i) => acc + i.count, 0);
+  
+  const getSeasonLabel = () => {
+    const years = new Set<number>();
+    limits.forEach(l => {
+      if (!l.huntingPeriod) return;
+      const dateMatches = l.huntingPeriod.match(/(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})/g);
+      if (dateMatches) {
+        dateMatches.forEach(match => {
+          const parts = match.split(/[\/\-\.]/);
+          let year = parseInt(parts[parts.length - 1]);
+          if (year < 100) year += 2000;
+          years.add(year);
+        });
+      } else {
+        const standaloneYears = l.huntingPeriod.match(/\b(20\d{2})\b/g);
+        if (standaloneYears) {
+          standaloneYears.forEach(y => years.add(parseInt(y)));
+        }
+      }
+    });
+
+    if (years.size > 0) {
+      const sortedYears = Array.from(years).sort((a, b) => a - b);
+      if (sortedYears.length >= 2) return `${sortedYears[0]}/${sortedYears[sortedYears.length - 1]}`;
+      const y = sortedYears[0];
+      return `${y}/${y + 1}`;
+    }
+    
+    const currentYear = new Date().getFullYear();
+    const currentMonth = new Date().getMonth();
+    if (currentMonth >= 7) return `${currentYear}/${currentYear + 1}`;
+    return `${currentYear - 1}/${currentYear}`;
+  };
+
+  const seasonLabel = getSeasonLabel();
   
   const recentHarvests = harvests.slice(0, 5);
   const recentTxs = txs.slice(0, 5);
@@ -87,7 +125,7 @@ export function Dashboard() {
           rel="noopener noreferrer"
           className="text-[0.8rem] bg-white px-4 py-2 rounded border border-slate-200 font-bold text-slate-gray shadow-sm hover:border-lake-green hover:text-lake-green transition-all flex items-center gap-2 group"
         >
-          <span className="group-hover:animate-pulse">📍</span> Lago Principale • Stagione {new Date().getFullYear()}
+          <span className="group-hover:animate-pulse">📍</span> Lago Principale • Stagione {seasonLabel}
           <ExternalLink size={12} className="text-slate-300 group-hover:text-lake-green" />
         </a>
       </header>

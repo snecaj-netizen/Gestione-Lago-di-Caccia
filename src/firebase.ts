@@ -1,6 +1,6 @@
 import { initializeApp, FirebaseApp } from 'firebase/app';
 import { getAuth, Auth } from 'firebase/auth';
-import { getFirestore, Firestore } from 'firebase/firestore';
+import { initializeFirestore, Firestore, getDocFromServer, doc } from 'firebase/firestore';
 
 // Firebase configuration
 // We prioritize VITE_ prefixed environment variables which are exposed via vite.config.ts
@@ -14,7 +14,7 @@ const firebaseConfig = {
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
 };
 
-const isConfigured = !!firebaseConfig.projectId && !!firebaseConfig.appId;
+const isConfigured = !!firebaseConfig.projectId && !!firebaseConfig.appId && !!firebaseConfig.apiKey;
 
 let db: Firestore | null = null;
 let auth: Auth | null = null;
@@ -22,18 +22,47 @@ let auth: Auth | null = null;
 if (isConfigured) {
   try {
     const app = initializeApp(firebaseConfig);
-    const dbId = firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== '(default)' 
+    // Explicitly handle default vs custom database ID
+    const dbId = (firebaseConfig.firestoreDatabaseId && 
+                 firebaseConfig.firestoreDatabaseId !== '(default)' && 
+                 firebaseConfig.firestoreDatabaseId.trim() !== '') 
       ? firebaseConfig.firestoreDatabaseId 
       : undefined;
     
-    db = getFirestore(app, dbId);
+    // Use initializeFirestore to enable experimentalForceLongPolling, which often helps in proxy/sandbox environments
+    db = initializeFirestore(app, {
+      experimentalForceLongPolling: true,
+    }, dbId);
+    
     auth = getAuth(app);
-    console.log("Firebase initialized successfully with Project ID:", firebaseConfig.projectId, dbId ? `and Database ID: ${dbId}` : "");
+    console.log("Firebase initialized successfully with Long Polling enabled. Project ID:", firebaseConfig.projectId, dbId ? `and Database ID: ${dbId}` : "(default database)");
   } catch (error) {
     console.error("Firebase initialization failed:", error);
   }
 } else {
-  console.warn("Firebase is not configured. Please set the required environment variables.");
+  console.warn("Firebase is not fully configured. Missing Project ID, App ID, or API Key.");
+}
+
+// Connection test - CRITICAL for AI Studio environment diagnostics
+if (db) {
+  const testConnection = async () => {
+    try {
+      // Attempt a server-side read to verify connection
+      await getDocFromServer(doc(db!, '_internal_', 'connection_test'));
+      console.log("Firestore connection verified.");
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message.includes('offline')) {
+          console.error("Firestore is offline. Check network or project configuration.");
+        } else if (error.message.includes('permission')) {
+          console.warn("Firestore connection attempt failed with permission error (expected if test doc doesn't exist).");
+        } else {
+          console.error("Firestore diagnostic failed:", error.message);
+        }
+      }
+    }
+  };
+  testConnection();
 }
 
 export { db, auth };

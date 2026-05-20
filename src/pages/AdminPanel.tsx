@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { subscribeToUsers, updateUserProfile, subscribeToSettings, updateSettings, addUserManually, deleteUser, subscribeToHuntingTimes, addHuntingTime, deleteHuntingTime, updateHuntingTime, subscribeToHuntingLimits, saveHuntingLimit, deleteHuntingLimit } from '../services';
+import { subscribeToUsers, updateUserProfile, subscribeToSettings, updateSettings, addUserManually, deleteUser, subscribeToHuntingTimes, addHuntingTime, deleteHuntingTime, updateHuntingTime, subscribeToHuntingLimits, saveHuntingLimit, deleteHuntingLimit, clearAllHuntingLimits } from '../services';
 import { UserProfile, LakeSettings, HuntingTime, HuntingLimit } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { format } from 'date-fns';
@@ -22,6 +22,10 @@ export function AdminPanel() {
   
   const [limits, setLimits] = useState<HuntingLimit[]>([]);
   const [extractingLimits, setExtractingLimits] = useState(false);
+  const [cleaningDb, setCleaningDb] = useState(false);
+  const [cleanError, setCleanError] = useState<string | null>(null);
+  const [cleanSuccess, setCleanSuccess] = useState(false);
+  const [showCleanConfirm, setShowCleanConfirm] = useState(false);
   const [extractedProspect, setExtractedProspect] = useState<Partial<HuntingLimit>[] | null>(null);
   const [editingLimitId, setEditingLimitId] = useState<string | null>(null);
   const [limitDraft, setLimitDraft] = useState<HuntingLimit | null>(null);
@@ -265,14 +269,20 @@ export function AdminPanel() {
     if (!extractedProspect) return;
     setSaveStatus('saving');
     try {
-      // For simplicity, we compare and save. 
-      // User might want to clear old ones or just add. 
-      // We'll replace/add based on species name as ID (slugified)
+      // 1. Create a map of existing limits by normalized name if needed, 
+      // but we'll just use a smarter ID generation to ensure overrides.
       const promises = extractedProspect.map(p => {
-        const id = p.species?.toLowerCase().replace(/\s+/g, '_').replace(/[^\w]/g, '') || Math.random().toString(36).substr(2, 9);
+        // More robust normalization for ID: trim, lowercase, remove everything in parentheses, then slugify.
+        const normalizedName = p.species
+          ?.split('(')[0] // Remove scientific names in parentheses
+          .trim()
+          .toLowerCase()
+          .replace(/\s+/g, '_')
+          .replace(/[^\w]/g, '') || Math.random().toString(36).substr(2, 9);
+          
         return saveHuntingLimit({
-          id,
-          species: p.species || 'Sconosciuta',
+          id: normalizedName,
+          species: p.species?.split('(')[0].trim() || 'Sconosciuta',
           dailyLimit: p.dailyLimit || 0,
           seasonalLimit: p.seasonalLimit || 0,
           huntingPeriod: p.huntingPeriod || '',
@@ -655,16 +665,74 @@ export function AdminPanel() {
               <h3 className="text-sm font-bold text-slate-800">Limiti di Carniere</h3>
               <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest mt-1">Configurazione specie e prelievi massimi</p>
             </div>
-            <button
-              onClick={handleExtractLimits}
-              disabled={extractingLimits}
-              className={cn(
-                "flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-xs transition-all shadow-sm",
-                extractingLimits 
-                  ? "bg-slate-200 text-slate-400 cursor-not-allowed" 
-                  : "bg-accent-gold text-white hover:bg-accent-gold/90"
+            <div className="flex gap-2 items-center relative">
+              {limits.length > 0 && (
+                <div className="flex items-center gap-2">
+                  {showCleanConfirm ? (
+                    <div className="flex items-center gap-2 bg-rose-50 p-1 rounded-lg border border-rose-200">
+                      <span className="text-[9px] font-bold text-rose-600 px-2 uppercase">Sicuro?</span>
+                      <button 
+                        onClick={async () => {
+                          setCleaningDb(true);
+                          setCleanError(null);
+                          setShowCleanConfirm(false);
+                          try {
+                            await clearAllHuntingLimits();
+                            setCleanSuccess(true);
+                            setTimeout(() => setCleanSuccess(false), 3000);
+                          } catch (err: any) {
+                            console.error("Error cleaning DB:", err);
+                            setCleanError(err.message || 'Errore');
+                          } finally {
+                            setCleaningDb(false);
+                          }
+                        }}
+                        className="bg-rose-600 text-white px-2 py-1 rounded text-[9px] font-black uppercase hover:bg-rose-700"
+                      >
+                        Sì, cancella
+                      </button>
+                      <button 
+                        onClick={() => setShowCleanConfirm(false)}
+                        className="text-slate-400 hover:text-slate-600 px-2 py-1 text-[9px] font-black uppercase"
+                      >
+                        No
+                      </button>
+                    </div>
+                  ) : (
+                    <button 
+                      onClick={() => setShowCleanConfirm(true)}
+                      disabled={cleaningDb}
+                      className={cn(
+                        "flex items-center gap-1.5 px-3 py-2 rounded-lg font-bold text-[10px] uppercase transition-all shadow-sm border",
+                        cleaningDb 
+                          ? "bg-slate-100 text-slate-400 border-slate-200" 
+                          : cleanSuccess 
+                            ? "bg-emerald-50 text-emerald-600 border-emerald-200"
+                            : "bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100"
+                      )}
+                    >
+                      {cleaningDb ? (
+                        <div className="w-3 h-3 border-2 border-slate-300 border-t-slate-500 rounded-full animate-spin" />
+                      ) : cleanSuccess ? (
+                        <UserCheck size={12} />
+                      ) : (
+                        <Trash2 size={12} />
+                      )}
+                      {cleaningDb ? 'Pulizia...' : cleanSuccess ? 'Vuoto!' : 'Svuota Tutto'}
+                    </button>
+                  )}
+                </div>
               )}
-            >
+              <button
+                onClick={handleExtractLimits}
+                disabled={extractingLimits}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-xs transition-all shadow-sm",
+                  extractingLimits 
+                    ? "bg-slate-200 text-slate-400 cursor-not-allowed" 
+                    : "bg-accent-gold text-white hover:bg-accent-gold/90"
+                )}
+              >
               {extractingLimits ? (
                 <>
                   <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -678,6 +746,13 @@ export function AdminPanel() {
               )}
             </button>
           </div>
+        </div>
+
+          {cleanError && (
+             <div className="p-3 bg-rose-50 text-rose-600 rounded-lg text-[10px] font-bold uppercase mb-4">
+               Errore pulizia: {cleanError}
+             </div>
+          )}
 
           {extractError && (
              <div className="p-3 bg-rose-50 text-rose-600 rounded-lg text-[10px] font-bold uppercase mb-4">
@@ -691,7 +766,7 @@ export function AdminPanel() {
                 <div className="p-3 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
                   <span className="text-[10px] font-black uppercase text-slate-400">Anteprima dati estratti</span>
                   <div className="flex gap-2">
-                    <button onClick={() => setExtractedProspect(null)} className="text-[10px] font-black uppercase text-rose-500 hover:underline">Annulla</button>
+                    <button onClick={() => setExtractedProspect(null)} className="text-[10px] font-black uppercase text-slate-400 hover:underline">Annulla</button>
                     <button 
                       onClick={handleSaveExtractedLimits} 
                       className="text-[10px] font-black uppercase text-emerald-600 hover:underline"
@@ -709,6 +784,7 @@ export function AdminPanel() {
                         <th className="p-3 text-[9px] font-black uppercase text-slate-400">Giorno</th>
                         <th className="p-3 text-[9px] font-black uppercase text-slate-400">Stagione</th>
                         <th className="p-3 text-[9px] font-black uppercase text-slate-400">Periodo</th>
+                        <th className="p-3 text-[9px] font-black uppercase text-slate-400">Note</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -718,6 +794,7 @@ export function AdminPanel() {
                           <td className="p-2"><input type="number" value={p.dailyLimit ?? 0} onChange={(e) => { const n = [...extractedProspect!]; n[i].dailyLimit = parseInt(e.target.value) || 0; setExtractedProspect(n); }} className="w-full text-xs font-mono text-slate-600 bg-transparent outline-none border-b border-transparent focus:border-lake-green" /></td>
                           <td className="p-2"><input type="number" value={p.seasonalLimit ?? 0} onChange={(e) => { const n = [...extractedProspect!]; n[i].seasonalLimit = parseInt(e.target.value) || 0; setExtractedProspect(n); }} className="w-full text-xs font-mono text-slate-600 bg-transparent outline-none border-b border-transparent focus:border-lake-green" /></td>
                           <td className="p-2"><input type="text" value={p.huntingPeriod || ''} onChange={(e) => { const n = [...extractedProspect!]; n[i].huntingPeriod = e.target.value; setExtractedProspect(n); }} className="w-full text-xs font-mono text-slate-600 bg-transparent outline-none border-b border-transparent focus:border-lake-green" /></td>
+                          <td className="p-2"><input type="text" value={p.notes || ''} onChange={(e) => { const n = [...extractedProspect!]; n[i].notes = e.target.value; setExtractedProspect(n); }} className="w-full text-[10px] text-slate-500 bg-transparent outline-none border-b border-transparent focus:border-lake-green placeholder:opacity-30" placeholder="Aggiungi nota..." /></td>
                         </tr>
                       ))}
                     </tbody>
@@ -805,17 +882,21 @@ export function AdminPanel() {
                       )}
                     </div>
                   </div>
-                  {editingLimitId === limit.id && (
-                    <div className="mt-2">
-                       <span className="block text-[8px] font-black text-slate-400 uppercase tracking-widest">Note</span>
-                       <input 
-                          type="text" 
-                          value={limitDraft?.notes || ''} 
-                          onChange={e => setLimitDraft(prev => prev ? {...prev, notes: e.target.value} : null)}
-                          className="text-[10px] text-slate-500 border-b border-slate-100 w-full outline-none"
-                        />
-                    </div>
-                  )}
+                  <div className="mt-2 pt-2 border-t border-slate-50">
+                    <span className="block text-[8px] font-black text-slate-400 uppercase tracking-widest">Note</span>
+                    {editingLimitId === limit.id ? (
+                      <input 
+                        type="text" 
+                        value={limitDraft?.notes || ''} 
+                        onChange={e => setLimitDraft(prev => prev ? {...prev, notes: e.target.value} : null)}
+                        className="text-[10px] text-slate-500 border-b border-slate-100 w-full outline-none"
+                      />
+                    ) : (
+                      <span className="text-[10px] text-slate-400 italic block leading-tight truncate">
+                        {limit.notes || 'Nessuna nota'}
+                      </span>
+                    )}
+                  </div>
                 </div>
               ))}
               {limits.length === 0 && (

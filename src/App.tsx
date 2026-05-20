@@ -86,7 +86,6 @@ function Sidebar({ isOpen, setIsOpen }: { isOpen: boolean, setIsOpen: (val: bool
   const navItems = [
     { name: 'Oggi al Lago', path: '/', icon: CalendarIcon },
     { name: 'Meteo Lago', path: '/meteo', icon: CloudSun },
-    { name: 'Regolamento PDF', path: '/regolamento', icon: FileText },
     { name: 'Abbattimenti', path: '/abbattimenti', icon: Target },
     { name: 'Galleria Foto', path: '/galleria', icon: Camera },
     { name: 'Selvaggina in Cucina', path: '/ricette', icon: Utensils },

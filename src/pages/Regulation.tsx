@@ -2,17 +2,58 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { FileText, Download, ExternalLink, ShieldCheck, Eye, Info, AlertCircle } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { subscribeToHuntingLimits } from '../services';
+import { HuntingLimit } from '../types';
 
 export function Regulation() {
   const pdfUrl = "/regulation.pdf"; // Generic path handled by the server
   const [pdfExists, setPdfExists] = useState<boolean | null>(null);
+  const [limits, setLimits] = useState<HuntingLimit[]>([]);
 
   useEffect(() => {
     fetch('/api/admin/check-regulation')
       .then(res => res.json())
       .then(data => setPdfExists(data.exists))
       .catch(() => setPdfExists(false));
+
+    const unsub = subscribeToHuntingLimits(setLimits);
+    return () => unsub();
   }, []);
+
+  const getSeasonLabel = () => {
+    const years = new Set<number>();
+    limits.forEach(l => {
+      if (!l.huntingPeriod) return;
+      const dateMatches = l.huntingPeriod.match(/(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})/g);
+      if (dateMatches) {
+        dateMatches.forEach(match => {
+          const parts = match.split(/[\/\-\.]/);
+          let year = parseInt(parts[parts.length - 1]);
+          if (year < 100) year += 2000;
+          years.add(year);
+        });
+      } else {
+        const standaloneYears = l.huntingPeriod.match(/\b(20\d{2})\b/g);
+        if (standaloneYears) {
+          standaloneYears.forEach(y => years.add(parseInt(y)));
+        }
+      }
+    });
+
+    if (years.size > 0) {
+      const sortedYears = Array.from(years).sort((a, b) => a - b);
+      if (sortedYears.length >= 2) return `${sortedYears[0]}/${sortedYears[sortedYears.length - 1]}`;
+      const y = sortedYears[0];
+      return `${y}/${y + 1}`;
+    }
+    
+    const currentYear = new Date().getFullYear();
+    const currentMonth = new Date().getMonth();
+    if (currentMonth >= 7) return `${currentYear}/${currentYear + 1}`;
+    return `${currentYear - 1}/${currentYear}`;
+  };
+
+  const seasonLabel = getSeasonLabel();
 
   if (pdfExists === false) {
     return (
@@ -34,7 +75,7 @@ export function Regulation() {
       <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-serif text-lake-green">Regolamento PDF</h1>
-          <p className="text-slate-gray font-medium">Calendario Venatorio Regionale 2026/27</p>
+          <p className="text-slate-gray font-medium">Calendario Venatorio Regionale {seasonLabel}</p>
         </div>
         {pdfExists && (
           <a 
@@ -56,7 +97,7 @@ export function Regulation() {
               <ShieldCheck size={20} />
               <h3 className="font-black text-[10px] uppercase tracking-widest">Validità</h3>
             </div>
-            <p className="text-sm font-bold text-slate-800">Stagione 2026/2027</p>
+            <p className="text-sm font-bold text-slate-800">Stagione {seasonLabel}</p>
             <p className="text-xs text-slate-500 mt-1">Approvato dalla Giunta Regionale.</p>
           </div>
 

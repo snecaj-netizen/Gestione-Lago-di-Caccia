@@ -29,7 +29,7 @@ import {
   differenceInSeconds
 } from 'date-fns';
 import { it } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, User as UserIcon, Calendar as CalendarIcon, Info, Plus, X, Clock, Trash2, Filter, ArrowRight, ArrowLeftRight, ChevronDown, ShieldAlert, Target, Bird } from 'lucide-react';
+import { ChevronLeft, ChevronRight, User as UserIcon, Calendar as CalendarIcon, Info, Plus, X, Clock, Trash2, Filter, ArrowRight, ArrowLeftRight, ChevronDown, ShieldAlert, Target, Bird, Search, FileText } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Link } from 'react-router-dom';
 import { useWeather } from '../hooks/useWeather';
@@ -403,8 +403,7 @@ export function HuntingCalendar() {
     return WATERFOWL_KEYWORDS.some(w => s.includes(w));
   };
 
-  const huntableSpecies = huntingLimits
-    .filter(l => isSpeciesHuntable(l.huntingPeriod))
+  const filteredSpecies = huntingLimits
     .filter(l => l.species.toLowerCase().includes(searchTerm.toLowerCase()))
     .sort((a, b) => {
       const aWater = isWaterfowl(a.species);
@@ -488,13 +487,6 @@ export function HuntingCalendar() {
     return list;
   };
 
-  const handleDayClick = (date: Date) => {
-    if (!isHuntingDay(date)) return;
-    if (!profile) return;
-    setSelectedDay(date);
-    setIsAssigning(true);
-  };
-
   const onAssign = async (userId: string) => {
     if (!selectedDay) return;
     const currentAssignments = dayAssignments(selectedDay);
@@ -554,6 +546,63 @@ export function HuntingCalendar() {
     setSelectedDay(null);
   };
 
+  const getSeasonLabel = () => {
+    // 1. Try to extract from limits first (this is the most accurate for the current PDF)
+    const years = new Set<number>();
+    huntingLimits.forEach(l => {
+      if (!l.huntingPeriod) return;
+      // Match dd/mm/yyyy or dd/mm/yy (supports 2 to 4 digit years)
+      const dateMatches = l.huntingPeriod.match(/(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})/g);
+      if (dateMatches) {
+        dateMatches.forEach(match => {
+          const parts = match.split(/[\/\-\.]/);
+          let year = parseInt(parts[parts.length - 1]);
+          if (year < 100) year += 2000;
+          years.add(year);
+        });
+      } else {
+        // Fallback: search for stand-alone 4-digit years
+        const standaloneYears = l.huntingPeriod.match(/\b(20\d{2})\b/g);
+        if (standaloneYears) {
+          standaloneYears.forEach(y => years.add(parseInt(y)));
+        }
+      }
+    });
+
+    if (years.size > 0) {
+      const sortedYears = Array.from(years).sort((a, b) => a - b);
+      if (sortedYears.length >= 2) {
+        // Find the "season bridge" (e.g., 2025 and 2026)
+        return `${sortedYears[0]}/${sortedYears[sortedYears.length - 1]}`;
+      }
+      const y = sortedYears[0];
+      // If we only found one year, assume it's the start year of a season (YYYY/YYYY+1)
+      return `${y}/${y + 1}`;
+    }
+
+    // 2. Try to extract from settings
+    if (settings?.seasonStart && settings?.seasonEnd) {
+      try {
+        const start = parseISO(settings.seasonStart);
+        const end = parseISO(settings.seasonEnd);
+        if (start.getFullYear() !== end.getFullYear()) {
+          return `${format(start, 'yyyy')}/${format(end, 'yyyy')}`;
+        }
+        return format(start, 'yyyy');
+      } catch (e) {}
+    }
+
+    // 3. Default fallback based on current date
+    const currentYear = new Date().getFullYear();
+    const currentMonth = new Date().getMonth(); // 0-indexed (0=Jan, 4=May)
+    // Most hunting seasons start in September (8) or August (7)
+    // If we are before August, we are in the tail of the previous-year/current-year season
+    if (currentMonth >= 7) return `${currentYear}/${currentYear + 1}`;
+    return `${currentYear - 1}/${currentYear}`;
+  };
+
+  const seasonLabel = getSeasonLabel();
+
   return (
     <div className="space-y-6">
       <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -561,6 +610,13 @@ export function HuntingCalendar() {
           <h1 className="text-3xl font-serif text-lake-green">Oggi al Lago</h1>
         </div>
         <div className="flex flex-col items-end gap-2">
+          <Link 
+            to="/regolamento"
+            className="text-[0.7rem] bg-white px-4 py-2 rounded-lg border border-slate-200 font-bold text-slate-gray shadow-sm hover:border-lake-green hover:text-lake-green transition-all flex items-center gap-2 group whitespace-nowrap"
+          >
+            <FileText size={14} className="text-slate-400 group-hover:text-lake-green transition-colors" />
+            Calendario Venatorio {seasonLabel}
+          </Link>
         </div>
       </header>
       
@@ -680,12 +736,12 @@ export function HuntingCalendar() {
             </div>
           )}
 
-          {huntableSpecies.length > 0 || searchTerm ? (
+          {huntingLimits.length > 0 || searchTerm ? (
             <div className="card-polish overflow-hidden !p-0 border-t-4 border-earth-brown animate-in fade-in slide-in-from-bottom-4 duration-700">
               <div className="p-4 bg-off-white border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-2">
                   <Bird size={16} className="text-earth-brown" />
-                  <h3 className="text-xs font-black text-slate-gray uppercase tracking-widest">Carniere e Specie Cacciabili Oggi</h3>
+                  <h3 className="text-xs font-black text-slate-gray uppercase tracking-widest">Periodi e Specie Cacciabili (Stagione {seasonLabel})</h3>
                 </div>
                 
                 <div className="flex items-center gap-3">
@@ -698,7 +754,7 @@ export function HuntingCalendar() {
                       className="bg-white border border-slate-200 rounded-lg pl-8 pr-8 py-1.5 text-xs font-bold text-slate-700 outline-none focus:ring-1 focus:ring-earth-brown focus:border-earth-brown transition-all w-full sm:w-48"
                     />
                     <div className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400">
-                      <Bird size={14} className="group-focus-within:text-earth-brown transition-colors" />
+                      <Search size={14} className="group-focus-within:text-earth-brown transition-colors" />
                     </div>
                     {searchTerm && (
                       <button 
@@ -709,7 +765,6 @@ export function HuntingCalendar() {
                       </button>
                     )}
                   </div>
-                  <span className="hidden sm:inline text-[9px] font-bold text-earth-brown/50 uppercase tracking-tighter">Stagione {new Date().getFullYear()}</span>
                 </div>
               </div>
               <div className="overflow-x-auto">
@@ -724,23 +779,35 @@ export function HuntingCalendar() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
-                    {huntableSpecies.length === 0 && (
+                    {filteredSpecies.length === 0 && (
                       <tr>
                         <td colSpan={5} className="px-4 py-8 text-center">
                           <p className="text-xs font-bold text-slate-400 uppercase tracking-widest italic">Nessuna specie trovata per "{searchTerm}"</p>
                         </td>
                       </tr>
                     )}
-                    {(showAllLimits ? huntableSpecies : huntableSpecies.slice(0, 5)).map((limit) => (
-                      <tr key={limit.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="px-4 py-3">
-                          <span className={cn(
-                            "text-xs font-bold uppercase tracking-tight",
-                            isWaterfowl(limit.species) ? "text-lake-green" : "text-slate-900"
-                          )}>
-                            {limit.species}
-                          </span>
-                        </td>
+                    {(showAllLimits ? filteredSpecies : filteredSpecies.slice(0, 5)).map((limit) => {
+                      const isHuntable = isSpeciesHuntable(limit.huntingPeriod);
+                      return (
+                        <tr key={limit.id} className={cn(
+                          "transition-colors",
+                          isHuntable ? "hover:bg-emerald-50/30" : "opacity-60 hover:bg-slate-50"
+                        )}>
+                          <td className="px-4 py-3">
+                            <div className="flex flex-col">
+                              <span className={cn(
+                                "text-xs font-bold uppercase tracking-tight",
+                                isWaterfowl(limit.species) ? "text-lake-green" : "text-slate-900"
+                              )}>
+                                {limit.species}
+                              </span>
+                              {isHuntable ? (
+                                <span className="text-[7px] font-black text-emerald-600 uppercase tracking-widest">Cacciabile Oggi</span>
+                              ) : (
+                                <span className="text-[7px] font-black text-rose-400 uppercase tracking-widest">Periodo Concluso</span>
+                              )}
+                            </div>
+                          </td>
                         <td className="px-2 py-3 text-center">
                           <span className="text-[9px] font-bold text-slate-500 whitespace-nowrap">
                             {formatShortPeriod(limit.huntingPeriod)}
@@ -768,18 +835,19 @@ export function HuntingCalendar() {
                           </span>
                         </td>
                       </tr>
-                    ))}
-                  </tbody>
+                    );
+                  })}
+                </tbody>
                 </table>
               </div>
               
-              {huntableSpecies.length > 5 && (
+                  {filteredSpecies.length > 5 && (
                 <button
                   onClick={() => setShowAllLimits(!showAllLimits)}
                   className="w-full py-3 bg-white hover:bg-slate-50 border-t border-slate-100 flex items-center justify-center gap-2 transition-colors group"
                 >
                   <span className="text-[10px] font-black text-slate-400 group-hover:text-earth-brown uppercase tracking-[0.2em]">
-                    {showAllLimits ? 'Mostra meno specie' : `Mostra altre ${huntableSpecies.length - 5} specie`}
+                    {showAllLimits ? 'Mostra meno specie' : `Mostra altre ${filteredSpecies.length - 5} specie`}
                   </span>
                   <div className={cn("transition-transform duration-300", showAllLimits ? "rotate-180" : "")}>
                     <ChevronDown size={14} className="text-slate-300 group-hover:text-earth-brown" />
@@ -884,7 +952,7 @@ export function HuntingCalendar() {
                   {selectedDay ? format(selectedDay, 'EEEE dd MMMM', { locale: it }) : 'Seleziona una data'}
                 </p>
               </div>
-              {selectedDay && isHuntingDay(selectedDay) && isInSeason(selectedDay) && (
+              {selectedDay && isHuntingDay(selectedDay) && isInSeason(selectedDay) && (profile?.role === 'admin' || profile?.role === 'socio') && (
                 <button 
                   onClick={() => setIsAssigning(true)}
                   className="bg-lake-green text-white p-2 rounded-lg hover:bg-lake-green/90 active:scale-95 transition-all shadow-sm"

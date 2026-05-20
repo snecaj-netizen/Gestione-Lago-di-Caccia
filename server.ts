@@ -76,7 +76,7 @@ function setCached(key: string, data: any) {
 
 async function startServer() {
   const app = express();
-  const PORT = process.env.PORT || 3000;
+  const PORT = Number(process.env.PORT) || 3000;
 
   app.use(express.json());
 
@@ -145,7 +145,7 @@ async function startServer() {
 
   app.post("/api/admin/extract-limits", async (req, res) => {
     const pdfPath = path.join(process.cwd(), 'public', 'regulation.pdf');
-    if (!fs.existsSync(pdfPath)) return res.status(404).json({ error: "PDF not found" });
+    if (!fs.existsSync(pdfPath)) return res.status(404).json({ error: "PDF non trovato. Carica prima il calendario venatorio." });
     
     const client = getAiClient();
     if (!client) return res.status(500).json({ error: "AI not configured" });
@@ -157,17 +157,36 @@ async function startServer() {
         contents: {
           parts: [
             { inlineData: { data: dataBuffer.toString("base64"), mimeType: "application/pdf" } },
-            { text: "Estrai limiti di carniere e periodo di caccia in JSON." }
+            { text: "Analizza il calendario venatorio allegato ed estrai i limiti di carniere (giornaliero e stagionale) per ogni specie cacciabile, il periodo di caccia e eventuali note. Restituisci una lista di oggetti JSON." }
           ]
         },
         config: {
-          systemInstruction: "Sei un esperto di normativa venatoria. Restituisci SOLO JSON.",
+          systemInstruction: "Sei un assistente esperto in normativa venatoria italiana. Estrai i dati con precisione. Se un limite non è specificato, usa 0. Il campo 'species' deve essere il nome comune dell'animale (es. 'Allodola', non 'Allodola (Alauda arvensis)'). Non duplicare le specie nel report finale. Il campo 'huntingPeriod' deve indicare l'intervallo di date includendo l'anno se presente nel testo (es. '01/09/2024 - 31/01/2025').",
           responseMimeType: "application/json",
+          responseSchema: {
+            type: "ARRAY",
+            items: {
+              type: "OBJECT",
+              properties: {
+                species: { type: "STRING" },
+                dailyLimit: { type: "NUMBER" },
+                seasonalLimit: { type: "NUMBER" },
+                huntingPeriod: { type: "STRING" },
+                notes: { type: "STRING" }
+              },
+              required: ["species", "dailyLimit", "seasonalLimit"]
+            }
+          }
         }
       });
-      res.json(JSON.parse(geminiResponse.text!.replace(/```json/g, "").replace(/```/g, "").trim()));
-    } catch (error) {
-      res.status(500).json({ error: "PDF Analysis failed" });
+      
+      const text = geminiResponse.text;
+      if (!text) throw new Error("Empty response from AI");
+      
+      res.json(JSON.parse(text));
+    } catch (error: any) {
+      console.error("PDF Analysis failed:", error);
+      res.status(500).json({ error: `Analisi PDF fallita: ${error.message}` });
     }
   });
 
@@ -181,7 +200,12 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.resolve(process.cwd(), 'dist');
+    const publicPath = path.resolve(process.cwd(), 'public');
+    
+    // Order matters: dist first (hashed assets), then public (dynamic uploads)
     app.use(express.static(distPath));
+    app.use(express.static(publicPath));
+    
     app.get("*", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
     });
