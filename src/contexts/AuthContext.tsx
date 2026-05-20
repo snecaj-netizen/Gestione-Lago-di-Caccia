@@ -43,7 +43,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const adminProfile: UserProfile = {
             uid: userData.uid,
             email: 'snecaj@gmail.com',
-            displayName: 'Admin User',
+            displayName: 'Stefano',
             role: 'admin',
             isActive: true,
             username: 'snecaj@gmail.com',
@@ -135,7 +135,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const adminProfile: UserProfile = {
           uid: 'admin-id',
           email: 'snecaj@gmail.com',
-          displayName: 'Admin User',
+          displayName: 'Stefano',
           username: 'snecaj@gmail.com',
           role: 'admin',
           isActive: true,
