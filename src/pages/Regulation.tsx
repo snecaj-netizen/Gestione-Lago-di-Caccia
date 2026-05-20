@@ -14,7 +14,10 @@ export function Regulation() {
     fetch('/api/admin/check-regulation')
       .then(res => res.json())
       .then(data => setPdfExists(data.exists))
-      .catch(() => setPdfExists(false));
+      .catch((err) => {
+        console.warn("Could not check regulation status via API, falling back to true:", err);
+        setPdfExists(true);
+      });
 
     const unsub = subscribeToHuntingLimits(setLimits);
     return () => unsub();

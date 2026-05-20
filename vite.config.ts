@@ -24,6 +24,31 @@ export default defineConfig(({mode}) => {
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,json,webmanifest}'],
           globIgnores: ['**/firebase-applet-config.json'],
+          navigateFallbackDenylist: [/^\/api/],
+          runtimeCaching: [
+            {
+              urlPattern: /^\/api\//,
+              handler: 'NetworkFirst',
+              options: {
+                cacheName: 'api-cache',
+                expiration: {
+                  maxEntries: 50,
+                  maxAgeSeconds: 24 * 60 * 60 // 24 hours
+                }
+              }
+            },
+            {
+              urlPattern: /regulation\.pdf$/,
+              handler: 'NetworkFirst',
+              options: {
+                cacheName: 'pdf-cache',
+                expiration: {
+                  maxEntries: 2,
+                  maxAgeSeconds: 30 * 24 * 60 * 60 // 30 days
+                }
+              }
+            }
+          ]
         }
       })
     ],
