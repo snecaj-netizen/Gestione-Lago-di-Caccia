@@ -27,6 +27,10 @@ export default defineConfig(({mode}) => {
           navigateFallbackDenylist: [/^\/api/],
           runtimeCaching: [
             {
+              urlPattern: /^\/api\/admin\//,
+              handler: 'NetworkOnly'
+            },
+            {
               urlPattern: /^\/api\//,
               handler: 'NetworkFirst',
               options: {

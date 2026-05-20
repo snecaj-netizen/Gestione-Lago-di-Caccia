@@ -74,7 +74,7 @@ export function AdminPanel() {
 
   const checkPdfStatus = async () => {
     try {
-      const response = await fetch('/api/admin/check-regulation');
+      const response = await fetch(`/api/admin/check-regulation?t=${Date.now()}`);
       if (response && response.ok) {
         const data = await response.json();
         setPdfInfo(data);

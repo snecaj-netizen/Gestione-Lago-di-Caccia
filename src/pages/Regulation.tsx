@@ -11,7 +11,7 @@ export function Regulation() {
   const [limits, setLimits] = useState<HuntingLimit[]>([]);
 
   useEffect(() => {
-    fetch('/api/admin/check-regulation')
+    fetch(`/api/admin/check-regulation?t=${Date.now()}`)
       .then(res => res.json())
       .then(data => setPdfExists(data.exists))
       .catch((err) => {

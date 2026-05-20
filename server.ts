@@ -129,6 +129,7 @@ async function startServer() {
 
   // Admin / Regulation API
   app.get("/api/admin/check-regulation", (req, res) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
     const pdfPath = path.join(process.cwd(), 'public', 'regulation.pdf');
     res.json({ exists: fs.existsSync(pdfPath) });
   });
@@ -202,9 +203,9 @@ async function startServer() {
     const distPath = path.resolve(process.cwd(), 'dist');
     const publicPath = path.resolve(process.cwd(), 'public');
     
-    // Order matters: dist first (hashed assets), then public (dynamic uploads)
-    app.use(express.static(distPath));
+    // Order matters: public (dynamic uploads) takes precedence, then dist (hashed assets)
     app.use(express.static(publicPath));
+    app.use(express.static(distPath));
     
     app.get("*", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
