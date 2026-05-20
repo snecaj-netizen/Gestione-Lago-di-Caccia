@@ -28,7 +28,8 @@ import {
   Waves,
   Fish,
   Utensils,
-  FileText
+  FileText,
+  BookOpen
 } from 'lucide-react';
 import { cn } from './lib/utils';
 
@@ -43,6 +44,7 @@ import { Profile } from './pages/Profile';
 import { Gallery } from './pages/Gallery';
 import { Recipes } from './pages/Recipes';
 import { Regulation } from './pages/Regulation';
+import { Tesserino } from './pages/Tesserino';
 import { NotificationCenter } from './components/NotificationCenter';
 import { PWAUpdatePrompt } from './components/PWAUpdatePrompt';
 import { it } from 'date-fns/locale';
@@ -97,6 +99,7 @@ function Sidebar({ isOpen, setIsOpen }: { isOpen: boolean, setIsOpen: (val: bool
   }
 
   if (profile?.role === 'admin') {
+    navItems.push({ name: 'Tesserino Venatorio', path: '/tesserino', icon: BookOpen });
     navItems.push({ name: 'Admin', path: '/admin', icon: Users });
   } else {
     navItems.push({ name: 'Mio Profilo', path: '/profilo', icon: UserIcon });
@@ -759,6 +762,9 @@ function MainLayout() {
                   <Route path="/galleria" element={<Gallery />} />
                   <Route path="/ricette" element={<Recipes />} />
                   <Route path="/regolamento" element={<Regulation />} />
+                  {profile?.role === 'admin' && (
+                    <Route path="/tesserino" element={<Tesserino />} />
+                  )}
                   <Route path="/admin" element={<AdminPanel />} />
                   <Route path="/profilo" element={<Profile />} />
                   <Route path="*" element={<Navigate to="/" replace />} />

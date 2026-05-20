@@ -14,7 +14,7 @@ import {
   Timestamp,
   getDocs
 } from 'firebase/firestore';
-import { UserProfile, HuntingDay, Transaction, Harvest, LakeSettings, HuntingPhoto, BudgetItem, Notification, HuntingTime, Recipe, HuntingLimit } from './types';
+import { UserProfile, HuntingDay, Transaction, Harvest, LakeSettings, HuntingPhoto, BudgetItem, Notification, HuntingTime, Recipe, HuntingLimit, TesserinoEntry } from './types';
 import { format } from 'date-fns';
 
 // Helper to strip undefined values from objects before Firestore operations
@@ -545,5 +545,38 @@ export const clearAllHuntingLimits = async () => {
     await Promise.all(promises);
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, 'hunting_limits_all');
+  }
+};
+
+// Tesserino Entries Services
+export const subscribeToTesserinoEntries = (callback: (entries: TesserinoEntry[]) => void) => {
+  const q = query(collection(db, 'tesserino_entries'), orderBy('date', 'desc'), orderBy('createdAt', 'desc'));
+  return onSnapshot(q, (snapshot) => {
+    callback(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as TesserinoEntry)));
+  }, (error) => handleFirestoreError(error, OperationType.LIST, 'tesserino_entries'));
+};
+
+export const addTesserinoEntry = async (entry: Omit<TesserinoEntry, 'id'>) => {
+  try {
+    const docRef = await addDoc(collection(db, 'tesserino_entries'), cleanData(entry));
+    return docRef.id;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, 'tesserino_entries');
+  }
+};
+
+export const deleteTesserinoEntry = async (id: string) => {
+  try {
+    await deleteDoc(doc(db, 'tesserino_entries', id));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `tesserino_entries/${id}`);
+  }
+};
+
+export const updateTesserinoEntry = async (id: string, updates: Partial<TesserinoEntry>) => {
+  try {
+    await updateDoc(doc(db, 'tesserino_entries', id), cleanData(updates));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `tesserino_entries/${id}`);
   }
 };

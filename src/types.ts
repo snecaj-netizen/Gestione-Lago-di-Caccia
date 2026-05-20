@@ -147,3 +147,11 @@ export interface HuntingLimit {
   notes?: string;
   updatedAt: string;
 }
+
+export interface TesserinoEntry {
+  id: string;
+  date: string; // YYYY-MM-DD
+  species: string;
+  count: number;
+  createdAt: string;
+}

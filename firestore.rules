@@ -222,5 +222,10 @@ service cloud.firestore {
     match /recipes/{recipeId} {
       allow read, write: if true;
     }
+
+    // Tesserino Entries (Admin personal official card tracker)
+    match /tesserino_entries/{entryId} {
+      allow read, write: if true;
+    }
   }
 }

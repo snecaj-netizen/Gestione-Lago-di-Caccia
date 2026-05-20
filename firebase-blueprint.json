@@ -163,6 +163,18 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["species", "dailyLimit", "seasonalLimit"]
+    },
+    "tesserinoEntry": {
+      "title": "Tesserino Entry",
+      "description": "Record of animals written down in the official paper hunting badge by the admin.",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string", "format": "date" },
+        "species": { "type": "string" },
+        "count": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["date", "species", "count"]
     }
   },
   "firestore": {
@@ -209,6 +221,10 @@
     "/hunting_limits/{limitId}": {
       "schema": "huntingLimit",
       "description": "Hunting limits extracted from regulations."
+    },
+    "/tesserino_entries/{entryId}": {
+      "schema": "tesserinoEntry",
+      "description": "Official paper card back up hunting entries."
     }
   }
 }
