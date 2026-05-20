@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { subscribeToUsers, updateUserProfile, subscribeToSettings, updateSettings, addUserManually, deleteUser, subscribeToHuntingTimes, addHuntingTime, deleteHuntingTime, updateHuntingTime, subscribeToHuntingLimits, saveHuntingLimit, deleteHuntingLimit, clearAllHuntingLimits } from '../services';
+import { subscribeToUsers, updateUserProfile, subscribeToSettings, updateSettings, addUserManually, deleteUser, subscribeToHuntingTimes, addHuntingTime, deleteHuntingTime, updateHuntingTime, subscribeToHuntingLimits, saveHuntingLimit, deleteHuntingLimit, clearAllHuntingLimits, clearAllHuntingTimes } from '../services';
 import { UserProfile, LakeSettings, HuntingTime, HuntingLimit } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { format } from 'date-fns';
@@ -29,6 +29,16 @@ export function AdminPanel() {
   const [extractedProspect, setExtractedProspect] = useState<Partial<HuntingLimit>[] | null>(null);
   const [editingLimitId, setEditingLimitId] = useState<string | null>(null);
   const [limitDraft, setLimitDraft] = useState<HuntingLimit | null>(null);
+
+  const [cleaningTimesDb, setCleaningTimesDb] = useState(false);
+  const [cleanTimesDbError, setCleanTimesDbError] = useState<string | null>(null);
+  const [cleanTimesSuccess, setCleanTimesSuccess] = useState(false);
+  const [showCleanTimesConfirm, setShowCleanTimesConfirm] = useState(false);
+  
+  const [extractedTimesProspect, setExtractedTimesProspect] = useState<Partial<HuntingTime>[] | null>(null);
+  const [extractingTimes, setExtractingTimes] = useState(false);
+  const [extractTimesError, setExtractTimesError] = useState(false);
+  const [saveTimesStatus, setSaveTimesStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
 
   const [newTime, setNewTime] = useState<Omit<HuntingTime, 'id'>>({
     startDate: '',
@@ -299,6 +309,62 @@ export function AdminPanel() {
       setTimeout(() => setSaveStatus('idle'), 3000);
     } catch (error) {
       setSaveStatus('error');
+    }
+  };
+
+  const handleExtractTimes = async () => {
+    setExtractingTimes(true);
+    setExtractTimesError(false);
+    try {
+      const response = await fetch('/api/admin/extract-hunting-times', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          seasonStart: settings?.seasonStart,
+          seasonEnd: settings?.seasonEnd
+        })
+      });
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to extract");
+      }
+      
+      setExtractedTimesProspect(data);
+    } catch (error: any) {
+      console.error(error);
+      alert("Errore estrazione orari: " + (error.message || "Errore sconosciuto"));
+      setExtractTimesError(true);
+    } finally {
+      setExtractingTimes(false);
+    }
+  };
+
+  const handleSaveExtractedTimes = async () => {
+    if (!extractedTimesProspect) return;
+    setSaveTimesStatus('saving');
+    try {
+      const promises = extractedTimesProspect.map(time => {
+        if (time.startDate && time.endDate && time.startTime && time.endTime) {
+          return addHuntingTime({
+            startDate: time.startDate,
+            endDate: time.endDate,
+            startTime: time.startTime,
+            endTime: time.endTime
+          });
+        }
+        return Promise.resolve();
+      });
+      await Promise.all(promises);
+      setSaveTimesStatus('success');
+      setExtractedTimesProspect(null);
+      alert("Orari di caccia estratti e salvati correttamente!");
+    } catch (error) {
+      console.error(error);
+      setSaveTimesStatus('error');
+      alert("Errore durante il salvataggio degli orari.");
+    } finally {
+      setSaveTimesStatus('idle');
     }
   };
 
@@ -914,10 +980,192 @@ export function AdminPanel() {
 
       {/* Hunting Times Management Section */}
       <section className="card-polish !border-t-accent-gold">
-        <div className="flex items-center gap-2 mb-6">
-          <Clock size={18} className="text-accent-gold" />
-          <h2 className="text-lg font-bold text-slate-gray uppercase tracking-widest">Orari e Periodi di Caccia</h2>
+        <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
+          <div className="flex items-center gap-2">
+            <Clock size={18} className="text-accent-gold" />
+            <h2 className="text-lg font-bold text-slate-gray uppercase tracking-widest">Orari e Periodi di Caccia</h2>
+          </div>
+          <div className="flex gap-2 items-center relative flex-wrap">
+            {huntingTimes.length > 0 && (
+              <div className="flex items-center gap-2">
+                {showCleanTimesConfirm ? (
+                  <div className="flex items-center gap-2 bg-rose-50 p-1 rounded-lg border border-rose-200">
+                    <span className="text-[9px] font-bold text-rose-600 px-2 uppercase">Sicuro?</span>
+                    <button 
+                      onClick={async () => {
+                        setCleaningTimesDb(true);
+                        setCleanTimesDbError(null);
+                        setShowCleanTimesConfirm(false);
+                        try {
+                          await clearAllHuntingTimes();
+                          setCleanTimesSuccess(true);
+                          setTimeout(() => setCleanTimesSuccess(false), 3000);
+                        } catch (err: any) {
+                          console.error("Error cleaning DB:", err);
+                          setCleanTimesDbError(err.message || 'Errore');
+                        } finally {
+                          setCleaningTimesDb(false);
+                        }
+                      }}
+                      className="bg-rose-600 text-white px-2 py-1 rounded text-[9px] font-black uppercase hover:bg-rose-700 cursor-pointer"
+                    >
+                      Sì, cancella
+                    </button>
+                    <button 
+                      onClick={() => setShowCleanTimesConfirm(false)}
+                      className="text-slate-400 hover:text-slate-600 px-2 py-1 text-[9px] font-black uppercase cursor-pointer"
+                    >
+                      No
+                    </button>
+                  </div>
+                ) : (
+                  <button 
+                    onClick={() => setShowCleanTimesConfirm(true)}
+                    disabled={cleaningTimesDb}
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-2 rounded-lg font-bold text-[10px] uppercase transition-all shadow-sm border cursor-pointer",
+                      cleaningTimesDb 
+                        ? "bg-slate-100 text-slate-400 border-slate-200" 
+                        : cleanTimesSuccess 
+                          ? "bg-emerald-50 text-emerald-600 border-emerald-200"
+                          : "bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100"
+                    )}
+                  >
+                    {cleaningTimesDb ? (
+                      <div className="w-3 h-3 border-2 border-slate-300 border-t-slate-500 rounded-full animate-spin" />
+                    ) : cleanTimesSuccess ? (
+                      <UserCheck size={12} />
+                    ) : (
+                      <Trash2 size={12} />
+                    )}
+                    {cleaningTimesDb ? 'Pulizia...' : cleanTimesSuccess ? 'Vuoto!' : 'Svuota Tutto'}
+                  </button>
+                )}
+              </div>
+            )}
+
+            <button
+              onClick={handleExtractTimes}
+              disabled={extractingTimes}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-xs transition-all shadow-sm cursor-pointer",
+                extractingTimes 
+                  ? "bg-slate-200 text-slate-400 cursor-not-allowed" 
+                  : "bg-accent-gold text-white hover:bg-accent-gold/90"
+              )}
+            >
+              {extractingTimes ? (
+                <>
+                  <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Analisi PDF in corso...
+                </>
+              ) : (
+                <>
+                  <Eye size={16} />
+                  Estrai Orari da PDF
+                </>
+              )}
+            </button>
+          </div>
         </div>
+
+        {cleanTimesDbError && (
+          <div className="p-3 bg-rose-50 text-rose-600 rounded-lg text-[10px] font-bold uppercase mb-4">
+            Errore pulizia: {cleanTimesDbError}
+          </div>
+        )}
+
+        {extractTimesError && (
+          <div className="p-3 bg-rose-50 text-rose-600 rounded-lg text-[10px] font-bold uppercase mb-4">
+            Errore durante l'estrazione degli orari. Assicurati di aver caricato il PDF e che la chiave Gemini sia configurata.
+          </div>
+        )}
+
+        {extractedTimesProspect && (
+          <div className="mb-6 p-4 bg-slate-50 rounded-xl border border-slate-200">
+            <div className="bg-white rounded-lg border border-slate-200 overflow-hidden shadow-sm">
+              <div className="p-3 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+                <span className="text-[10px] font-black uppercase text-slate-400">Anteprima Orari Estratti dal PDF</span>
+                <div className="flex gap-4">
+                  <button onClick={() => setExtractedTimesProspect(null)} className="text-[10px] font-black uppercase text-slate-400 hover:underline cursor-pointer">Annulla</button>
+                  <button 
+                    onClick={handleSaveExtractedTimes} 
+                    className="text-[10px] font-black uppercase text-emerald-600 hover:underline cursor-pointer"
+                    disabled={saveTimesStatus === 'saving'}
+                  >
+                    {saveTimesStatus === 'saving' ? 'Salvataggio...' : 'Conferma e Salva Tutto'}
+                  </button>
+                </div>
+              </div>
+              <div className="max-h-[300px] overflow-y-auto">
+                <table className="w-full text-left">
+                  <thead className="bg-slate-50 sticky top-0">
+                    <tr>
+                      <th className="p-3 text-[9px] font-black uppercase text-slate-400">Data Inizio (YYYY-MM-DD)</th>
+                      <th className="p-3 text-[9px] font-black uppercase text-slate-400">Data Fine (YYYY-MM-DD)</th>
+                      <th className="p-3 text-[9px] font-black uppercase text-slate-400">Ora Inizio (HH:MM)</th>
+                      <th className="p-3 text-[9px] font-black uppercase text-slate-400">Ora Fine (HH:MM)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {extractedTimesProspect.map((p, i) => (
+                      <tr key={i}>
+                        <td className="p-2">
+                          <input 
+                            type="text" 
+                            value={p.startDate || ''} 
+                            onChange={(e) => { 
+                              const n = [...extractedTimesProspect!]; 
+                              n[i].startDate = e.target.value; 
+                              setExtractedTimesProspect(n); 
+                            }} 
+                            className="w-full text-xs font-mono text-slate-700 bg-transparent outline-none border-b border-transparent focus:border-lake-green" 
+                          />
+                        </td>
+                        <td className="p-2">
+                          <input 
+                            type="text" 
+                            value={p.endDate || ''} 
+                            onChange={(e) => { 
+                              const n = [...extractedTimesProspect!]; 
+                              n[i].endDate = e.target.value; 
+                              setExtractedTimesProspect(n); 
+                            }} 
+                            className="w-full text-xs font-mono text-slate-700 bg-transparent outline-none border-b border-transparent focus:border-lake-green" 
+                          />
+                        </td>
+                        <td className="p-2">
+                          <input 
+                            type="text" 
+                            value={p.startTime || ''} 
+                            onChange={(e) => { 
+                              const n = [...extractedTimesProspect!]; 
+                              n[i].startTime = e.target.value; 
+                              setExtractedTimesProspect(n); 
+                            }} 
+                            className="w-full text-xs font-mono text-slate-700 bg-transparent outline-none border-b border-transparent focus:border-lake-green" 
+                          />
+                        </td>
+                        <td className="p-2">
+                          <input 
+                            type="text" 
+                            value={p.endTime || ''} 
+                            onChange={(e) => { 
+                              const n = [...extractedTimesProspect!]; 
+                              n[i].endTime = e.target.value; 
+                              setExtractedTimesProspect(n); 
+                            }} 
+                            className="w-full text-xs font-mono text-slate-700 bg-transparent outline-none border-b border-transparent focus:border-lake-green" 
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Add Form */}

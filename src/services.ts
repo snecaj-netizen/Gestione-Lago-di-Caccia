@@ -62,6 +62,17 @@ export const deleteHuntingTime = async (id: string) => {
   }
 };
 
+export const clearAllHuntingTimes = async () => {
+  try {
+    const q = query(collection(db, 'hunting_times'));
+    const snapshot = await getDocs(q);
+    const promises = snapshot.docs.map(doc => deleteDoc(doc.ref));
+    await Promise.all(promises);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, 'hunting_times_all');
+  }
+};
+
 // Photos Gallery
 export const subscribeToPhotos = (callback: (photos: HuntingPhoto[]) => void) => {
   const q = query(collection(db, 'photos'), orderBy('createdAt', 'desc'));

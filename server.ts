@@ -191,6 +191,56 @@ async function startServer() {
     }
   });
 
+  app.post("/api/admin/extract-hunting-times", async (req, res) => {
+    const pdfPath = path.join(process.cwd(), 'public', 'regulation.pdf');
+    if (!fs.existsSync(pdfPath)) return res.status(404).json({ error: "PDF non trovato. Carica prima il calendario venatorio." });
+    
+    const client = getAiClient();
+    if (!client) return res.status(500).json({ error: "AI not configured" });
+
+    const { seasonStart, seasonEnd } = req.body;
+
+    try {
+      const dataBuffer = fs.readFileSync(pdfPath);
+      const geminiResponse = await client.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: {
+          parts: [
+            { inlineData: { data: dataBuffer.toString("base64"), mimeType: "application/pdf" } },
+            { text: `Analizza l'allegato ed estrai gli orari della giornata venatoria (periodi di date e orario di inizio / fine caccia).
+Gli orari cambiano tipicamente di quindicina in quindicina o mese per mese (es. dal 1 settembre al 15 settembre dalle 05:45 alle 19:15, ecc.).
+La stagione corrente inizia il ${seasonStart || '2024-09-01'} e termina il ${seasonEnd || '2025-01-31'}. Usa questi anni come riferimento per determinare correttamente le date d'inizio (startDate) e fine (endDate) di ciascun periodo. Ad esempio, se un periodo va dal 1 Gennaio al 15 Gennaio, l'anno sarà quello di fine stagione (es. 2025).` }
+          ]
+        },
+        config: {
+          systemInstruction: "Sei un assistente esperto in normativa venatoria italiana. Estrai tutte le fasce orarie e i periodi definiti per la caccia nel laghetto o calendario venatorio con la massima precisione. Assicurati che startDate e endDate siano esclusivamente in formato YYYY-MM-DD. Assicurati che startTime e endTime siano in formato HH:MM.",
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: "ARRAY",
+            items: {
+              type: "OBJECT",
+              properties: {
+                startDate: { type: "STRING" },
+                endDate: { type: "STRING" },
+                startTime: { type: "STRING" },
+                endTime: { type: "STRING" }
+              },
+              required: ["startDate", "endDate", "startTime", "endTime"]
+            }
+          }
+        }
+      });
+      
+      const text = geminiResponse.text;
+      if (!text) throw new Error("Empty response from AI");
+      
+      res.json(JSON.parse(text));
+    } catch (error: any) {
+      console.error("PDF Hunting Times Analysis failed:", error);
+      res.status(500).json({ error: `Analisi orari da PDF fallita: ${error.message}` });
+    }
+  });
+
   // Serve static files and handle SPA fallback
   if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import("vite");
