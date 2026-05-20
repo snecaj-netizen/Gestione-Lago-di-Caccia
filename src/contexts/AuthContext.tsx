@@ -188,8 +188,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setProfile(null);
   };
 
+  const finalProfile = profile && (profile.email === 'snecaj@gmail.com' || profile.uid === 'admin-id')
+    ? { ...profile, displayName: 'Stefano' }
+    : profile;
+
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signIn, signInWithCredentials, logout }}>
+    <AuthContext.Provider value={{ user, profile: finalProfile, loading, signIn, signInWithCredentials, logout }}>
       {children}
     </AuthContext.Provider>
   );

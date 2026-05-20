@@ -151,7 +151,7 @@ export const ensureUserProfile = async (user: any): Promise<UserProfile> => {
         email: user.email || '',
         username: isAdmin ? 'snecaj@gmail.com' : (user.email || ''),
         password: isAdmin ? 'admin' : '',
-        displayName: user.displayName || (isAdmin ? 'Stefano Necaj' : 'Utente'),
+        displayName: user.displayName || (isAdmin ? 'Stefano' : 'Utente'),
         role: isAdmin ? 'admin' : 'quotista', // Default to quotista, admin must approve
         isActive: isAdmin, // Stefano is active, others wait for approval
         assignedDaysOfWeek: [],
@@ -239,7 +239,7 @@ export const seedUsers = async () => {
         email: adminEmail,
         username: adminEmail,
         password: 'admin',
-        displayName: 'Stefano Necaj',
+        displayName: 'Stefano',
         role: 'admin',
         isActive: true,
         assignedDaysOfWeek: [],
