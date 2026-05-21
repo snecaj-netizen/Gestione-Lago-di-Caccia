@@ -3,6 +3,201 @@ import path from "path";
 import fs from "fs";
 import multer from "multer";
 import { GoogleGenAI } from "@google/genai";
+import dotenv from "dotenv";
+dotenv.config();
+
+// Start of Firebase Server Initialization via REST API
+const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID;
+const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY;
+const isFirebaseConfigured = !!FIREBASE_PROJECT_ID && !!FIREBASE_API_KEY;
+
+if (isFirebaseConfigured) {
+  console.log("[Firebase Server REST] Configurato con successo con Project ID:", FIREBASE_PROJECT_ID);
+} else {
+  console.warn("[Firebase Server REST] Credenziali mancanti in env. Il PDF non sarà salvato su Firestore.");
+}
+
+async function restGetDoc(collection: string, docId: string) {
+  if (!isFirebaseConfigured) return null;
+  const url = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/${collection}/${docId}?key=${FIREBASE_API_KEY}`;
+  const res = await fetch(url);
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Firestore REST GET error: ${res.status} - ${text}`);
+  }
+  
+  const responseJson = await res.json();
+  const result: Record<string, any> = {};
+  if (responseJson.fields) {
+    for (const [key, valObj] of Object.entries(responseJson.fields) as any) {
+      if (valObj.stringValue !== undefined) {
+        result[key] = valObj.stringValue;
+      } else if (valObj.doubleValue !== undefined) {
+        result[key] = Number(valObj.doubleValue);
+      } else if (valObj.integerValue !== undefined) {
+        result[key] = parseInt(valObj.integerValue, 10);
+      } else if (valObj.booleanValue !== undefined) {
+        result[key] = valObj.booleanValue;
+      } else if (valObj.nullValue !== undefined) {
+        result[key] = null;
+      }
+    }
+  }
+  return result;
+}
+
+async function restSetDoc(collection: string, docId: string, fields: Record<string, any>) {
+  if (!isFirebaseConfigured) return null;
+  
+  const url = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/${collection}/${docId}?key=${FIREBASE_API_KEY}`;
+  
+  const firestoreFields: Record<string, any> = {};
+  for (const [key, val] of Object.entries(fields)) {
+    if (typeof val === 'number') {
+      firestoreFields[key] = { doubleValue: val };
+    } else if (typeof val === 'boolean') {
+      firestoreFields[key] = { booleanValue: val };
+    } else if (val === null || val === undefined) {
+      firestoreFields[key] = { nullValue: null };
+    } else {
+      firestoreFields[key] = { stringValue: String(val) };
+    }
+  }
+
+  const res = await fetch(url, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fields: firestoreFields })
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Firestore REST PATCH error: ${res.status} - ${text}`);
+  }
+  return await res.json();
+}
+
+async function restDeleteDoc(collection: string, docId: string) {
+  if (!isFirebaseConfigured) return;
+  const url = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/${collection}/${docId}?key=${FIREBASE_API_KEY}`;
+  const res = await fetch(url, {
+    method: 'DELETE'
+  });
+  if (res.status === 404) return;
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Firestore REST DELETE error: ${res.status} - ${text}`);
+  }
+}
+
+async function savePdfToFirestore(pdfPath: string) {
+  if (!isFirebaseConfigured) {
+    console.warn("[Firebase Server REST] Impossibile salvare su Firestore: credenziali non configurate.");
+    return;
+  }
+  try {
+    const dataBuffer = fs.readFileSync(pdfPath);
+    const base64Str = dataBuffer.toString("base64");
+    
+    // Chunk size: 800 KB (819200 characters) - safest limit under 1MB
+    const chunkSize = 800 * 1024;
+    const chunks: string[] = [];
+    for (let i = 0; i < base64Str.length; i += chunkSize) {
+      chunks.push(base64Str.substring(i, i + chunkSize));
+    }
+
+    console.log(`[Firebase Server REST] Salvo PDF in ${chunks.length} frammenti su Firestore...`);
+
+    // Write chunk documents under the permitted 'settings' collection
+    for (let i = 0; i < chunks.length; i++) {
+      await restSetDoc('settings', `regulation_pdf_chunk_${i}`, {
+        index: i,
+        data: chunks[i]
+      });
+    }
+
+    // Write metadata under the permitted 'settings' collection
+    await restSetDoc('settings', 'regulation_pdf_metadata', {
+      totalChunks: chunks.length,
+      size: dataBuffer.length,
+      filename: 'regulation.pdf',
+      updatedAt: new Date().toISOString()
+    });
+
+    // Clean up any old leftover chunks if the new PDF is smaller than the previous one
+    for (let i = chunks.length; i < 100; i++) {
+      try {
+        await restDeleteDoc('settings', `regulation_pdf_chunk_${i}`);
+      } catch (e) {
+        break;
+      }
+    }
+    console.log("[Firebase Server REST] PDF salvato correttamente su Firestore.");
+  } catch (error) {
+    console.error("[Firebase Server REST] Errore salvataggio PDF su Firestore:", error);
+    throw error;
+  }
+}
+
+async function restorePdfFromFirestore(pdfPath: string): Promise<boolean> {
+  if (!isFirebaseConfigured) {
+    console.warn("[Firebase Server REST] Impossibile ripristinare: credenziali non configurate.");
+    return false;
+  }
+  try {
+    const meta = await restGetDoc('settings', 'regulation_pdf_metadata');
+    if (!meta) {
+      console.log("[Firebase Server REST] Nessun PDF di regolamento trovato su Firestore.");
+      return false;
+    }
+    const totalChunks = meta.totalChunks || 0;
+    if (totalChunks === 0) return false;
+
+    console.log(`[Firebase Server REST] Ripristino PDF da Firestore (${totalChunks} frammenti)...`);
+    
+    let base64Full = "";
+    for (let i = 0; i < totalChunks; i++) {
+      const chunkDoc = await restGetDoc('settings', `regulation_pdf_chunk_${i}`);
+      if (!chunkDoc) {
+        throw new Error(`Frammento regulation_pdf_chunk_${i} mancante su Firestore!`);
+      }
+      base64Full += chunkDoc.data || "";
+    }
+
+    const pdfBuffer = Buffer.from(base64Full, 'base64');
+    
+    // Ensure parent directory exists
+    const dir = path.dirname(pdfPath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+
+    fs.writeFileSync(pdfPath, pdfBuffer);
+    console.log(`[Firebase Server REST] PDF di regolamento ripristinato in: ${pdfPath}`);
+    return true;
+  } catch (error) {
+    console.error("[Firebase Server REST] Errore durante il ripristino del PDF:", error);
+    return false;
+  }
+}
+
+async function deletePdfFromFirestore() {
+  if (!isFirebaseConfigured) return;
+  try {
+    for (let i = 0; i < 100; i++) {
+      try {
+        await restDeleteDoc('settings', `regulation_pdf_chunk_${i}`);
+      } catch (e) {
+        break;
+      }
+    }
+    await restDeleteDoc('settings', 'regulation_pdf_metadata');
+    console.log("[Firebase Server REST] PDF e metadati rimossi da Firestore.");
+  } catch (err) {
+    console.error("[Firebase Server REST] Errore rimozione PDF da Firestore:", err);
+  }
+}
 
 // Configure multer for PDF uploads
 const pdfStorage = multer.diskStorage({
@@ -58,8 +253,30 @@ function getAiClient() {
   return aiClientInstance;
 }
 
-// Simple in-memory cache
-const cache = new Map<string, { data: any, timestamp: number }>();
+// Persistent filesystem cache for hunting predictions
+const CACHE_FILE = path.join(process.cwd(), 'predictions_cache.json');
+let cache = new Map<string, { data: any, timestamp: number }>();
+
+try {
+  if (fs.existsSync(CACHE_FILE)) {
+    const raw = fs.readFileSync(CACHE_FILE, 'utf8');
+    const parsed = JSON.parse(raw);
+    cache = new Map(Object.entries(parsed));
+    console.log(`[Cache System] Cache di previsione caricato con successo da disco: ${cache.size} elementi.`);
+  }
+} catch (err) {
+  console.error("[Cache System] Errore nel caricamento del file di cache delle previsioni:", err);
+}
+
+function saveCacheToDisk() {
+  try {
+    const obj = Object.fromEntries(cache.entries());
+    fs.writeFileSync(CACHE_FILE, JSON.stringify(obj, null, 2), 'utf8');
+  } catch (err) {
+    console.error("[Cache System] Errore nel salvataggio della cache delle previsioni su disco:", err);
+  }
+}
+
 const CACHE_TTL = 1000 * 60 * 60 * 24; // 24 hours for daily predictions
 
 function getCached(key: string) {
@@ -72,6 +289,7 @@ function getCached(key: string) {
 
 function setCached(key: string, data: any) {
   cache.set(key, { data, timestamp: Date.now() });
+  saveCacheToDisk();
 }
 
 async function startServer() {
@@ -79,6 +297,23 @@ async function startServer() {
   const PORT = Number(process.env.PORT) || 3000;
 
   app.use(express.json());
+
+  // Auto-restore PDF from Firestore if it is missing on disk
+  const bootPdfPath = path.join(process.cwd(), 'public', 'regulation.pdf');
+  if (!fs.existsSync(bootPdfPath)) {
+    console.log("[Boot] PDF di regolamento non trovato su disco. Verifico ripristino da Firestore...");
+    restorePdfFromFirestore(bootPdfPath).then((restored) => {
+      if (restored) {
+        console.log("[Boot] PDF ripristinato con successo da Firestore.");
+      } else {
+        console.log("[Boot] Nessun PDF di regolamento è presente su Firestore.");
+      }
+    }).catch(err => {
+      console.error("[Boot] Errore durante il tentativo di ripristino del PDF:", err);
+    });
+  } else {
+    console.log("[Boot] PDF di regolamento già presente su disco.");
+  }
 
   // API Routes
   app.get("/api/health", (req, res) => {
@@ -126,26 +361,42 @@ async function startServer() {
       res.status(500).json({ error: "AI failed" });
     }
   });
-
   // Admin / Regulation API
-  app.get("/api/admin/check-regulation", (req, res) => {
+  app.get("/api/admin/check-regulation", async (req, res) => {
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
     const pdfPath = path.join(process.cwd(), 'public', 'regulation.pdf');
-    res.json({ exists: fs.existsSync(pdfPath) });
+    let exists = fs.existsSync(pdfPath);
+    if (!exists) {
+      exists = await restorePdfFromFirestore(pdfPath);
+    }
+    res.json({ exists });
   });
   
-  app.delete("/api/admin/delete-regulation", (req, res) => {
+  app.delete("/api/admin/delete-regulation", async (req, res) => {
     const pdfPath = path.join(process.cwd(), 'public', 'regulation.pdf');
     if (fs.existsSync(pdfPath)) fs.unlinkSync(pdfPath);
+    await deletePdfFromFirestore();
     res.json({ success: true });
   });
   
-  app.post("/api/admin/upload-regulation", uploadPdf.single('pdf'), (req, res) => {
-    res.json({ success: true });
+  app.post("/api/admin/upload-regulation", uploadPdf.single('pdf'), async (req, res) => {
+    try {
+      const pdfPath = path.join(process.cwd(), 'public', 'regulation.pdf');
+      if (fs.existsSync(pdfPath)) {
+        await savePdfToFirestore(pdfPath);
+      }
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error("Errore salvataggio PDF su Firestore:", err);
+      res.status(500).json({ error: `Caricamento fallito nel backup cloud: ${err.message}` });
+    }
   });
 
   app.post("/api/admin/extract-limits", async (req, res) => {
     const pdfPath = path.join(process.cwd(), 'public', 'regulation.pdf');
+    if (!fs.existsSync(pdfPath)) {
+      await restorePdfFromFirestore(pdfPath);
+    }
     if (!fs.existsSync(pdfPath)) return res.status(404).json({ error: "PDF non trovato. Carica prima il calendario venatorio." });
     
     const client = getAiClient();
@@ -193,6 +444,9 @@ async function startServer() {
 
   app.post("/api/admin/extract-hunting-times", async (req, res) => {
     const pdfPath = path.join(process.cwd(), 'public', 'regulation.pdf');
+    if (!fs.existsSync(pdfPath)) {
+      await restorePdfFromFirestore(pdfPath);
+    }
     if (!fs.existsSync(pdfPath)) return res.status(404).json({ error: "PDF non trovato. Carica prima il calendario venatorio." });
     
     const client = getAiClient();
@@ -238,6 +492,104 @@ La stagione corrente inizia il ${seasonStart || '2024-09-01'} e termina il ${sea
     } catch (error: any) {
       console.error("PDF Hunting Times Analysis failed:", error);
       res.status(500).json({ error: `Analisi orari da PDF fallita: ${error.message}` });
+    }
+  });
+
+  app.post("/api/admin/extract-regulation-summary", async (req, res) => {
+    const pdfPath = path.join(process.cwd(), 'public', 'regulation.pdf');
+    if (!fs.existsSync(pdfPath)) {
+      await restorePdfFromFirestore(pdfPath);
+    }
+    if (!fs.existsSync(pdfPath)) return res.status(404).json({ error: "PDF non trovato. Carica prima il calendario venatorio." });
+    
+    const client = getAiClient();
+    if (!client) return res.status(500).json({ error: "AI not configured" });
+
+    try {
+      const dataBuffer = fs.readFileSync(pdfPath);
+      const geminiResponse = await client.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: {
+          parts: [
+            { inlineData: { data: dataBuffer.toString("base64"), mimeType: "application/pdf" } },
+            { text: "Analizza il calendario venatorio allegato ed estrai i punti salienti per un riassunto esaustivo ma compatto. Fornisci un set di regole di comportamento, date e periodi importanti, limiti carniere o specie, e informazioni generali." }
+          ]
+        },
+        config: {
+          systemInstruction: "Sei un assistente esperto in normativa venatoria italiana. Estrai le informazioni in modo schematico, chiaro e sintetico per facilitarne la consultazione rapidissima su mobile da parte dei cacciatori.",
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: "OBJECT",
+            properties: {
+              rules: {
+                type: "ARRAY",
+                items: { type: "STRING" },
+                description: "Brevi frasi contenenti regole di comportamento principali, divieti fondamentali (es. distanze, armi, tesserino)."
+              },
+              datesAndPeriods: {
+                type: "ARRAY",
+                items: { type: "STRING" },
+                description: "Sintesi dei principali periodi di apertura/chiusura e date importanti estratti dal calendario venatorio."
+              },
+              allowedSpecies: {
+                type: "ARRAY",
+                items: { type: "STRING" },
+                description: "Sintesi dei limiti di specie o carnieri significativi menzionati."
+              },
+              generalInfo: {
+                type: "ARRAY",
+                items: { type: "STRING" },
+                description: "Note aggiuntive, sanzioni, raccomandazioni per la sicurezza e consigli utili."
+              }
+            },
+            required: ["rules", "datesAndPeriods", "allowedSpecies", "generalInfo"]
+          }
+        }
+      });
+      
+      const text = geminiResponse.text;
+      if (!text) throw new Error("Empty response from AI");
+      
+      res.json(JSON.parse(text));
+    } catch (error: any) {
+      console.error("PDF Regulation summary extraction failed:", error);
+      res.status(500).json({ error: `Estrazione riassunto regolamento fallita: ${error.message}` });
+    }
+  });
+
+  app.post("/api/regulation/ask", async (req, res) => {
+    const { question } = req.body;
+    if (!question) return res.status(400).json({ error: "Missing question" });
+
+    const pdfPath = path.join(process.cwd(), 'public', 'regulation.pdf');
+    if (!fs.existsSync(pdfPath)) {
+      await restorePdfFromFirestore(pdfPath);
+    }
+    if (!fs.existsSync(pdfPath)) return res.status(404).json({ error: "Regolamento PDF non disponibile sul server." });
+    
+    const client = getAiClient();
+    if (!client) return res.status(500).json({ error: "AI non configurata." });
+
+    try {
+      const dataBuffer = fs.readFileSync(pdfPath);
+      const geminiResponse = await client.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: {
+          parts: [
+            { inlineData: { data: dataBuffer.toString("base64"), mimeType: "application/pdf" } },
+            { text: `Rispondi brevemente a questa domanda basandoti sull'allegato: ${question}` }
+          ]
+        },
+        config: {
+          systemInstruction: "Sei l'assistente ufficiale del lago di caccia. Rispondi in modo cordiale, chiaro e conciso in lingua italiana basandoti esclusivamente sul regolamento PDF allegato. Se non trovi l'informazione nel PDF, dillo gentilmente spiegando che non è specificata nel regolamento corrente."
+        }
+      });
+      
+      const text = geminiResponse.text;
+      res.json({ answer: text || "Non è stato possibile elaborare una risposta." });
+    } catch (error: any) {
+      console.error("PDF Query failed:", error);
+      res.status(500).json({ error: `Impossibile analizzare la domanda: ${error.message}` });
     }
   });
 

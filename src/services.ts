@@ -14,7 +14,7 @@ import {
   Timestamp,
   getDocs
 } from 'firebase/firestore';
-import { UserProfile, HuntingDay, Transaction, Harvest, LakeSettings, HuntingPhoto, BudgetItem, Notification, HuntingTime, Recipe, HuntingLimit, TesserinoEntry } from './types';
+import { UserProfile, HuntingDay, Transaction, Harvest, LakeSettings, HuntingPhoto, BudgetItem, Notification, HuntingTime, Recipe, HuntingLimit, TesserinoEntry, RegulationSummary } from './types';
 import { format } from 'date-fns';
 
 // Helper to strip undefined values from objects before Firestore operations
@@ -591,3 +591,34 @@ export const updateTesserinoEntry = async (id: string, updates: Partial<Tesserin
     handleFirestoreError(error, OperationType.UPDATE, `tesserino_entries/${id}`);
   }
 };
+
+// Regulation Summary Services
+export const subscribeToRegulationSummary = (callback: (summary: RegulationSummary | null) => void) => {
+  const docRef = doc(db, 'settings', 'regulation_summary');
+  return onSnapshot(docRef, (docSnap) => {
+    if (docSnap.exists()) {
+      callback({ ...docSnap.data(), id: docSnap.id } as RegulationSummary);
+    } else {
+      callback(null);
+    }
+  }, (error) => handleFirestoreError(error, OperationType.GET, 'settings/regulation_summary'));
+};
+
+export const saveRegulationSummary = async (summary: RegulationSummary) => {
+  try {
+    const docRef = doc(db, 'settings', 'regulation_summary');
+    await setDoc(docRef, cleanData(summary));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, 'settings/regulation_summary');
+  }
+};
+
+export const clearRegulationSummary = async () => {
+  try {
+    const docRef = doc(db, 'settings', 'regulation_summary');
+    await deleteDoc(docRef);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, 'settings/regulation_summary');
+  }
+};
+

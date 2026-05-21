@@ -155,3 +155,13 @@ export interface TesserinoEntry {
   count: number;
   createdAt: string;
 }
+
+export interface RegulationSummary {
+  id?: string;
+  rules: string[];
+  datesAndPeriods: string[];
+  allowedSpecies: string[];
+  generalInfo: string[];
+  updatedAt: string;
+}
+

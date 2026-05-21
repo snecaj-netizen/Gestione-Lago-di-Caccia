@@ -44,6 +44,7 @@ import { Profile } from './pages/Profile';
 import { Gallery } from './pages/Gallery';
 import { Recipes } from './pages/Recipes';
 import { Tesserino } from './pages/Tesserino';
+import { Regulation } from './pages/Regulation';
 import { NotificationCenter } from './components/NotificationCenter';
 import { PWAUpdatePrompt } from './components/PWAUpdatePrompt';
 import { it } from 'date-fns/locale';
@@ -86,6 +87,7 @@ function Sidebar({ isOpen, setIsOpen }: { isOpen: boolean, setIsOpen: (val: bool
 
   const navItems = [
     { name: 'Oggi al Lago', path: '/', icon: CalendarIcon },
+    { name: 'Regolamento', path: '/regolamento', icon: FileText },
     { name: 'Meteo Lago', path: '/meteo', icon: CloudSun },
     { name: 'Abbattimenti', path: '/abbattimenti', icon: Target },
     { name: 'Galleria Foto', path: '/galleria', icon: Camera },
@@ -750,6 +752,7 @@ function MainLayout() {
               >
                 <Routes location={location}>
                   <Route path="/" element={<HuntingCalendar />} />
+                  <Route path="/regolamento" element={<Regulation />} />
                   {(profile?.role === 'admin' || profile?.role === 'socio') && (
                     <>
                       <Route path="/dashboard" element={<Dashboard />} />

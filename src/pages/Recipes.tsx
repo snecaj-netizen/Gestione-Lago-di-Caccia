@@ -465,7 +465,7 @@ export function Recipes() {
                     <ChefHat size={18} className="text-lake-green" />
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-[9px] font-black text-slate-300 uppercase tracking-[0.1em]">Esperto</span>
+                    <span className="text-[9px] font-black text-slate-300 uppercase tracking-[0.1em]">Caricata da</span>
                     <span className="text-[11px] font-bold text-slate-500">{recipe.authorName}</span>
                   </div>
                 </div>
