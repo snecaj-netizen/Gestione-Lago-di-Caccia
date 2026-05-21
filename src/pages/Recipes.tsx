@@ -215,7 +215,7 @@ export function Recipes() {
 
       <div className="max-w-7xl mx-auto px-4 py-12 relative">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
         <div className="space-y-1">
           <motion.div 
             initial={{ opacity: 0, x: -20 }}
@@ -232,21 +232,21 @@ export function Recipes() {
             L'arte della selvaggina: ricette tramandate, segreti della valle e ispirazione stellata.
           </p>
         </div>
-        <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto items-stretch sm:items-center">
+        <div className="flex flex-row gap-2 w-full md:w-auto items-center">
           <button
             onClick={() => setIsAdding(true)}
-            className="flex-1 sm:flex-none sm:w-56 h-16 bg-lake-green text-white px-8 rounded-2xl font-black text-xs uppercase tracking-[0.15em] flex items-center justify-center gap-3 hover:bg-lake-green/90 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-xl shadow-lake-green/20 group"
+            className="flex-1 sm:flex-none sm:w-52 h-15 bg-lake-green text-white px-4 sm:px-8 rounded-2xl font-black text-[10px] xs:text-xs uppercase tracking-[0.12em] sm:tracking-[0.15em] flex items-center justify-center gap-2 sm:gap-3 hover:bg-lake-green/90 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-xl shadow-lake-green/20 group"
           >
-            <Plus size={20} className="group-hover:rotate-90 transition-transform duration-300" /> 
-            Nuova Ricetta
+            <Plus size={18} className="group-hover:rotate-90 transition-transform duration-300 flex-shrink-0" /> 
+            <span className="truncate">Nuova Ricetta</span>
           </button>
           <button
             onClick={() => setShowAiPromptModal(true)}
             disabled={isGenerating}
-            className="flex-1 sm:flex-none sm:w-56 h-16 bg-accent-gold text-white px-8 rounded-2xl font-black text-xs uppercase tracking-[0.15em] flex items-center justify-center gap-3 hover:bg-accent-gold/90 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-xl shadow-accent-gold/20 disabled:opacity-50"
+            className="flex-1 sm:flex-none sm:w-52 h-15 bg-accent-gold text-white px-4 sm:px-8 rounded-2xl font-black text-[10px] xs:text-xs uppercase tracking-[0.12em] sm:tracking-[0.15em] flex items-center justify-center gap-2 sm:gap-3 hover:bg-accent-gold/90 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-xl shadow-accent-gold/20 disabled:opacity-50"
           >
-            {isGenerating ? <Loader2 size={20} className="animate-spin" /> : <Sparkles size={20} />}
-            Chef AI
+            {isGenerating ? <Loader2 size={18} className="animate-spin flex-shrink-0" /> : <Sparkles size={18} className="flex-shrink-0" />}
+            <span className="truncate">Chef AI</span>
           </button>
         </div>
       </div>
@@ -266,7 +266,7 @@ export function Recipes() {
                 placeholder="Cerca tra le tue ricette..."
                 value={search}
                 onChange={handleSearch}
-                className="w-full bg-white border-2 border-slate-100 rounded-2xl pl-16 pr-8 py-6 text-slate-800 font-sans font-bold placeholder:text-slate-300 outline-none focus:border-lake-green/30 focus:ring-4 focus:ring-lake-green/5 transition-all shadow-sm"
+                className="w-full h-15 bg-white border-2 border-slate-100 rounded-2xl pl-16 pr-8 py-0 text-slate-800 font-sans font-bold placeholder:text-slate-300 outline-none focus:border-lake-green/30 focus:ring-4 focus:ring-lake-green/5 transition-all shadow-sm"
               />
             </div>
           </div>
@@ -341,7 +341,9 @@ export function Recipes() {
                         "Pappardelle alla lepre in salmì",
                         "Fagiano alla cacciatora con porcini",
                         "Beccaccia al forno con crostoni"
-                      ].map((suggestion, i) => (
+                      ].filter(suggestion => 
+                        !recipes.some(r => r.title.toLowerCase().trim() === suggestion.toLowerCase().trim())
+                      ).map((suggestion, i) => (
                         <button
                           key={i}
                           onClick={() => setAiPromptValue(suggestion)}
