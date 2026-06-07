@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
   addTransaction, 
+  deleteTransaction,
+  updateTransaction,
   subscribeToTransactions, 
   subscribeToHuntingDays,
   subscribeToUsers,
@@ -33,6 +35,7 @@ export function Accounting() {
   const handleToggleModal = (modalName: 'quota' | 'budget' | 'add' | null) => {
     if (!modalName) {
       setSearchParams({});
+      setEditingTransactionId(null);
     } else {
       setSearchParams({ modal: modalName });
     }
@@ -44,6 +47,8 @@ export function Accounting() {
   const [settings, setSettings] = useState<LakeSettings | null>(null);
   const [budgetItems, setBudgetItems] = useState<BudgetItem[]>([]);
   const [editingBudgetItemId, setEditingBudgetItemId] = useState<string | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
 
   const [newBudgetItem, setNewBudgetItem] = useState<Omit<BudgetItem, 'id'>>({
     label: '',
@@ -214,10 +219,17 @@ export function Accounting() {
       finalData.memberName = profile.displayName;
     }
 
-    await addTransaction({
-      ...finalData,
-      createdBy: profile.uid
-    });
+    if (editingTransactionId) {
+        await updateTransaction(editingTransactionId, {
+          ...finalData,
+        });
+        setEditingTransactionId(null);
+    } else {
+        await addTransaction({
+          ...finalData,
+          createdBy: profile.uid
+        });
+    }
     setFormData({ 
       ...formData, 
       category: '', 
@@ -302,7 +314,7 @@ export function Accounting() {
                     <input 
                       type="number"
                       disabled={isSilence || isSocioDay}
-                      placeholder="0"
+                      placeholder=""
                       value={dayTotal || ''}
                       onChange={(e) => handleUpdateWeekdayQuota(idx, parseFloat(e.target.value) || 0)}
                       className="w-full bg-white border border-slate-100 rounded pl-6 pr-2 py-2 text-sm font-bold text-slate-900 outline-none focus:border-lake-green disabled:bg-transparent"
@@ -352,6 +364,7 @@ export function Accounting() {
                       type="number"
                       placeholder="Importo"
                       value={newBudgetItem.amount || ''}
+                      onFocus={(e) => e.target.select()}
                       onChange={e => setNewBudgetItem({...newBudgetItem, amount: parseFloat(e.target.value) || 0})}
                       className="w-full bg-off-white border border-slate-200 rounded pl-6 pr-2 py-2 text-xs font-bold outline-none focus:border-purple-600"
                     />
@@ -720,7 +733,8 @@ export function Accounting() {
                         step="0.01"
                         min="0.01"
                         required
-                        value={isNaN(formData.amount) ? '' : formData.amount}
+                        value={isNaN(formData.amount) || formData.amount === 0 ? '' : formData.amount}
+                        onFocus={(e) => e.target.select()}
                         onChange={e => {
                           const val = parseFloat(e.target.value);
                           setFormData({ ...formData, amount: isNaN(val) ? 0 : val });
@@ -940,51 +954,108 @@ export function Accounting() {
                 <tr>
                   <td colSpan={4} className="px-3 sm:px-6 py-10 text-center text-slate-300 italic font-medium">Caricamento registro...</td>
                 </tr>
-              ) : items.length === 0 ? (
-                <tr>
-                  <td colSpan={4} className="px-3 sm:px-6 py-10 text-center text-slate-300 italic font-medium">Nessun record trovato</td>
-                </tr>
-              ) : items.map((item) => (
-                <tr key={item.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="px-3 sm:px-6 py-3 text-xs sm:text-sm font-medium text-slate-600 whitespace-nowrap">
-                    {format(new Date(item.date), 'dd MMM', { locale: it })}
-                  </td>
-                  <td className="px-3 sm:px-6 py-3 whitespace-nowrap group">
-                    <div className="flex flex-col">
-                      <span className={cn(
-                        "text-[8px] sm:text-[9px] font-bold uppercase px-2 py-0.5 rounded-full border w-fit mb-0.5",
-                        item.type === 'entrata' ? "bg-emerald-50 text-emerald-700 border-emerald-100" : "bg-rose-50 text-rose-700 border-rose-100"
+              ) : (
+                items.map((item) => (
+                    <tr key={item.id} className="hover:bg-slate-50 transition-colors group">
+                      <td className="px-3 sm:px-6 py-3 text-xs sm:text-sm font-medium text-slate-600 whitespace-nowrap">
+                        {format(new Date(item.date), 'dd MMM', { locale: it })}
+                      </td>
+                      <td className="px-3 sm:px-6 py-3 whitespace-nowrap">
+                        <div className="flex flex-col">
+                          <span className={cn(
+                            "text-[8px] sm:text-[9px] font-bold uppercase px-2 py-0.5 rounded-full border w-fit mb-0.5",
+                            item.type === 'entrata' ? "bg-emerald-50 text-emerald-700 border-emerald-100" : "bg-rose-50 text-rose-700 border-rose-100"
+                          )}>
+                            {item.category}
+                          </span>
+                          {item.payerName && (
+                            <div className="flex items-center gap-1 text-[9px] text-slate-400 font-bold uppercase tracking-tighter">
+                              <UserIcon size={10} /> {item.payerName}
+                              {item.huntingDayId && <span className="text-accent-gold">• {format(new Date(item.huntingDayId), 'dd/MM')}</span>}
+                            </div>
+                          )}
+                          {item.memberName && (
+                            <div className="flex items-center gap-1 text-[9px] text-lake-green font-bold uppercase tracking-tighter mt-0.5">
+                              <Wallet size={10} className="opacity-70" /> {item.type === 'entrata' ? 'In cassa a' : 'Pagato da'}: {item.memberName}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-3 sm:px-6 py-3 text-[10px] sm:text-xs text-slate-400 font-medium italic whitespace-nowrap hidden sm:table-cell truncate max-w-[150px]">
+                        {item.description || '---'}
+                      </td>
+                      <td className={cn(
+                        "px-3 sm:px-6 py-3 text-right font-bold text-sm whitespace-nowrap flex items-center justify-end gap-3",
+                        item.type === 'entrata' ? "text-emerald-700" : "text-rose-700"
                       )}>
-                        {item.category}
-                      </span>
-                      {item.payerName && (
-                        <div className="flex items-center gap-1 text-[9px] text-slate-400 font-bold uppercase tracking-tighter">
-                          <UserIcon size={10} /> {item.payerName}
-                          {item.huntingDayId && <span className="text-accent-gold">• {format(new Date(item.huntingDayId), 'dd/MM')}</span>}
-                        </div>
-                      )}
-                      {item.memberName && (
-                        <div className="flex items-center gap-1 text-[9px] text-lake-green font-bold uppercase tracking-tighter mt-0.5">
-                          <Wallet size={10} className="opacity-70" /> {item.type === 'entrata' ? 'In cassa a' : 'Pagato da'}: {item.memberName}
-                        </div>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-3 sm:px-6 py-3 text-[10px] sm:text-xs text-slate-400 font-medium italic whitespace-nowrap hidden sm:table-cell truncate max-w-[150px]">
-                    {item.description || '---'}
-                  </td>
-                  <td className={cn(
-                    "px-3 sm:px-6 py-3 text-right font-bold text-sm whitespace-nowrap",
-                    item.type === 'entrata' ? "text-emerald-700" : "text-rose-700"
-                  )}>
-                    {item.type === 'entrata' ? '+' : '-'}€{item.amount.toLocaleString()}
-                  </td>
-                </tr>
-              ))}
+                        <span>{item.type === 'entrata' ? '+' : '-'}€{item.amount.toLocaleString()}</span>
+                        {(profile?.role === 'admin') && (
+                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                             <button 
+                                onClick={() => {
+                                    // Populate form and open modal
+                                    setFormData({...item, date: item.date});
+                                    setEditingTransactionId(item.id);
+                                    handleToggleModal('add');
+                                }}
+                                className="p-1 text-slate-400 hover:text-lake-green"
+                                title="Modifica"
+                             >
+                                <Edit2 size={12}/>
+                             </button>
+                             <button 
+                                 onClick={() => setDeleteConfirmId(item.id)}
+                                 className="p-1 text-slate-400 hover:text-rose-600"
+                                 title="Elimina"
+                             >
+                                 <Trash2 size={12}/>
+                             </button>
+                           </div>
+                        )}
+                      </td>
+                    </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
       </section>
+
+      {/* Delete Confirmation Modal */}
+      <AnimatePresence>
+        {deleteConfirmId && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="bg-white rounded-xl p-6 max-w-sm w-full shadow-2xl"
+            >
+              <h3 className="text-lg font-bold text-slate-800 mb-2">Conferma eliminazione</h3>
+              <p className="text-sm text-slate-500 mb-6">Sei sicuro di voler eliminare questa operazione? Questa azione non può essere annullata.</p>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setDeleteConfirmId(null)}
+                  className="flex-1 px-4 py-2 bg-slate-100 text-slate-700 font-bold rounded-lg hover:bg-slate-200"
+                >
+                  Annulla
+                </button>
+                <button 
+                  onClick={async () => {
+                    if (deleteConfirmId) {
+                      await deleteTransaction(deleteConfirmId);
+                      setDeleteConfirmId(null);
+                    }
+                  }}
+                  className="flex-1 px-4 py-2 bg-rose-600 text-white font-bold rounded-lg hover:bg-rose-700"
+                >
+                  Elimina
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

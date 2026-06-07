@@ -330,6 +330,22 @@ export const addTransaction = async (tx: Omit<Transaction, 'id'>) => {
   }
 };
 
+export const deleteTransaction = async (id: string) => {
+  try {
+    await deleteDoc(doc(db, 'transactions', id));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `transactions/${id}`);
+  }
+};
+
+export const updateTransaction = async (id: string, updates: Partial<Transaction>) => {
+  try {
+    await updateDoc(doc(db, 'transactions', id), cleanData(updates));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `transactions/${id}`);
+  }
+};
+
 // Budget Items (Preventive)
 export const subscribeToBudgetItems = (callback: (items: BudgetItem[]) => void) => {
   const q = query(collection(db, 'budget_items'), orderBy('label'));
