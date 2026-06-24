@@ -1058,6 +1058,32 @@ export const deleteNotification = async (id: string) => {
   }
 };
 
+export const markAllNotificationsAsRead = async (ids: string[]) => {
+  if (!db) {
+    ids.forEach(id => updateLocalDoc('notifications', id, { read: true }));
+    return;
+  }
+  try {
+    const promises = ids.map(id => updateDoc(doc(db, 'notifications', id), { read: true }));
+    await Promise.all(promises);
+  } catch (error) {
+    console.error("Error marking all notifications as read:", error);
+  }
+};
+
+export const deleteAllNotifications = async (ids: string[]) => {
+  if (!db) {
+    ids.forEach(id => deleteLocalDoc('notifications', id));
+    return;
+  }
+  try {
+    const promises = ids.map(id => deleteDoc(doc(db, 'notifications', id)));
+    await Promise.all(promises);
+  } catch (error) {
+    console.error("Error deleting all notifications:", error);
+  }
+};
+
 // Recipes
 export const subscribeToRecipes = (callback: (recipes: Recipe[]) => void) => {
   if (!db) {

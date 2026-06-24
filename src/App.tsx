@@ -29,7 +29,9 @@ import {
   Fish,
   Utensils,
   FileText,
-  BookOpen
+  BookOpen,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { cn } from './lib/utils';
 import { safeLocalStorage } from './lib/safeLocalStorage';
@@ -88,7 +90,6 @@ function Sidebar({ isOpen, setIsOpen }: { isOpen: boolean, setIsOpen: (val: bool
 
   const navItems = [
     { name: 'Oggi al Lago', path: '/', icon: CalendarIcon },
-    { name: 'Regolamento', path: '/regolamento', icon: FileText },
     { name: 'Meteo Lago', path: '/meteo', icon: CloudSun },
     { name: 'Abbattimenti', path: '/abbattimenti', icon: Target },
     { name: 'Galleria Foto', path: '/galleria', icon: Camera },
@@ -102,8 +103,10 @@ function Sidebar({ isOpen, setIsOpen }: { isOpen: boolean, setIsOpen: (val: bool
 
   if (profile?.role === 'admin') {
     navItems.push({ name: 'Tesserino Venatorio', path: '/tesserino', icon: BookOpen });
+    navItems.push({ name: 'Info e Regolamento', path: '/regolamento', icon: FileText });
     navItems.push({ name: 'Admin', path: '/admin', icon: Users });
   } else {
+    navItems.push({ name: 'Info e Regolamento', path: '/regolamento', icon: FileText });
     navItems.push({ name: 'Mio Profilo', path: '/profilo', icon: UserIcon });
   }
 
@@ -245,6 +248,7 @@ function Login() {
   const [password, setPassword] = React.useState(() => {
     return localStorage.getItem('lake_remember_me') === 'true' ? (localStorage.getItem('lake_password') || '') : '';
   });
+  const [showPassword, setShowPassword] = React.useState(false);
   const [error, setError] = React.useState('');
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [deferredPrompt, setDeferredPrompt] = React.useState<any>(null);
@@ -349,14 +353,24 @@ function Login() {
           </div>
           <div className="space-y-2">
             <label className="text-[0.65rem] font-black text-slate-400 uppercase tracking-widest">Password</label>
-            <input 
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-off-white border border-slate-200 rounded px-4 py-4 text-sm font-bold text-slate-900 outline-none focus:border-lake-green transition-all shadow-inner"
-              placeholder="Inserisci password"
-            />
+            <div className="relative">
+              <input 
+                type={showPassword ? "text" : "password"}
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full bg-off-white border border-slate-200 rounded pl-4 pr-12 py-4 text-sm font-bold text-slate-900 outline-none focus:border-lake-green transition-all shadow-inner"
+                placeholder="Inserisci password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-lake-green focus:outline-none transition-colors"
+                aria-label={showPassword ? "Nascondi password" : "Mostra password"}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
           </div>
 
           <div className="flex items-center pt-2">
