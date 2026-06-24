@@ -540,11 +540,6 @@ export function HuntingCalendar() {
 
   const onAssign = async (userId: string) => {
     if (!selectedDay) return;
-    const currentAssignments = dayAssignments(selectedDay);
-    if (currentAssignments.length >= 4) {
-      alert("Massimo 4 cacciatori consentiti per giornata.");
-      return;
-    }
 
     const user = availableUsers.find(u => u.uid === userId);
     if (!user) return;
@@ -1147,7 +1142,9 @@ export function HuntingCalendar() {
                  {dayAssignments(selectedDay).length > 0 && (
                    <span className={cn(
                      "text-[8px] font-bold px-2 py-0.5 rounded",
-                     dayAssignments(selectedDay).length >= 4 ? "bg-rose-50 text-rose-600" : "text-lake-green bg-emerald-50"
+                     dayAssignments(selectedDay).length > 4 
+                       ? "bg-rose-500 text-white font-black animate-pulse" 
+                       : (dayAssignments(selectedDay).length === 4 ? "bg-rose-50 text-rose-600" : "text-lake-green bg-emerald-50")
                    )}>
                      {dayAssignments(selectedDay).length} / 4 POSTI
                    </span>
@@ -1244,9 +1241,11 @@ export function HuntingCalendar() {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <p className="text-[0.6rem] font-black text-slate-400 uppercase tracking-widest mb-1">Aggiungi Cacciatore (Manuale)</p>
-                    {dayAssignments(selectedDay).length >= 4 && (
-                      <span className="text-[9px] font-bold text-rose-500 uppercase tracking-tight italic">Limite raggiunto (4)</span>
-                    )}
+                    {dayAssignments(selectedDay).length > 4 ? (
+                      <span className="text-[9px] font-black text-rose-600 bg-rose-50 px-2 py-0.5 rounded uppercase tracking-tight italic animate-pulse">Superato limite (4+)</span>
+                    ) : dayAssignments(selectedDay).length === 4 ? (
+                      <span className="text-[9px] font-bold text-amber-600 uppercase tracking-tight italic">Limite raggiunto (4)</span>
+                    ) : null}
                   </div>
                   <div className="max-h-48 overflow-y-auto pr-2 custom-scrollbar">
                     {availableUsers
@@ -1255,32 +1254,24 @@ export function HuntingCalendar() {
                       .map(user => (
                         <button
                           key={user.uid}
-                          disabled={dayAssignments(selectedDay).length >= 4}
                           onClick={() => onAssign(user.uid)}
-                          className={cn(
-                            "w-full flex items-center justify-between p-3 rounded border border-slate-50 transition-all group mb-2 text-left",
-                            dayAssignments(selectedDay).length >= 4 
-                              ? "opacity-50 cursor-not-allowed grayscale" 
-                              : "hover:border-accent-gold hover:bg-white"
-                          )}
+                          className="w-full flex items-center justify-between p-3 rounded border border-slate-50 hover:border-accent-gold hover:bg-white transition-all group mb-2 text-left"
                         >
                           <div className="flex items-center gap-3">
-                          <div className={cn(
-                            "w-7 h-7 rounded flex items-center justify-center text-[9px] font-bold uppercase",
-                            user.role === 'admin' ? "bg-lake-green text-white" : "bg-slate-100 text-slate-gray"
-                          )}>
-                            {user.displayName[0]}
+                            <div className={cn(
+                              "w-7 h-7 rounded flex items-center justify-center text-[9px] font-bold uppercase",
+                              user.role === 'admin' ? "bg-lake-green text-white" : "bg-slate-100 text-slate-gray"
+                            )}>
+                              {user.displayName[0]}
+                            </div>
+                            <div>
+                              <p className="font-bold text-slate-800 text-xs">{getFirstName(user.displayName)}</p>
+                              <p className="text-[9px] text-slate-400 uppercase font-bold tracking-widest leading-tight">{user.role}</p>
+                            </div>
                           </div>
-                          <div>
-                            <p className="font-bold text-slate-800 text-xs">{getFirstName(user.displayName)}</p>
-                            <p className="text-[9px] text-slate-400 uppercase font-bold tracking-widest leading-tight">{user.role}</p>
-                          </div>
-                        </div>
-                        {dayAssignments(selectedDay).length < 4 && (
                           <Plus size={14} className="text-slate-200 group-hover:text-accent-gold" />
-                        )}
-                      </button>
-                    ))}
+                        </button>
+                      ))}
                   </div>
                 </div>
               </div>
