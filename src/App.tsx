@@ -211,7 +211,7 @@ function Sidebar({ isOpen, setIsOpen }: { isOpen: boolean, setIsOpen: (val: bool
             </div>
             <h3 className="text-xl font-bold text-slate-900 mb-2">Sei sicuro?</h3>
             <p className="text-slate-500 text-sm mb-8 font-medium">
-              Stai per uscire dal portale di gestione del lago. Dovrai rieffettuare l'accesso con Google.
+              Stai per uscire dal portale di gestione del lago. Dovrai rieffettuare l'accesso con le tue credenziali.
             </p>
             <div className="flex gap-3">
               <button 
@@ -235,9 +235,16 @@ function Sidebar({ isOpen, setIsOpen }: { isOpen: boolean, setIsOpen: (val: bool
 }
 
 function Login() {
-  const { signIn, signInWithCredentials } = useAuth();
-  const [username, setUsername] = React.useState('');
-  const [password, setPassword] = React.useState('');
+  const { signInWithCredentials } = useAuth();
+  const [rememberMe, setRememberMe] = React.useState(() => {
+    return localStorage.getItem('lake_remember_me') === 'true';
+  });
+  const [username, setUsername] = React.useState(() => {
+    return localStorage.getItem('lake_remember_me') === 'true' ? (localStorage.getItem('lake_username') || '') : '';
+  });
+  const [password, setPassword] = React.useState(() => {
+    return localStorage.getItem('lake_remember_me') === 'true' ? (localStorage.getItem('lake_password') || '') : '';
+  });
   const [error, setError] = React.useState('');
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [deferredPrompt, setDeferredPrompt] = React.useState<any>(null);
@@ -294,6 +301,15 @@ function Login() {
     setIsSubmitting(true);
     try {
       await signInWithCredentials(username, password);
+      if (rememberMe) {
+        localStorage.setItem('lake_remember_me', 'true');
+        localStorage.setItem('lake_username', username);
+        localStorage.setItem('lake_password', password);
+      } else {
+        localStorage.removeItem('lake_remember_me');
+        localStorage.removeItem('lake_username');
+        localStorage.removeItem('lake_password');
+      }
     } catch (err: any) {
       setError(err.message || 'Errore durante l\'accesso');
     } finally {
@@ -318,13 +334,6 @@ function Login() {
               <Lock size={14} /> {error}
             </div>
           )}
-          
-          <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-lg mb-6">
-            <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest mb-1">Accesso Amministratore</p>
-            <p className="text-[11px] text-indigo-400 font-medium leading-relaxed">
-              Usa <span className="font-bold text-indigo-600">snecaj@gmail.com</span> / <span className="font-bold text-indigo-600">admin</span> o accedi direttamente con Google.
-            </p>
-          </div>
 
           <div className="space-y-2">
             <label className="text-[0.65rem] font-black text-slate-400 uppercase tracking-widest">Nome Utente</label>
@@ -349,6 +358,20 @@ function Login() {
               placeholder="Inserisci password"
             />
           </div>
+
+          <div className="flex items-center pt-2">
+            <input
+              id="rememberMe"
+              type="checkbox"
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+              className="h-4 w-4 text-lake-green border-slate-300 rounded focus:ring-lake-green focus:ring-offset-0 cursor-pointer accent-lake-green"
+            />
+            <label htmlFor="rememberMe" className="ml-2 block text-xs font-bold text-slate-500 uppercase tracking-wider cursor-pointer select-none">
+              Ricorda credenziali
+            </label>
+          </div>
+
           <button 
             type="submit"
             disabled={isSubmitting}
@@ -357,24 +380,6 @@ function Login() {
             {isSubmitting ? 'Accesso in corso...' : 'Accedi al Portale'}
           </button>
         </form>
-
-        <div className="relative my-8">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-slate-100"></div>
-          </div>
-          <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-white px-4 text-slate-400 font-bold tracking-widest">Oppure</span>
-          </div>
-        </div>
-
-        <button 
-          type="button"
-          onClick={signIn}
-          className="w-full bg-white text-slate-700 border border-slate-200 font-bold py-4 px-6 rounded-lg transition-all shadow-sm active:scale-95 flex items-center justify-center gap-3 hover:bg-slate-50 text-xs uppercase tracking-widest group"
-        >
-          <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/pwa/google.svg" className="w-5 h-5 group-hover:scale-110 transition-transform" alt="Google" />
-          Accedi con Google
-        </button>
 
         {deferredPrompt && (
           <div className="mt-8 pt-6 border-t border-slate-100 animate-in fade-in slide-in-from-bottom-4 duration-500">
