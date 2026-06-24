@@ -34,6 +34,24 @@ import { cn } from '../lib/utils';
 import { Link } from 'react-router-dom';
 import { useWeather } from '../hooks/useWeather';
 
+const safeFormatDate = (dateStr: any, formatStr: string, options?: any) => {
+  try {
+    if (!dateStr) return '---';
+    let parsed: Date;
+    if (dateStr && typeof dateStr.toDate === 'function') {
+      parsed = dateStr.toDate();
+    } else {
+      parsed = new Date(dateStr);
+    }
+    if (isNaN(parsed.getTime())) {
+      return typeof dateStr === 'string' ? dateStr : '---';
+    }
+    return format(parsed, formatStr, options);
+  } catch (e) {
+    return '---';
+  }
+};
+
 function DuckHuntAI({ latitude, longitude }: { latitude?: number, longitude?: number }) {
   const { weather, loading: weatherLoading } = useWeather(latitude, longitude);
   const [prediction, setPrediction] = useState<any>(null);
@@ -137,10 +155,10 @@ function DuckHuntAI({ latitude, longitude }: { latitude?: number, longitude?: nu
                         <div key={day.date} className="flex flex-1 items-center gap-2 sm:gap-3 min-w-max px-2 py-1 bg-white/5 rounded-lg border border-white/5">
                           <div className="flex flex-col items-center min-w-[30px]">
                             <span className="text-[8px] font-black text-slate-500 uppercase tracking-tighter">
-                              {format(new Date(day.date), 'EEE', { locale: it })}
+                              {safeFormatDate(day.date, 'EEE', { locale: it })}
                             </span>
                             <span className="text-[10px] font-bold text-white leading-none">
-                              {format(new Date(day.date), 'dd')}
+                              {safeFormatDate(day.date, 'dd')}
                             </span>
                           </div>
                           
@@ -178,12 +196,12 @@ function DuckHuntAI({ latitude, longitude }: { latitude?: number, longitude?: nu
   );
 }
 
-function Countdown({ targetDate }: { targetDate: string }) {
+function Countdown({ targetDate }: { targetDate: Date | string }) {
   const [timeLeft, setTimeLeft] = useState<{ d: number, h: number, m: number, s: number } | null>(null);
 
   useEffect(() => {
     const calculate = () => {
-      const target = parseISO(targetDate);
+      const target = typeof targetDate === 'string' ? parseISO(targetDate) : targetDate;
       const now = new Date();
       const diff = differenceInSeconds(target, now);
 
@@ -364,31 +382,49 @@ export function HuntingCalendar() {
     return p.replace(/\s*[-–]\s*/g, ' - ');
   };
 
-  const isSpeciesHuntable = (period: string | undefined): boolean => {
-    if (!period) return true;
+  const getSpeciesHuntingStatus = (period: string | undefined): 'open' | 'future' | 'closed' => {
+    if (!period) return 'open';
     try {
       const now = new Date();
-      const currentMonth = now.getMonth() + 1;
-      const currentDay = now.getDate();
-
       const parts = period.split('-').map(p => p.trim());
-      if (parts.length !== 2) return true;
+      if (parts.length !== 2) return 'open';
 
       const [startDay, startMonth] = parts[0].split('/').map(Number);
       const [endDay, endMonth] = parts[1].split('/').map(Number);
 
-      const currentVal = currentMonth * 100 + currentDay;
-      const startVal = startMonth * 100 + startDay;
-      const endVal = endMonth * 100 + endDay;
+      const seasonLabel = getSeasonLabel();
+      const seasonParts = seasonLabel.split('/');
+      let startYear = now.getFullYear();
+      let endYear = now.getFullYear();
 
-      if (startVal <= endVal) {
-        return currentVal >= startVal && currentVal <= endVal;
+      if (seasonParts.length === 2) {
+        startYear = Number(seasonParts[0]);
+        endYear = Number(seasonParts[1]);
+      } else if (seasonParts.length === 1 && !isNaN(Number(seasonParts[0]))) {
+        startYear = Number(seasonParts[0]);
+        endYear = startYear + 1;
+      }
+
+      const sYear = startMonth >= 6 ? startYear : endYear;
+      const eYear = endMonth < 6 ? endYear : startYear;
+
+      const startDate = new Date(sYear, startMonth - 1, startDay, 0, 0, 0);
+      const endDate = new Date(eYear, endMonth - 1, endDay, 23, 59, 59);
+
+      if (now >= startDate && now <= endDate) {
+        return 'open';
+      } else if (now < startDate) {
+        return 'future';
       } else {
-        return currentVal >= startVal || currentVal <= endVal;
+        return 'closed';
       }
     } catch (e) {
-      return true;
+      return 'open';
     }
+  };
+
+  const isSpeciesHuntable = (period: string | undefined): boolean => {
+    return getSpeciesHuntingStatus(period) === 'open';
   };
 
   const WATERFOWL_KEYWORDS = [
@@ -571,13 +607,10 @@ export function HuntingCalendar() {
 
     if (years.size > 0) {
       const sortedYears = Array.from(years).sort((a, b) => a - b);
-      if (sortedYears.length >= 2) {
-        // Find the "season bridge" (e.g., 2025 and 2026)
-        return `${sortedYears[0]}/${sortedYears[sortedYears.length - 1]}`;
-      }
-      const y = sortedYears[0];
-      // If we only found one year, assume it's the start year of a season (YYYY/YYYY+1)
-      return `${y}/${y + 1}`;
+      const maxY = sortedYears[sortedYears.length - 1];
+      // Since a hunting season is typically YYYY/YYYY+1, we find the highest year (maxY) which represents
+      // the end of the latest season, and return `${maxY - 1}/${maxY}` (e.g. 2026/2027 if maxY is 2027).
+      return `${maxY - 1}/${maxY}`;
     }
 
     // 2. Try to extract from settings
@@ -603,6 +636,36 @@ export function HuntingCalendar() {
 
   const seasonLabel = getSeasonLabel();
 
+  const getCountdownTargetDate = (): Date | null => {
+    if (!settings?.seasonStart) return null;
+    try {
+      const baseDate = parseISO(settings.seasonStart);
+      if (baseDate.toString() === 'Invalid Date') return null;
+
+      // 1. Find a huntingTime that covers settings.seasonStart
+      const matchingTime = huntingTimes.find(t => {
+        return settings.seasonStart >= t.startDate && settings.seasonStart <= t.endDate;
+      });
+
+      let startTime = '00:00';
+      if (matchingTime?.startTime) {
+        startTime = matchingTime.startTime;
+      } else if (huntingTimes.length > 0) {
+        // Sort and get the first one's startTime as a fallback
+        const sortedTimes = [...huntingTimes].sort((a, b) => a.startDate.localeCompare(b.startDate));
+        startTime = sortedTimes[0].startTime;
+      }
+
+      const [year, month, day] = settings.seasonStart.split('-').map(Number);
+      const [hours, minutes] = startTime.split(':').map(Number);
+      return new Date(year, month - 1, day, hours, minutes, 0);
+    } catch (e) {
+      return parseISO(settings.seasonStart);
+    }
+  };
+
+  const countdownTarget = getCountdownTargetDate();
+
   return (
     <div className="space-y-6">
       <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -623,10 +686,10 @@ export function HuntingCalendar() {
       
 
       {/* Countdown or Today's Status based on season start */}
-      {settings && settings.seasonStart && parseISO(settings.seasonStart).toString() !== 'Invalid Date' && (
+      {countdownTarget && (
         <div className="space-y-6">
-          {parseISO(settings.seasonStart) > new Date() ? (
-            <Countdown targetDate={settings.seasonStart} />
+          {countdownTarget > new Date() ? (
+            <Countdown targetDate={countdownTarget} />
           ) : (
             <TodayInfo 
               day={new Date()} 
@@ -680,7 +743,7 @@ export function HuntingCalendar() {
                                 "font-black leading-none",
                                 isCurrent ? "text-xs text-lake-green" : "text-[10px] text-slate-700"
                               )}>
-                                {format(new Date(time.startDate), 'dd/MM/yy', { locale: it })}
+                                {safeFormatDate(time.startDate, 'dd/MM/yy', { locale: it })}
                               </span>
                             </div>
                           </td>
@@ -690,7 +753,7 @@ export function HuntingCalendar() {
                                 "font-bold leading-none",
                                 isCurrent ? "text-xs text-slate-900" : "text-[10px] text-slate-600"
                               )}>
-                                {format(new Date(time.endDate), 'dd/MM/yy', { locale: it })}
+                                {safeFormatDate(time.endDate, 'dd/MM/yy', { locale: it })}
                               </span>
                             </div>
                           </td>
@@ -788,11 +851,13 @@ export function HuntingCalendar() {
                       </tr>
                     )}
                     {(showAllLimits ? filteredSpecies : filteredSpecies.slice(0, 5)).map((limit) => {
-                      const isHuntable = isSpeciesHuntable(limit.huntingPeriod);
+                      const status = getSpeciesHuntingStatus(limit.huntingPeriod);
                       return (
                         <tr key={limit.id} className={cn(
                           "transition-colors",
-                          isHuntable ? "hover:bg-emerald-50/30" : "opacity-60 hover:bg-slate-50"
+                          status === 'open' && "hover:bg-emerald-50/30",
+                          status === 'future' && "opacity-80 hover:bg-sky-50/20",
+                          status === 'closed' && "opacity-60 hover:bg-slate-50"
                         )}>
                           <td className="px-4 py-3">
                             <div className="flex flex-col">
@@ -802,9 +867,13 @@ export function HuntingCalendar() {
                               )}>
                                 {limit.species}
                               </span>
-                              {isHuntable ? (
+                              {status === 'open' && (
                                 <span className="text-[7px] font-black text-emerald-600 uppercase tracking-widest">Cacciabile Oggi</span>
-                              ) : (
+                              )}
+                              {status === 'future' && (
+                                <span className="text-[7px] font-black text-sky-500 uppercase tracking-widest">Apertura Futura</span>
+                              )}
+                              {status === 'closed' && (
                                 <span className="text-[7px] font-black text-rose-400 uppercase tracking-widest">Periodo Concluso</span>
                               )}
                             </div>

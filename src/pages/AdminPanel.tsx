@@ -8,6 +8,24 @@ import { Shield, UserCheck, UserX, Trash2, Mail, ShieldAlert, MapPin, Calendar, 
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 
+const safeFormatDate = (dateStr: any, formatStr: string, options?: any) => {
+  try {
+    if (!dateStr) return '---';
+    let parsed: Date;
+    if (dateStr && typeof dateStr.toDate === 'function') {
+      parsed = dateStr.toDate();
+    } else {
+      parsed = new Date(dateStr);
+    }
+    if (isNaN(parsed.getTime())) {
+      return typeof dateStr === 'string' ? dateStr : '---';
+    }
+    return format(parsed, formatStr, options);
+  } catch (e) {
+    return '---';
+  }
+};
+
 export function AdminPanel() {
   const { profile: currentUser } = useAuth();
   const [users, setUsers] = useState<UserProfile[]>([]);
@@ -1261,9 +1279,9 @@ export function AdminPanel() {
                     <td className="px-4 py-1.5 whitespace-nowrap">
                       <div className="flex flex-col">
                         <span className="text-xs font-bold text-slate-900">
-                          {format(new Date(time.startDate), 'dd MMM', { locale: it })} - {format(new Date(time.endDate), 'dd MMM', { locale: it })}
+                          {safeFormatDate(time.startDate, 'dd MMM', { locale: it })} - {safeFormatDate(time.endDate, 'dd MMM', { locale: it })}
                         </span>
-                        <span className="text-[8px] font-medium text-slate-400 uppercase tracking-tight">{format(new Date(time.startDate), 'yyyy')}</span>
+                        <span className="text-[8px] font-medium text-slate-400 uppercase tracking-tight">{safeFormatDate(time.startDate, 'yyyy')}</span>
                       </div>
                     </td>
                     <td className="px-4 py-1.5 whitespace-nowrap">

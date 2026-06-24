@@ -6,6 +6,17 @@ import { FileText, BookOpen, Search, Send, Sparkles, Clock, Calendar, CheckCircl
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 
+const safeFormatLocaleDate = (dateStr: any) => {
+  try {
+    if (!dateStr) return '---';
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return '---';
+    return d.toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  } catch (e) {
+    return '---';
+  }
+};
+
 export function Regulation() {
   const { profile } = useAuth();
   const isAdmin = profile?.role === 'admin';
@@ -162,7 +173,7 @@ export function Regulation() {
                   {/* Summary Update Metadata Alert */}
                   <div className="flex items-center justify-between text-[10px] text-slate-400 bg-white p-3 rounded-lg border border-slate-200 shadow-sm">
                     <span className="font-bold uppercase">Sintesi compilata dall'AI</span>
-                    <span className="font-mono">Aggiornato: {new Date(summary.updatedAt).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                    <span className="font-mono">Aggiornato: {safeFormatLocaleDate(summary.updatedAt)}</span>
                   </div>
 
                   {/* Section 1: Regole Comportamentali */}

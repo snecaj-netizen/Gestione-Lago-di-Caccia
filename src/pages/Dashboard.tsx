@@ -23,6 +23,24 @@ import { format, subDays, isAfter } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { cn } from '../lib/utils';
 
+const safeFormatDate = (dateStr: any, formatStr: string, options?: any) => {
+  try {
+    if (!dateStr) return '---';
+    let parsed: Date;
+    if (dateStr && typeof dateStr.toDate === 'function') {
+      parsed = dateStr.toDate();
+    } else {
+      parsed = new Date(dateStr);
+    }
+    if (isNaN(parsed.getTime())) {
+      return typeof dateStr === 'string' ? dateStr : '---';
+    }
+    return format(parsed, formatStr, options);
+  } catch (e) {
+    return '---';
+  }
+};
+
 export function Dashboard() {
   const [txs, setTxs] = useState<Transaction[]>([]);
   const [harvests, setHarvests] = useState<Harvest[]>([]);
@@ -65,9 +83,10 @@ export function Dashboard() {
 
     if (years.size > 0) {
       const sortedYears = Array.from(years).sort((a, b) => a - b);
-      if (sortedYears.length >= 2) return `${sortedYears[0]}/${sortedYears[sortedYears.length - 1]}`;
-      const y = sortedYears[0];
-      return `${y}/${y + 1}`;
+      const maxY = sortedYears[sortedYears.length - 1];
+      // Since a hunting season is typically YYYY/YYYY+1, we find the highest year (maxY) which represents
+      // the end of the latest season, and return `${maxY - 1}/${maxY}` (e.g. 2026/2027 if maxY is 2027).
+      return `${maxY - 1}/${maxY}`;
     }
     
     const currentYear = new Date().getFullYear();
@@ -284,7 +303,7 @@ export function Dashboard() {
                 <tbody className="divide-y divide-slate-50">
                   {recentHarvests.map((h) => (
                     <tr key={h.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="py-3 text-slate-gray font-medium">{format(new Date(h.date), 'dd MMM', { locale: it })}</td>
+                      <td className="py-3 text-slate-gray font-medium">{safeFormatDate(h.date, 'dd MMM', { locale: it })}</td>
                       <td className="py-3 font-semibold text-lake-green">{h.species}</td>
                       <td className="py-3 text-right font-black text-slate-900">{h.count}</td>
                     </tr>
@@ -317,7 +336,7 @@ export function Dashboard() {
                 <tbody className="divide-y divide-slate-50">
                   {recentTxs.map((t) => (
                     <tr key={t.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="py-3 text-slate-gray font-medium">{format(new Date(t.date), 'dd MMM', { locale: it })}</td>
+                      <td className="py-3 text-slate-gray font-medium">{safeFormatDate(t.date, 'dd MMM', { locale: it })}</td>
                       <td className="py-3">
                         <span className={cn(
                           "text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border",

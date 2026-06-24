@@ -13,6 +13,7 @@ export default defineConfig(({mode}) => {
       react(), 
       tailwindcss(),
       VitePWA({
+        disable: process.env.NODE_ENV !== 'production',
         registerType: 'prompt',
         includeAssets: ['favicon.ico'],
         manifest: {

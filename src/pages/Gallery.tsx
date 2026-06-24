@@ -25,6 +25,24 @@ import { motion, AnimatePresence } from 'motion/react';
 
 const MAX_IMAGE_SIZE = 800; // max width/height in px
 
+const safeFormatDate = (dateStr: any, formatStr: string, options?: any) => {
+  try {
+    if (!dateStr) return '---';
+    let parsed: Date;
+    if (dateStr && typeof dateStr.toDate === 'function') {
+      parsed = dateStr.toDate();
+    } else {
+      parsed = new Date(dateStr);
+    }
+    if (isNaN(parsed.getTime())) {
+      return typeof dateStr === 'string' ? dateStr : '---';
+    }
+    return format(parsed, formatStr, options);
+  } catch (e) {
+    return '---';
+  }
+};
+
 export function Gallery() {
   const { profile } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -408,7 +426,7 @@ export function Gallery() {
                   <div className="flex items-center justify-between text-[10px] font-medium text-slate-400 border-t border-slate-50 pt-3">
                     <div className="flex items-center gap-1.5">
                       <CalendarIcon size={12} />
-                      {photo.date ? format(new Date(photo.date), 'dd MMM yyyy', { locale: it }) : 'N/D'}
+                      {photo.date ? safeFormatDate(photo.date, 'dd MMM yyyy', { locale: it }) : 'N/D'}
                     </div>
                   </div>
                 </div>
@@ -514,7 +532,7 @@ export function Gallery() {
                     </div>
                     <div className="flex items-center gap-2 text-white/40 text-[9px] font-black uppercase tracking-[0.25em]">
                       <CalendarIcon size={10} className="text-accent-gold/60" />
-                      {selectedPhoto.date ? format(new Date(selectedPhoto.date), 'dd MMMM yyyy', { locale: it }) : 'N/D'}
+                      {selectedPhoto.date ? safeFormatDate(selectedPhoto.date, 'dd MMMM yyyy', { locale: it }) : 'N/D'}
                     </div>
                     {selectedPhoto.images.length > 1 && (
                       <div className="text-accent-gold/60 text-[9px] font-black tracking-widest border border-accent-gold/10 px-2 py-0.5 rounded">

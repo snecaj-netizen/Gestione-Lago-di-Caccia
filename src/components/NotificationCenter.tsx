@@ -9,6 +9,24 @@ import { it } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
 
+const safeFormatDate = (dateStr: any, formatStr: string, options?: any) => {
+  try {
+    if (!dateStr) return '---';
+    let parsed: Date;
+    if (dateStr && typeof dateStr.toDate === 'function') {
+      parsed = dateStr.toDate();
+    } else {
+      parsed = new Date(dateStr);
+    }
+    if (isNaN(parsed.getTime())) {
+      return typeof dateStr === 'string' ? dateStr : '---';
+    }
+    return format(parsed, formatStr, options);
+  } catch (e) {
+    return '---';
+  }
+};
+
 export function NotificationCenter({ isOpen, onToggle }: { isOpen: boolean, onToggle: (val: boolean) => void }) {
   const { profile } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -102,7 +120,7 @@ export function NotificationCenter({ isOpen, onToggle }: { isOpen: boolean, onTo
                                 {n.link && <ExternalLink size={8} className="text-slate-300" />}
                               </p>
                               <span className="text-[9px] font-medium text-slate-400 whitespace-nowrap ml-2">
-                                {format(new Date(n.createdAt), 'HH:mm • d MMM', { locale: it })}
+                                {safeFormatDate(n.createdAt, 'HH:mm • d MMM', { locale: it })}
                               </span>
                             </div>
                             <p className="text-xs text-slate-600 leading-relaxed">{n.body}</p>

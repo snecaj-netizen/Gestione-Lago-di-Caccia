@@ -20,6 +20,24 @@ import { subscribeToSettings } from '../services';
 import { LakeSettings, WeatherData } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 
+const safeFormatDate = (dateStr: any, formatStr: string, options?: any) => {
+  try {
+    if (!dateStr) return '---';
+    let parsed: Date;
+    if (dateStr && typeof dateStr.toDate === 'function') {
+      parsed = dateStr.toDate();
+    } else {
+      parsed = new Date(dateStr);
+    }
+    if (isNaN(parsed.getTime())) {
+      return typeof dateStr === 'string' ? dateStr : '---';
+    }
+    return format(parsed, formatStr, options);
+  } catch (e) {
+    return '---';
+  }
+};
+
 const WeatherIcon = ({ condition, size = 24 }: { condition: string, size?: number }) => {
   if (condition.includes('Pioggia')) return <CloudRain size={size} className="text-blue-400" />;
   if (condition.includes('Sereno')) return <Sun size={size} className="text-amber-400" />;
@@ -202,7 +220,7 @@ export function WeatherPage() {
               <div className="flex flex-col sm:flex-row justify-between items-start gap-4 mb-6 sm:mb-8">
                 <div className="w-full sm:w-auto">
                   <h2 className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-black tracking-tighter mb-1 leading-tight break-words">
-                    {format(new Date(selectedDay.date), 'EEEE dd MMMM', { locale: it })}
+                    {safeFormatDate(selectedDay.date, 'EEEE dd MMMM', { locale: it })}
                   </h2>
                   <p className="text-accent-gold font-bold uppercase tracking-[0.2em] text-[8px] sm:text-[9px]">Oggi al Lago</p>
                 </div>
@@ -440,7 +458,7 @@ export function WeatherPage() {
                   "text-[0.6rem] sm:text-[0.65rem] font-black uppercase tracking-widest leading-none mb-1",
                   selectedDay.date === day.date ? "text-white/60" : "text-slate-400"
                 )}>
-                  {format(new Date(day.date), 'EEE', { locale: it })} {format(new Date(day.date), 'dd', { locale: it })}
+                  {safeFormatDate(day.date, 'EEE', { locale: it })} {safeFormatDate(day.date, 'dd', { locale: it })}
                 </span>
                 <div className="flex items-baseline gap-1.5">
                   <span className="text-base sm:text-lg font-black leading-none">{day.temp.toFixed(0)}°</span>

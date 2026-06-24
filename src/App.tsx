@@ -32,6 +32,7 @@ import {
   BookOpen
 } from 'lucide-react';
 import { cn } from './lib/utils';
+import { safeLocalStorage } from './lib/safeLocalStorage';
 
 // Pages (to be implemented in sub-components or here for simplicity)
 import { Dashboard } from './pages/Dashboard';
@@ -47,7 +48,7 @@ import { Tesserino } from './pages/Tesserino';
 import { Regulation } from './pages/Regulation';
 import { NotificationCenter } from './components/NotificationCenter';
 import { PWAUpdatePrompt } from './components/PWAUpdatePrompt';
-import { it } from 'date-fns/locale';
+import { it } from 'date-fns/locale/it';
 import { format } from 'date-fns';
 import { db } from './firebase';
 import { collection, query, where, orderBy, limit, onSnapshot, getDocs } from 'firebase/firestore';
@@ -245,11 +246,18 @@ function Login() {
     seedUsers();
     
     // Debug PWA status
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistration().then(reg => {
-        console.log('PWA: Service Worker registration state:', reg ? 'Found' : 'Not found');
-        if (reg) console.log('PWA: Registration active:', !!reg.active);
-      });
+    try {
+      const isInIframe = typeof window !== 'undefined' && window.self !== window.top;
+      if (!isInIframe && 'serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistration().then(reg => {
+          console.log('PWA: Service Worker registration state:', reg ? 'Found' : 'Not found');
+          if (reg) console.log('PWA: Registration active:', !!reg.active);
+        }).catch(err => {
+          console.warn('PWA: Service worker check failed with error:', err);
+        });
+      }
+    } catch (e) {
+      console.warn('PWA: Service worker is not accessible or blocked in this environment:', e);
     }
 
     const handler = (e: any) => {
@@ -416,7 +424,7 @@ function PrivateRoute({ children, allowPending = false }: { children: React.Reac
             </button>
             <button 
               onClick={() => {
-                localStorage.removeItem('lake_app_user');
+                safeLocalStorage.removeItem('lake_app_user');
                 window.location.href = '/login';
               }}
               className="w-full py-4 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-bold transition-all shadow-sm active:scale-95 text-xs uppercase tracking-widest border border-slate-700"
@@ -460,8 +468,12 @@ function MainLayout() {
 
   // Notification permission and browser push
   React.useEffect(() => {
-    if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission();
+    try {
+      if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission();
+      }
+    } catch (e) {
+      console.warn("Notification API is restricted or not supported in this environment:", e);
     }
   }, []);
 
@@ -487,14 +499,18 @@ function MainLayout() {
       snapshot.docChanges().forEach((change) => {
         if (change.type === 'added') {
           const notif = change.doc.data() as AppNotification;
-          if ('Notification' in window && Notification.permission === 'granted') {
-            new Notification(notif.title, {
-              body: notif.body,
-              icon: '/logo.png' // Adjust if logo path differs
-            }).onclick = () => {
-              if (notif.link) navigate(notif.link);
-              window.focus();
-            };
+          try {
+            if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+              new Notification(notif.title, {
+                body: notif.body,
+                icon: '/logo.png' // Adjust if logo path differs
+              }).onclick = () => {
+                if (notif.link) navigate(notif.link);
+                window.focus();
+              };
+            }
+          } catch (e) {
+            console.warn("Could not display browser notification in this environment:", e);
           }
         }
       });
@@ -780,10 +796,23 @@ function MainLayout() {
 }
 
 export default function App() {
+  const [supportServiceWorker, setSupportServiceWorker] = React.useState(false);
+
+  React.useEffect(() => {
+    try {
+      const isInIframe = typeof window !== 'undefined' && window.self !== window.top;
+      if (!isInIframe && typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+        setSupportServiceWorker(true);
+      }
+    } catch (e) {
+      console.warn("Service workers are not supported or blocked in this environment:", e);
+    }
+  }, []);
+
   return (
     <Router>
       <AuthProvider>
-        <PWAUpdatePrompt />
+        {supportServiceWorker && <PWAUpdatePrompt />}
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/*" element={

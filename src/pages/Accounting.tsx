@@ -22,6 +22,24 @@ import { it } from 'date-fns/locale';
 import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 
+const safeFormatDate = (dateStr: any, formatStr: string, options?: any) => {
+  try {
+    if (!dateStr) return '---';
+    let parsed: Date;
+    if (dateStr && typeof dateStr.toDate === 'function') {
+      parsed = dateStr.toDate();
+    } else {
+      parsed = new Date(dateStr);
+    }
+    if (isNaN(parsed.getTime())) {
+      return typeof dateStr === 'string' ? dateStr : '---';
+    }
+    return format(parsed, formatStr, options);
+  } catch (e) {
+    return '---';
+  }
+};
+
 export function Accounting() {
   const { profile } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -784,7 +802,7 @@ export function Accounting() {
                         <option value="">Nessuna</option>
                         {huntingDays.slice().reverse().slice(0, 30).map(day => (
                           <option key={day.id} value={day.id}>
-                            {format(new Date(day.date), 'dd MMM yyyy', { locale: it })} - {day.assignedToName}
+                            {safeFormatDate(day.date, 'dd MMM yyyy', { locale: it })} - {day.assignedToName}
                           </option>
                         ))}
                       </select>
@@ -958,7 +976,7 @@ export function Accounting() {
                 items.map((item) => (
                     <tr key={item.id} className="hover:bg-slate-50 transition-colors group">
                       <td className="px-3 sm:px-6 py-3 text-xs sm:text-sm font-medium text-slate-600 whitespace-nowrap">
-                        {format(new Date(item.date), 'dd MMM', { locale: it })}
+                        {safeFormatDate(item.date, 'dd MMM', { locale: it })}
                       </td>
                       <td className="px-3 sm:px-6 py-3 whitespace-nowrap">
                         <div className="flex flex-col">
@@ -971,7 +989,7 @@ export function Accounting() {
                           {item.payerName && (
                             <div className="flex items-center gap-1 text-[9px] text-slate-400 font-bold uppercase tracking-tighter">
                               <UserIcon size={10} /> {item.payerName}
-                              {item.huntingDayId && <span className="text-accent-gold">• {format(new Date(item.huntingDayId), 'dd/MM')}</span>}
+                              {item.huntingDayId && <span className="text-accent-gold">• {safeFormatDate(item.huntingDayId, 'dd/MM')}</span>}
                             </div>
                           )}
                           {item.memberName && (
@@ -993,8 +1011,19 @@ export function Accounting() {
                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                              <button 
                                 onClick={() => {
-                                    // Populate form and open modal
-                                    setFormData({...item, date: item.date});
+                                    // Populate form and open modal safely
+                                    setFormData({
+                                      date: item.date || format(new Date(), 'yyyy-MM-dd'),
+                                      type: item.type || 'entrata',
+                                      category: item.category || '',
+                                      amount: item.amount || 0,
+                                      description: item.description || '',
+                                      huntingDayId: item.huntingDayId || '',
+                                      payerUid: item.payerUid || '',
+                                      payerName: item.payerName || '',
+                                      memberUid: item.memberUid || '',
+                                      memberName: item.memberName || ''
+                                    });
                                     setEditingTransactionId(item.id);
                                     handleToggleModal('add');
                                 }}

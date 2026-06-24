@@ -11,6 +11,7 @@ import { auth, db } from '../firebase';
 import { ensureUserProfile } from '../services';
 import { UserProfile } from '../types';
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
+import { safeLocalStorage } from '../lib/safeLocalStorage';
 
 interface AuthContextType {
   user: User | null;
@@ -32,7 +33,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let mounted = true;
 
     // Check local storage FIRST for immediate session recovery (useful for the custom admin login)
-    const persistedUser = localStorage.getItem('lake_app_user');
+    const persistedUser = safeLocalStorage.getItem('lake_app_user');
     if (persistedUser) {
       try {
         const userData = JSON.parse(persistedUser);
@@ -57,29 +58,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setLoading(false);
         } else {
           // Fetch real profile from Firestore for other credential users
-          const docRef = doc(db, 'users', userData.uid);
-          getDoc(docRef).then(snap => {
-            if (mounted && snap.exists()) {
-              setProfile(snap.data() as UserProfile);
-              setLoading(false);
-            } else if (mounted) {
-              setLoading(false);
+          if (!db) {
+            const localUsers = JSON.parse(safeLocalStorage.getItem('lake_db_users') || '[]');
+            const found = localUsers.find((u: any) => u.uid === userData.uid);
+            if (found && mounted) {
+              setProfile(found);
             }
-          }).catch(err => {
-            console.error("Error fetching persisted profile", err);
-            if (mounted) setLoading(false);
-          });
+            setLoading(false);
+          } else {
+            const docRef = doc(db, 'users', userData.uid);
+            getDoc(docRef).then(snap => {
+              if (mounted && snap.exists()) {
+                setProfile(snap.data() as UserProfile);
+                setLoading(false);
+              } else if (mounted) {
+                setLoading(false);
+              }
+            }).catch(err => {
+              console.error("Error fetching persisted profile", err);
+              if (mounted) setLoading(false);
+            });
+          }
         }
       } catch (e) {
         console.error("Error parsing persisted user", e);
         setLoading(false);
       }
     } else {
-      // If no persisted user, we still need to wait for onAuthStateChanged
-      // which is handled below.
+      // If no persisted user and we have no firebase auth, set loading to false
+      if (!auth && mounted) {
+        setLoading(false);
+      }
     }
 
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    const unsubscribe = auth ? onAuthStateChanged(auth, async (firebaseUser) => {
       if (!mounted) return;
       
       if (firebaseUser) {
@@ -90,7 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (mounted) {
           setProfile(userProfile);
           // Persist user for faster recovery on refresh
-          localStorage.setItem('lake_app_user', JSON.stringify({ 
+          safeLocalStorage.setItem('lake_app_user', JSON.stringify({ 
             uid: firebaseUser.uid, 
             email: firebaseUser.email,
             displayName: firebaseUser.displayName,
@@ -100,7 +112,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       } else {
         // No Firebase user, check if we still have the local storage one (custom credentials or recently logged out)
-        const checkPersisted = localStorage.getItem('lake_app_user');
+        const checkPersisted = safeLocalStorage.getItem('lake_app_user');
         if (!checkPersisted) {
           if (mounted) {
             setUser(null);
@@ -114,7 +126,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (mounted) setLoading(false);
         }
       }
-    });
+    }) : () => {};
 
     return () => {
       mounted = false;
@@ -123,6 +135,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signIn = async () => {
+    if (!auth) {
+      throw new Error("Autenticazione Firebase non disponibile.");
+    }
     const provider = new GoogleAuthProvider();
     await signInWithPopup(auth, provider);
   };
@@ -147,12 +162,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         };
         setUser({ uid: adminProfile.uid, email: adminProfile.email } as User);
         setProfile(adminProfile);
-        localStorage.setItem('lake_app_user', JSON.stringify({ uid: adminProfile.uid, email: adminProfile.email }));
+        safeLocalStorage.setItem('lake_app_user', JSON.stringify({ uid: adminProfile.uid, email: adminProfile.email }));
         return;
       }
 
       if (!db) {
-        throw new Error('Database Firebase non configurato. Usa le credenziali admin di default.');
+        const localUsers = JSON.parse(safeLocalStorage.getItem('lake_db_users') || safeLocalStorage.getItem('lake_users') || '[]');
+        const found = localUsers.find((u: any) => u.username === username && u.password === password);
+        if (!found) {
+          throw new Error('Credenziali non valide');
+        }
+        setUser({ uid: found.uid, email: found.email } as User);
+        setProfile(found);
+        safeLocalStorage.setItem('lake_app_user', JSON.stringify({ uid: found.uid, email: found.email }));
+        return;
       }
 
       // Find the profile with this username/password in Firestore
@@ -169,7 +192,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser({ uid: userProfile.uid, email: userProfile.email } as User);
       setProfile(userProfile);
       
-      localStorage.setItem('lake_app_user', JSON.stringify({
+      safeLocalStorage.setItem('lake_app_user', JSON.stringify({
         uid: userProfile.uid,
         email: userProfile.email
       }));
@@ -182,8 +205,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
-    await signOut(auth);
-    localStorage.removeItem('lake_app_user');
+    if (auth) {
+      await signOut(auth);
+    }
+    safeLocalStorage.removeItem('lake_app_user');
     setUser(null);
     setProfile(null);
   };

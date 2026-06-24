@@ -16,6 +16,24 @@ import { it } from 'date-fns/locale';
 import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 
+const safeFormatDate = (dateStr: any, formatStr: string, options?: any) => {
+  try {
+    if (!dateStr) return '---';
+    let parsed: Date;
+    if (dateStr && typeof dateStr.toDate === 'function') {
+      parsed = dateStr.toDate();
+    } else {
+      parsed = new Date(dateStr);
+    }
+    if (isNaN(parsed.getTime())) {
+      return typeof dateStr === 'string' ? dateStr : '---';
+    }
+    return format(parsed, formatStr, options);
+  } catch (e) {
+    return '---';
+  }
+};
+
 const SPECIES_LIST = [
   'Alzavola',
   'Beccaccino',
@@ -515,7 +533,7 @@ export function Harvests() {
                   )}
                 >
                   <td className="px-3 sm:px-6 py-3 text-xs sm:text-sm font-medium text-slate-600 whitespace-nowrap">
-                    {format(new Date(item.date), 'dd MMM', { locale: it })}
+                    {safeFormatDate(item.date, 'dd MMM', { locale: it })}
                   </td>
                   <td className="px-3 sm:px-6 py-3 whitespace-nowrap">
                     <div className="flex items-center gap-2">
