@@ -7,19 +7,20 @@ import dotenv from "dotenv";
 dotenv.config();
 
 // Start of Firebase Server Initialization via REST API
-const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID;
-const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY;
+const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID;
+const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY || process.env.VITE_FIREBASE_API_KEY;
+const FIREBASE_DATABASE_ID = process.env.FIREBASE_FIRESTORE_DATABASE_ID || process.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || '(default)';
 const isFirebaseConfigured = !!FIREBASE_PROJECT_ID && !!FIREBASE_API_KEY;
 
 if (isFirebaseConfigured) {
-  console.log("[Firebase Server REST] Configurato con successo con Project ID:", FIREBASE_PROJECT_ID);
+  console.log("[Firebase Server REST] Configurato con successo con Project ID:", FIREBASE_PROJECT_ID, "e Database ID:", FIREBASE_DATABASE_ID);
 } else {
   console.warn("[Firebase Server REST] Credenziali mancanti in env. Il PDF non sarà salvato su Firestore.");
 }
 
 async function restGetDoc(collection: string, docId: string) {
   if (!isFirebaseConfigured) return null;
-  const url = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/${collection}/${docId}?key=${FIREBASE_API_KEY}`;
+  const url = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/${FIREBASE_DATABASE_ID}/documents/${collection}/${docId}?key=${FIREBASE_API_KEY}`;
   const res = await fetch(url);
   if (res.status === 404) return null;
   if (!res.ok) {
@@ -50,7 +51,7 @@ async function restGetDoc(collection: string, docId: string) {
 async function restSetDoc(collection: string, docId: string, fields: Record<string, any>) {
   if (!isFirebaseConfigured) return null;
   
-  const url = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/${collection}/${docId}?key=${FIREBASE_API_KEY}`;
+  const url = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/${FIREBASE_DATABASE_ID}/documents/${collection}/${docId}?key=${FIREBASE_API_KEY}`;
   
   const firestoreFields: Record<string, any> = {};
   for (const [key, val] of Object.entries(fields)) {
@@ -80,7 +81,7 @@ async function restSetDoc(collection: string, docId: string, fields: Record<stri
 
 async function restDeleteDoc(collection: string, docId: string) {
   if (!isFirebaseConfigured) return;
-  const url = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/${collection}/${docId}?key=${FIREBASE_API_KEY}`;
+  const url = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/${FIREBASE_DATABASE_ID}/documents/${collection}/${docId}?key=${FIREBASE_API_KEY}`;
   const res = await fetch(url, {
     method: 'DELETE'
   });
@@ -362,6 +363,18 @@ async function startServer() {
     }
   });
   // Admin / Regulation API
+  app.get("/api/regulation/download", async (req, res) => {
+    const pdfPath = path.join(process.cwd(), 'public', 'regulation.pdf');
+    let exists = fs.existsSync(pdfPath);
+    if (!exists) {
+      exists = await restorePdfFromFirestore(pdfPath);
+    }
+    if (!exists) {
+      return res.status(404).send("File non trovato. Carica prima il calendario venatorio.");
+    }
+    res.download(pdfPath, "regulation.pdf");
+  });
+
   app.get("/api/admin/check-regulation", async (req, res) => {
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
     const pdfPath = path.join(process.cwd(), 'public', 'regulation.pdf');
@@ -369,7 +382,8 @@ async function startServer() {
     if (!exists) {
       exists = await restorePdfFromFirestore(pdfPath);
     }
-    res.json({ exists });
+    const size = exists ? fs.statSync(pdfPath).size : 0;
+    res.json({ exists, name: 'regulation.pdf', size });
   });
   
   app.delete("/api/admin/delete-regulation", async (req, res) => {

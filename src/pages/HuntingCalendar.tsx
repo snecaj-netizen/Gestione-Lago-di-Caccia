@@ -324,6 +324,21 @@ export function HuntingCalendar() {
   const [showSwapModal, setShowSwapModal] = useState(false);
   const [swapTargetDate, setSwapTargetDate] = useState<string>('');
 
+  const handleDownload = async (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    try {
+      const res = await fetch("/api/admin/check-regulation");
+      const data = await res.json();
+      if (data && data.exists) {
+        window.location.href = "/api/regulation/download";
+      } else {
+        alert("Il calendario venatorio PDF non è stato ancora caricato dall'amministratore nel Pannello di Controllo.");
+      }
+    } catch (err) {
+      alert("Errore durante la verifica del file.");
+    }
+  };
+
   useEffect(() => {
     // Auto-toggle based on initial screen size
     if (window.innerWidth > 1024) {
@@ -674,7 +689,8 @@ export function HuntingCalendar() {
         </div>
         <div className="flex flex-col items-end gap-2">
           <a 
-            href="/regulation.pdf"
+            href="/api/regulation/download"
+            onClick={handleDownload}
             download="regulation.pdf"
             className="text-[0.7rem] bg-white px-4 py-2 rounded-lg border border-slate-200 font-bold text-slate-gray shadow-sm hover:border-lake-green hover:text-lake-green transition-all flex items-center gap-2 group whitespace-nowrap cursor-pointer"
           >
@@ -852,18 +868,20 @@ export function HuntingCalendar() {
                     )}
                     {(showAllLimits ? filteredSpecies : filteredSpecies.slice(0, 5)).map((limit) => {
                       const status = getSpeciesHuntingStatus(limit.huntingPeriod);
+                      const isInactive = status === 'closed' || status === 'future';
                       return (
                         <tr key={limit.id} className={cn(
                           "transition-colors",
                           status === 'open' && "hover:bg-emerald-50/30",
-                          status === 'future' && "opacity-80 hover:bg-sky-50/20",
-                          status === 'closed' && "opacity-60 hover:bg-slate-50"
+                          isInactive && "opacity-55 hover:bg-slate-50/50"
                         )}>
                           <td className="px-4 py-3">
                             <div className="flex flex-col">
                               <span className={cn(
                                 "text-xs font-bold uppercase tracking-tight",
-                                isWaterfowl(limit.species) ? "text-lake-green" : "text-slate-900"
+                                isInactive 
+                                  ? "text-slate-400 font-medium" 
+                                  : (isWaterfowl(limit.species) ? "text-lake-green" : "text-slate-900")
                               )}>
                                 {limit.species}
                               </span>
@@ -871,22 +889,27 @@ export function HuntingCalendar() {
                                 <span className="text-[7px] font-black text-emerald-600 uppercase tracking-widest">Cacciabile Oggi</span>
                               )}
                               {status === 'future' && (
-                                <span className="text-[7px] font-black text-sky-500 uppercase tracking-widest">Apertura Futura</span>
+                                <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">Apertura Futura</span>
                               )}
                               {status === 'closed' && (
-                                <span className="text-[7px] font-black text-rose-400 uppercase tracking-widest">Periodo Concluso</span>
+                                <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">Periodo Concluso</span>
                               )}
                             </div>
                           </td>
                         <td className="px-2 py-3 text-center">
-                          <span className="text-[9px] font-bold text-slate-500 whitespace-nowrap">
+                          <span className={cn(
+                            "text-[9px] font-bold whitespace-nowrap",
+                            isInactive ? "text-slate-400" : "text-slate-500"
+                          )}>
                             {formatShortPeriod(limit.huntingPeriod)}
                           </span>
                         </td>
                         <td className="px-2 py-3 text-center">
                           <span className={cn(
                             "text-xs font-black px-2 py-1 rounded inline-block min-w-[30px]",
-                            limit.dailyLimit > 0 ? "bg-earth-brown text-white" : "bg-slate-100 text-slate-400"
+                            limit.dailyLimit > 0 
+                              ? (isInactive ? "bg-slate-200 text-slate-500" : "bg-earth-brown text-white")
+                              : "bg-slate-100 text-slate-400"
                           )}>
                             {limit.dailyLimit > 0 ? limit.dailyLimit : '∞'}
                           </span>
@@ -894,7 +917,9 @@ export function HuntingCalendar() {
                         <td className="px-2 py-3 text-center">
                           <span className={cn(
                             "text-xs font-black px-2 py-1 rounded inline-block min-w-[30px]",
-                            limit.seasonalLimit > 0 ? "bg-accent-gold text-white" : "bg-slate-100 text-slate-400"
+                            limit.seasonalLimit > 0 
+                              ? (isInactive ? "bg-slate-200 text-slate-500" : "bg-accent-gold text-white")
+                              : "bg-slate-100 text-slate-400"
                           )}>
                             {limit.seasonalLimit > 0 ? limit.seasonalLimit : '∞'}
                           </span>
