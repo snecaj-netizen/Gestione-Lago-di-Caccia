@@ -57,7 +57,23 @@ import { collection, query, where, orderBy, limit, onSnapshot, getDocs } from 'f
 import { Notification as AppNotification } from './types';
 import { seedUsers, createNotification } from './services';
 
-function Sidebar({ isOpen, setIsOpen }: { isOpen: boolean, setIsOpen: (val: boolean) => void }) {
+function Sidebar({ 
+  isOpen, 
+  setIsOpen,
+  decreaseFontSize,
+  increaseFontSize,
+  scaleIndex,
+  fontScale,
+  FONT_SCALES
+}: { 
+  isOpen: boolean, 
+  setIsOpen: (val: boolean) => void,
+  decreaseFontSize: () => void,
+  increaseFontSize: () => void,
+  scaleIndex: number,
+  fontScale: number,
+  FONT_SCALES: number[]
+}) {
   const { logout, profile } = useAuth();
   const location = useLocation();
   const [showLogoutConfirm, setShowLogoutConfirm] = React.useState(false);
@@ -149,6 +165,29 @@ function Sidebar({ isOpen, setIsOpen }: { isOpen: boolean, setIsOpen: (val: bool
           <div className="flex flex-col items-center pt-20 lg:pt-8 mb-6">
             {/* Logo removed here */}
             <p className="mt-4 text-[10px] font-black text-white/40 uppercase tracking-[0.3em] font-sans">Lago di Caccia</p>
+            
+            {/* Mobile Font Size controls */}
+            <div className="mt-4 flex items-center bg-white/10 rounded-lg p-0.5 gap-0.5 shadow-inner border border-white/15">
+              <button 
+                onClick={decreaseFontSize}
+                disabled={scaleIndex === 0}
+                className="p-1 px-3 rounded hover:bg-white/10 text-white disabled:opacity-30 disabled:hover:bg-transparent transition-all text-xs font-black flex items-center justify-center min-w-[28px] h-[28px] cursor-pointer disabled:cursor-not-allowed active:scale-90"
+                title="Riduci testo (A-)"
+              >
+                A-
+              </button>
+              <span className="text-[10px] font-black text-accent-gold px-2.5 uppercase select-none min-w-[36px] text-center">
+                {fontScale}%
+              </span>
+              <button 
+                onClick={increaseFontSize}
+                disabled={scaleIndex === FONT_SCALES.length - 1}
+                className="p-1 px-3 rounded hover:bg-white/10 text-white disabled:opacity-30 disabled:hover:bg-transparent transition-all text-xs font-black flex items-center justify-center min-w-[28px] h-[28px] cursor-pointer disabled:cursor-not-allowed active:scale-90"
+                title="Aumenta testo (A+)"
+              >
+                A+
+              </button>
+            </div>
           </div>
           <nav className="flex-1">
             <ul>
@@ -238,20 +277,27 @@ function Sidebar({ isOpen, setIsOpen }: { isOpen: boolean, setIsOpen: (val: bool
 }
 
 function Login() {
-  const { signInWithCredentials } = useAuth();
+  const { signInWithCredentials, user, profile } = useAuth();
+  const navigate = useNavigate();
   const [rememberMe, setRememberMe] = React.useState(() => {
-    return localStorage.getItem('lake_remember_me') === 'true';
+    return safeLocalStorage.getItem('lake_remember_me') === 'true';
   });
   const [username, setUsername] = React.useState(() => {
-    return localStorage.getItem('lake_remember_me') === 'true' ? (localStorage.getItem('lake_username') || '') : '';
+    return safeLocalStorage.getItem('lake_remember_me') === 'true' ? (safeLocalStorage.getItem('lake_username') || '') : '';
   });
   const [password, setPassword] = React.useState(() => {
-    return localStorage.getItem('lake_remember_me') === 'true' ? (localStorage.getItem('lake_password') || '') : '';
+    return safeLocalStorage.getItem('lake_remember_me') === 'true' ? (safeLocalStorage.getItem('lake_password') || '') : '';
   });
   const [showPassword, setShowPassword] = React.useState(false);
   const [error, setError] = React.useState('');
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [deferredPrompt, setDeferredPrompt] = React.useState<any>(null);
+
+  React.useEffect(() => {
+    if (user && profile?.isActive) {
+      navigate('/', { replace: true });
+    }
+  }, [user, profile, navigate]);
 
   React.useEffect(() => {
     seedUsers();
@@ -306,13 +352,13 @@ function Login() {
     try {
       await signInWithCredentials(username, password);
       if (rememberMe) {
-        localStorage.setItem('lake_remember_me', 'true');
-        localStorage.setItem('lake_username', username);
-        localStorage.setItem('lake_password', password);
+        safeLocalStorage.setItem('lake_remember_me', 'true');
+        safeLocalStorage.setItem('lake_username', username);
+        safeLocalStorage.setItem('lake_password', password);
       } else {
-        localStorage.removeItem('lake_remember_me');
-        localStorage.removeItem('lake_username');
-        localStorage.removeItem('lake_password');
+        safeLocalStorage.removeItem('lake_remember_me');
+        safeLocalStorage.removeItem('lake_username');
+        safeLocalStorage.removeItem('lake_password');
       }
     } catch (err: any) {
       setError(err.message || 'Errore durante l\'accesso');
@@ -485,6 +531,35 @@ function MainLayout() {
   const location = useLocation();
   const navigate = useNavigate();
 
+  // Font size adjustment for older users
+  const FONT_SCALES = [90, 100, 110, 120, 135, 150];
+  const [fontScale, setFontScale] = React.useState(() => {
+    return Number(safeLocalStorage.getItem('lake_font_scale') || '100');
+  });
+
+  React.useEffect(() => {
+    try {
+      document.documentElement.style.fontSize = `${fontScale}%`;
+      safeLocalStorage.setItem('lake_font_scale', fontScale.toString());
+    } catch (e) {
+      console.warn("Could not set font scale on document element:", e);
+    }
+  }, [fontScale]);
+
+  const scaleIndex = FONT_SCALES.indexOf(fontScale) !== -1 ? FONT_SCALES.indexOf(fontScale) : 1;
+
+  const decreaseFontSize = () => {
+    if (scaleIndex > 0) {
+      setFontScale(FONT_SCALES[scaleIndex - 1]);
+    }
+  };
+
+  const increaseFontSize = () => {
+    if (scaleIndex < FONT_SCALES.length - 1) {
+      setFontScale(FONT_SCALES[scaleIndex + 1]);
+    }
+  };
+
   // Notification permission and browser push
   React.useEffect(() => {
     try {
@@ -648,7 +723,15 @@ function MainLayout() {
 
   return (
     <div className="flex min-h-screen bg-slate-50">
-      <Sidebar isOpen={isOpen} setIsOpen={toggleSidebar} />
+      <Sidebar 
+        isOpen={isOpen} 
+        setIsOpen={toggleSidebar}
+        decreaseFontSize={decreaseFontSize}
+        increaseFontSize={increaseFontSize}
+        scaleIndex={scaleIndex}
+        fontScale={fontScale}
+        FONT_SCALES={FONT_SCALES}
+      />
       
       {/* Global Overlay for Menus (Profile/Notifications) */}
       <AnimatePresence>
@@ -685,7 +768,32 @@ function MainLayout() {
           <div className="flex-1 lg:hidden" />
           <div className="hidden lg:block flex-1" />
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
+            {/* Regolazione Font Size (Hidden on mobile/tablet, shown on desktop menu / sidebars for mobile) */}
+            <div className="hidden md:flex items-center bg-slate-100 rounded-lg p-0.5 gap-0.5 shadow-sm border border-slate-200/50">
+              <button 
+                onClick={decreaseFontSize}
+                disabled={scaleIndex === 0}
+                className="p-1 sm:p-1.5 rounded hover:bg-white text-slate-700 disabled:opacity-30 disabled:hover:bg-transparent transition-all text-[11px] sm:text-xs font-black flex items-center justify-center min-w-[24px] sm:min-w-[28px] h-6 sm:h-[28px] cursor-pointer disabled:cursor-not-allowed active:scale-90"
+                title="Riduci testo"
+              >
+                A-
+              </button>
+              <span className="hidden sm:inline-block text-[10px] font-black text-slate-500 px-1.5 uppercase select-none min-w-[32px] text-center">
+                {fontScale}%
+              </span>
+              <button 
+                onClick={increaseFontSize}
+                disabled={scaleIndex === FONT_SCALES.length - 1}
+                className="p-1 sm:p-1.5 rounded hover:bg-white text-slate-700 disabled:opacity-30 disabled:hover:bg-transparent transition-all text-[11px] sm:text-xs font-black flex items-center justify-center min-w-[24px] sm:min-w-[28px] h-6 sm:h-[28px] cursor-pointer disabled:cursor-not-allowed active:scale-90"
+                title="Aumenta testo"
+              >
+                A+
+              </button>
+            </div>
+
+            <div className="hidden md:block h-8 w-[1px] bg-slate-100 mx-0.5 sm:mx-1" />
+
             <NotificationCenter isOpen={showNotifications} onToggle={toggleNotifications} />
             <div className="h-8 w-[1px] bg-slate-100 mx-1 hidden sm:block" />
             
@@ -816,6 +924,15 @@ function MainLayout() {
 
 export default function App() {
   const [supportServiceWorker, setSupportServiceWorker] = React.useState(false);
+
+  React.useEffect(() => {
+    try {
+      const savedScale = safeLocalStorage.getItem('lake_font_scale') || '100';
+      document.documentElement.style.fontSize = `${savedScale}%`;
+    } catch (e) {
+      console.warn("Could not apply initial font scale:", e);
+    }
+  }, []);
 
   React.useEffect(() => {
     try {

@@ -31,6 +31,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
+    let isFetchingCustomProfile = false;
 
     // Check local storage FIRST for immediate session recovery (useful for the custom admin login)
     const persistedUser = safeLocalStorage.getItem('lake_app_user');
@@ -57,6 +58,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setProfile(adminProfile);
           setLoading(false);
         } else {
+          isFetchingCustomProfile = true;
           // Fetch real profile from Firestore for other credential users
           if (!db) {
             const localUsers = JSON.parse(safeLocalStorage.getItem('lake_db_users') || '[]');
@@ -64,19 +66,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (found && mounted) {
               setProfile(found);
             }
+            isFetchingCustomProfile = false;
             setLoading(false);
           } else {
             const docRef = doc(db, 'users', userData.uid);
             getDoc(docRef).then(snap => {
               if (mounted && snap.exists()) {
                 setProfile(snap.data() as UserProfile);
-                setLoading(false);
-              } else if (mounted) {
+              }
+              if (mounted) {
+                isFetchingCustomProfile = false;
                 setLoading(false);
               }
             }).catch(err => {
               console.error("Error fetching persisted profile", err);
-              if (mounted) setLoading(false);
+              if (mounted) {
+                isFetchingCustomProfile = false;
+                setLoading(false);
+              }
             });
           }
         }
@@ -122,8 +129,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } else {
           // If we have a persisted user but Firebase says null, 
           // we might be in the middle of a refresh for a custom credential user.
-          // Don't set user to null yet.
-          if (mounted) setLoading(false);
+          // Don't set user to null yet unless they are not currently fetching.
+          if (mounted && !isFetchingCustomProfile) {
+            setLoading(false);
+          }
         }
       }
     }) : () => {};
