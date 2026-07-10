@@ -300,6 +300,23 @@ function Login() {
   }, [user, profile, navigate]);
 
   React.useEffect(() => {
+    const isExplicitLogout = safeLocalStorage.getItem('lake_explicit_logout') === 'true';
+    if (rememberMe && username && password && !user && !isSubmitting && !isExplicitLogout) {
+      const performAutoLogin = async () => {
+        setIsSubmitting(true);
+        try {
+          await signInWithCredentials(username, password);
+        } catch (err: any) {
+          console.warn("Auto-login failed:", err);
+        } finally {
+          setIsSubmitting(false);
+        }
+      };
+      performAutoLogin();
+    }
+  }, []);
+
+  React.useEffect(() => {
     seedUsers();
     
     // Debug PWA status

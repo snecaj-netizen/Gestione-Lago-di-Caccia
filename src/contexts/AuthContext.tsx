@@ -153,6 +153,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signInWithCredentials = async (username: string, password: string) => {
     setLoading(true);
+    safeLocalStorage.removeItem('lake_explicit_logout');
     try {
       // Hardcoded fallback for admin login since Firestore might not be configured
       if (username === 'snecaj@gmail.com' && password === 'admin') {
@@ -218,6 +219,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await signOut(auth);
     }
     safeLocalStorage.removeItem('lake_app_user');
+    safeLocalStorage.setItem('lake_explicit_logout', 'true');
     setUser(null);
     setProfile(null);
   };

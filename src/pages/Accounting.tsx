@@ -331,7 +331,7 @@ export function Accounting() {
                     <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 group-focus-within:text-lake-green">€</span>
                     <input 
                       type="number"
-                      disabled={isSilence || isSocioDay}
+                      disabled={isSilence || isSocioDay || profile?.role !== 'admin'}
                       placeholder=""
                       value={dayTotal || ''}
                       onChange={(e) => handleUpdateWeekdayQuota(idx, parseFloat(e.target.value) || 0)}
@@ -361,77 +361,85 @@ export function Accounting() {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <div className="space-y-4">
-              <div className="flex items-center gap-2 text-xs font-black text-slate-400 uppercase tracking-widest">
-                {editingBudgetItemId ? <Edit2 size={14} className="text-purple-600" /> : <Plus size={14} className="text-emerald-500" />} 
-                {editingBudgetItemId ? 'Modifica Voce di Budget' : 'Aggiungi Voce di Budget'}
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
-                <div className="sm:col-span-5">
-                  <input 
-                    type="text"
-                    placeholder="Descrizione (es. Mangime, Affitto...)"
-                    value={newBudgetItem.label}
-                    onChange={e => setNewBudgetItem({...newBudgetItem, label: e.target.value})}
-                    className="w-full bg-off-white border border-slate-200 rounded px-3 py-2 text-xs font-bold outline-none focus:border-purple-600"
-                  />
-                </div>
-                <div className="sm:col-span-3">
-                  <div className="relative">
-                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 italic">€</span>
-                    <input 
-                      type="number"
-                      placeholder="Importo"
-                      value={newBudgetItem.amount || ''}
-                      onFocus={(e) => e.target.select()}
-                      onChange={e => setNewBudgetItem({...newBudgetItem, amount: parseFloat(e.target.value) || 0})}
-                      className="w-full bg-off-white border border-slate-200 rounded pl-6 pr-2 py-2 text-xs font-bold outline-none focus:border-purple-600"
-                    />
+              {profile?.role === 'admin' ? (
+                <>
+                  <div className="flex items-center gap-2 text-xs font-black text-slate-400 uppercase tracking-widest">
+                    {editingBudgetItemId ? <Edit2 size={14} className="text-purple-600" /> : <Plus size={14} className="text-emerald-500" />} 
+                    {editingBudgetItemId ? 'Modifica Voce di Budget' : 'Aggiungi Voce di Budget'}
                   </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+                    <div className="sm:col-span-5">
+                      <input 
+                        type="text"
+                        placeholder="Descrizione (es. Mangime, Affitto...)"
+                        value={newBudgetItem.label}
+                        onChange={e => setNewBudgetItem({...newBudgetItem, label: e.target.value})}
+                        className="w-full bg-off-white border border-slate-200 rounded px-3 py-2 text-xs font-bold outline-none focus:border-purple-600"
+                      />
+                    </div>
+                    <div className="sm:col-span-3">
+                      <div className="relative">
+                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 italic">€</span>
+                        <input 
+                          type="number"
+                          placeholder="Importo"
+                          value={newBudgetItem.amount || ''}
+                          onFocus={(e) => e.target.select()}
+                          onChange={e => setNewBudgetItem({...newBudgetItem, amount: parseFloat(e.target.value) || 0})}
+                          className="w-full bg-off-white border border-slate-200 rounded pl-6 pr-2 py-2 text-xs font-bold outline-none focus:border-purple-600"
+                        />
+                      </div>
+                    </div>
+                    <div className="sm:col-span-3">
+                      <select 
+                        value={newBudgetItem.type}
+                        onChange={e => setNewBudgetItem({...newBudgetItem, type: e.target.value as any})}
+                        className="w-full bg-off-white border border-slate-200 rounded px-2 py-2 text-xs font-bold outline-none focus:border-purple-600"
+                      >
+                        <option value="entrata">Entrata</option>
+                        <option value="uscita">Uscita</option>
+                      </select>
+                    </div>
+                    <div className="sm:col-span-1 flex gap-1">
+                      <button 
+                        onClick={async () => {
+                          if (!newBudgetItem.label || !newBudgetItem.amount) return;
+                          if (editingBudgetItemId) {
+                            await updateBudgetItem(editingBudgetItemId, newBudgetItem);
+                            setEditingBudgetItemId(null);
+                          } else {
+                            await addBudgetItem(newBudgetItem);
+                          }
+                          setNewBudgetItem({ label: '', amount: 0, type: 'uscita' });
+                        }}
+                        className={cn(
+                          "flex-1 aspect-square rounded flex items-center justify-center transition-colors shadow-sm",
+                          editingBudgetItemId ? "bg-purple-600 text-white hover:bg-purple-700" : "bg-emerald-600 text-white hover:bg-emerald-700"
+                        )}
+                        title={editingBudgetItemId ? "Aggiorna" : "Aggiungi"}
+                      >
+                        {editingBudgetItemId ? <Save size={16} /> : <Plus size={16} />}
+                      </button>
+                      {editingBudgetItemId && (
+                        <button 
+                          onClick={() => {
+                            setEditingBudgetItemId(null);
+                            setNewBudgetItem({ label: '', amount: 0, type: 'uscita' });
+                          }}
+                          className="flex-1 aspect-square bg-slate-200 text-slate-500 rounded flex items-center justify-center hover:bg-slate-300 transition-colors"
+                          title="Annulla"
+                        >
+                          <X size={16} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="p-3.5 bg-slate-50 border border-slate-200/60 rounded-lg text-xs text-slate-500 font-bold italic text-center">
+                  Inserimento e modifiche del budget sono riservati all'amministratore
                 </div>
-                <div className="sm:col-span-3">
-                  <select 
-                    value={newBudgetItem.type}
-                    onChange={e => setNewBudgetItem({...newBudgetItem, type: e.target.value as any})}
-                    className="w-full bg-off-white border border-slate-200 rounded px-2 py-2 text-xs font-bold outline-none focus:border-purple-600"
-                  >
-                    <option value="entrata">Entrata</option>
-                    <option value="uscita">Uscita</option>
-                  </select>
-                </div>
-                <div className="sm:col-span-1 flex gap-1">
-                  <button 
-                    onClick={async () => {
-                      if (!newBudgetItem.label || !newBudgetItem.amount) return;
-                      if (editingBudgetItemId) {
-                        await updateBudgetItem(editingBudgetItemId, newBudgetItem);
-                        setEditingBudgetItemId(null);
-                      } else {
-                        await addBudgetItem(newBudgetItem);
-                      }
-                      setNewBudgetItem({ label: '', amount: 0, type: 'uscita' });
-                    }}
-                    className={cn(
-                      "flex-1 aspect-square rounded flex items-center justify-center transition-colors shadow-sm",
-                      editingBudgetItemId ? "bg-purple-600 text-white hover:bg-purple-700" : "bg-emerald-600 text-white hover:bg-emerald-700"
-                    )}
-                    title={editingBudgetItemId ? "Aggiorna" : "Aggiungi"}
-                  >
-                    {editingBudgetItemId ? <Save size={16} /> : <Plus size={16} />}
-                  </button>
-                  {editingBudgetItemId && (
-                    <button 
-                      onClick={() => {
-                        setEditingBudgetItemId(null);
-                        setNewBudgetItem({ label: '', amount: 0, type: 'uscita' });
-                      }}
-                      className="flex-1 aspect-square bg-slate-200 text-slate-500 rounded flex items-center justify-center hover:bg-slate-300 transition-colors"
-                      title="Annulla"
-                    >
-                      <X size={16} />
-                    </button>
-                  )}
-                </div>
-              </div>
+              )}
 
               <div className="divide-y divide-slate-100 border rounded overflow-hidden">
                 {budgetItems.length === 0 ? (
@@ -450,29 +458,31 @@ export function Accounting() {
                       </div>
                       <div className="flex items-center gap-3">
                         <span className="text-sm font-bold text-slate-700">€{item.amount.toLocaleString()}</span>
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                          <button 
-                            onClick={() => {
-                              setEditingBudgetItemId(item.id);
-                              setNewBudgetItem({
-                                label: item.label,
-                                amount: item.amount,
-                                type: item.type
-                              });
-                            }}
-                            className="p-1.5 text-slate-300 hover:text-purple-600 transition-colors"
-                            title="Modifica"
-                          >
-                            <Edit2 size={14} />
-                          </button>
-                          <button 
-                            onClick={() => deleteBudgetItem(item.id)}
-                            className="p-1.5 text-slate-300 hover:text-rose-600 transition-colors"
-                            title="Elimina"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
+                        {profile?.role === 'admin' && (
+                          <div className="flex items-center gap-1">
+                            <button 
+                              onClick={() => {
+                                setEditingBudgetItemId(item.id);
+                                setNewBudgetItem({
+                                  label: item.label,
+                                  amount: item.amount,
+                                  type: item.type
+                                });
+                              }}
+                              className="p-1.5 text-slate-500 hover:text-purple-600 hover:bg-purple-50 rounded transition-colors"
+                              title="Modifica"
+                            >
+                              <Edit2 size={14} />
+                            </button>
+                            <button 
+                              onClick={() => deleteBudgetItem(item.id)}
+                              className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
+                              title="Elimina"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))
@@ -1007,8 +1017,8 @@ export function Accounting() {
                         item.type === 'entrata' ? "text-emerald-700" : "text-rose-700"
                       )}>
                         <span>{item.type === 'entrata' ? '+' : '-'}€{item.amount.toLocaleString()}</span>
-                        {(profile?.role === 'admin') && (
-                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {profile?.role === 'admin' && (
+                           <div className="flex items-center gap-1.5 ml-2">
                              <button 
                                 onClick={() => {
                                     // Populate form and open modal safely
@@ -1027,14 +1037,14 @@ export function Accounting() {
                                     setEditingTransactionId(item.id);
                                     handleToggleModal('add');
                                 }}
-                                className="p-1 text-slate-400 hover:text-lake-green"
+                                className="p-1 text-slate-500 hover:text-lake-green bg-slate-100 hover:bg-slate-200 rounded transition-colors"
                                 title="Modifica"
                              >
                                 <Edit2 size={12}/>
                              </button>
                              <button 
                                  onClick={() => setDeleteConfirmId(item.id)}
-                                 className="p-1 text-slate-400 hover:text-rose-600"
+                                 className="p-1 text-slate-500 hover:text-rose-600 bg-slate-100 hover:bg-slate-200 rounded transition-colors"
                                  title="Elimina"
                              >
                                  <Trash2 size={12}/>
