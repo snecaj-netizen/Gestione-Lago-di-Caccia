@@ -2,7 +2,7 @@ import express from "express";
 import path from "path";
 import fs from "fs";
 import multer from "multer";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
 dotenv.config();
 
@@ -340,26 +340,122 @@ async function startServer() {
   app.post("/api/ai/hunt-prediction", async (req, res) => {
     const { weatherSummary } = req.body;
     const client = getAiClient();
-    if (!client) return res.status(500).json({ error: "AI not configured" });
+    if (!client) return res.status(500).json({ error: "AI capability non configurata sul server. Verificare GEMINI_API_KEY nei secret." });
 
     const cacheKey = `hunt_${JSON.stringify(weatherSummary)}`;
     const cached = getCached(cacheKey);
-    if (cached) return res.json(cached);
+    if (cached && (cached.days || Array.isArray(cached))) {
+      return res.json(cached);
+    }
 
     try {
       const response = await client.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: `Analizza dati meteo per caccia anatre in Italia: ${JSON.stringify(weatherSummary)}`,
+        model: "gemini-3.6-flash",
+        contents: `Analizza i seguenti dati meteo per le prossime giornate di caccia alle anatre in Italia: ${JSON.stringify(weatherSummary)}.
+Fornisci per ciascuna data una percentuale di probabilità di caccia favorevole (0-100%), un'etichetta (es. "Ottima", "Buona", "Discreta", "Bassa") e una motivazione sintetica basata su vento, temperatura e pioggia. Fornisci anche una sintesi complessiva dell'analisi.`,
         config: {
-          systemInstruction: `Analizza meteo e fattori migratori per la caccia in Italia. Restituisci SOLO JSON.`,
+          systemInstruction: "Sei un esperto ornitologo e cacciatore di acquatici in Italia. Analizza meteo e fattori migratori con precisione. Restituisci un oggetto JSON valido.",
           responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              prediction: { 
+                type: Type.STRING, 
+                description: "Sintesi complessiva dell'analisi meteo e del passo degli acquatici" 
+              },
+              days: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    date: { type: Type.STRING, description: "Data nel formato YYYY-MM-DD" },
+                    probability: { type: Type.NUMBER, description: "Probabilità percentuale di caccia favorevole da 0 a 100" },
+                    label: { type: Type.STRING, description: "Etichetta della giornata (es. 'Ottima', 'Buona', 'Discreta', 'Bassa')" },
+                    reason: { type: Type.STRING, description: "Spiegazione sintetica dei fattori meteo e migratori" }
+                  },
+                  required: ["date", "probability", "label", "reason"]
+                }
+              }
+            },
+            required: ["prediction", "days"]
+          }
         }
       });
-      const result = JSON.parse(response.text!.replace(/```json/g, "").replace(/```/g, "").trim());
+      const text = response.text;
+      if (!text) throw new Error("Risposta vuota dall'IA");
+      const result = JSON.parse(text);
       setCached(cacheKey, result);
       res.json(result);
-    } catch (error) {
-      res.status(500).json({ error: "AI failed" });
+    } catch (error: any) {
+      console.error("AI Hunt Prediction error:", error);
+      res.status(500).json({ error: error.message || "Errore durante l'elaborazione della previsione" });
+    }
+  });
+
+  app.post("/api/ai/recipe-search", async (req, res) => {
+    const { query, recipes } = req.body;
+    const client = getAiClient();
+    if (!client) return res.status(500).json({ error: "AI capability non configurata." });
+
+    try {
+      const response = await client.models.generateContent({
+        model: "gemini-3.6-flash",
+        contents: `Quali di queste ricette corrispondono meglio alla ricerca "${query}"?
+Ricette disponibili: ${JSON.stringify(recipes)}
+Restituisci un array JSON di stringhe contenente solo gli ID delle ricette rilevanti.`,
+        config: {
+          systemInstruction: "Sei uno chef ed esperto culinario. Restituisci SOLO un array di stringhe JSON con gli ID delle ricette pertinenti.",
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.ARRAY,
+            items: { type: Type.STRING }
+          }
+        }
+      });
+      const text = response.text;
+      if (!text) throw new Error("Risposta vuota da AI");
+      res.json(JSON.parse(text));
+    } catch (error: any) {
+      console.error("AI recipe search error:", error);
+      res.status(500).json({ error: error.message || "Failed to search recipes" });
+    }
+  });
+
+  app.post("/api/ai/recipe-generate", async (req, res) => {
+    const { prompt } = req.body;
+    const client = getAiClient();
+    if (!client) return res.status(500).json({ error: "AI capability non configurata." });
+
+    try {
+      const response = await client.models.generateContent({
+        model: "gemini-3.6-flash",
+        contents: `Crea una ricetta completa di selvaggina o cucina tradizionale basata su questa richiesta: "${prompt}".`,
+        config: {
+          systemInstruction: "Sei un grande Chef stellato specializzato in cucina di selvaggina tradizionale e moderna. Restituisci un oggetto JSON con i dettagli della ricetta.",
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              title: { type: Type.STRING },
+              description: { type: Type.STRING },
+              category: { type: Type.STRING, description: "Una tra: 'Cinghiale', 'Anatra', 'Beccaccia', 'Fagiano', 'Lepre', 'Altro'" },
+              courseType: { type: Type.STRING, description: "Una tra: 'Antipasto', 'Primo', 'Secondo', 'Altro'" },
+              ingredients: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING }
+              },
+              instructions: { type: Type.STRING }
+            },
+            required: ["title", "description", "category", "courseType", "ingredients", "instructions"]
+          }
+        }
+      });
+      const text = response.text;
+      if (!text) throw new Error("Risposta vuota da AI");
+      res.json(JSON.parse(text));
+    } catch (error: any) {
+      console.error("AI recipe generate error:", error);
+      res.status(500).json({ error: error.message || "Failed to generate recipe" });
     }
   });
   // Admin / Regulation API
@@ -419,7 +515,7 @@ async function startServer() {
     try {
       const dataBuffer = fs.readFileSync(pdfPath);
       const geminiResponse = await client.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: "gemini-3.6-flash",
         contents: {
           parts: [
             { inlineData: { data: dataBuffer.toString("base64"), mimeType: "application/pdf" } },
@@ -471,7 +567,7 @@ async function startServer() {
     try {
       const dataBuffer = fs.readFileSync(pdfPath);
       const geminiResponse = await client.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: "gemini-3.6-flash",
         contents: {
           parts: [
             { inlineData: { data: dataBuffer.toString("base64"), mimeType: "application/pdf" } },
@@ -522,7 +618,7 @@ La stagione corrente inizia il ${seasonStart || '2024-09-01'} e termina il ${sea
     try {
       const dataBuffer = fs.readFileSync(pdfPath);
       const geminiResponse = await client.models.generateContent({
-        model: "gemini-3.5-flash",
+        model: "gemini-3.6-flash",
         contents: {
           parts: [
             { inlineData: { data: dataBuffer.toString("base64"), mimeType: "application/pdf" } },
@@ -587,7 +683,7 @@ La stagione corrente inizia il ${seasonStart || '2024-09-01'} e termina il ${sea
     try {
       const dataBuffer = fs.readFileSync(pdfPath);
       const geminiResponse = await client.models.generateContent({
-        model: "gemini-3.5-flash",
+        model: "gemini-3.6-flash",
         contents: {
           parts: [
             { inlineData: { data: dataBuffer.toString("base64"), mimeType: "application/pdf" } },

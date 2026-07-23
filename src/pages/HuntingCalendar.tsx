@@ -53,10 +53,15 @@ const safeFormatDate = (dateStr: any, formatStr: string, options?: any) => {
 };
 
 function DuckHuntAI({ latitude, longitude }: { latitude?: number, longitude?: number }) {
+  const { profile } = useAuth();
   const { weather, loading: weatherLoading } = useWeather(latitude, longitude);
   const [prediction, setPrediction] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
+
+  if (profile?.role !== 'admin' && profile?.role !== 'socio') {
+    return null;
+  }
 
   useEffect(() => {
     if (isOpen && weather.length >= 3 && !prediction && !loading) {
@@ -710,7 +715,9 @@ export function HuntingCalendar() {
           )}
 
           {/* AI Hunting Prediction element */}
-          <DuckHuntAI latitude={settings?.latitude} longitude={settings?.longitude} />
+          {(profile?.role === 'admin' || profile?.role === 'socio') && (
+            <DuckHuntAI latitude={settings?.latitude} longitude={settings?.longitude} />
+          )}
           
           {huntingTimes.length > 0 && (
             <div className="card-polish overflow-hidden !p-0 border-t-4 border-lake-green">
