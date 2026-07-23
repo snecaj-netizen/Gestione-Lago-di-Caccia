@@ -306,6 +306,7 @@ function Login() {
         setIsSubmitting(true);
         try {
           await signInWithCredentials(username, password);
+          navigate('/', { replace: true });
         } catch (err: any) {
           console.warn("Auto-login failed:", err);
         } finally {
@@ -377,6 +378,7 @@ function Login() {
         safeLocalStorage.removeItem('lake_username');
         safeLocalStorage.removeItem('lake_password');
       }
+      navigate('/', { replace: true });
     } catch (err: any) {
       setError(err.message || 'Errore durante l\'accesso');
     } finally {
