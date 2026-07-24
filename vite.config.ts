@@ -15,18 +15,50 @@ export default defineConfig(({mode}) => {
       VitePWA({
         disable: process.env.NODE_ENV !== 'production',
         registerType: 'prompt',
-        includeAssets: ['favicon.ico'],
+        includeAssets: ['favicon.ico', 'logo_lago.png'],
         manifest: {
           name: 'Gestione Lago',
           short_name: 'LagoSoci',
           description: 'Gestione Lago di Caccia - Soci e Quotisti',
-          theme_color: '#ffffff',
+          theme_color: '#0a2e2a',
+          background_color: '#0a2e2a',
+          display: 'standalone',
+          start_url: '/',
+          icons: [
+            {
+              src: '/logo_lago.png',
+              sizes: '192x192',
+              type: 'image/png'
+            },
+            {
+              src: '/logo_lago.png',
+              sizes: '512x512',
+              type: 'image/png'
+            },
+            {
+              src: '/logo_lago.png',
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'any maskable'
+            }
+          ]
         },
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,json,webmanifest}'],
           globIgnores: ['**/firebase-applet-config.json'],
           navigateFallbackDenylist: [/^\/api/],
           runtimeCaching: [
+            {
+              urlPattern: /\/logo_lago\.png/,
+              handler: 'NetworkFirst',
+              options: {
+                cacheName: 'logo-cache',
+                expiration: {
+                  maxEntries: 5,
+                  maxAgeSeconds: 30 * 24 * 60 * 60
+                }
+              }
+            },
             {
               urlPattern: /^\/api\/admin\//,
               handler: 'NetworkOnly'

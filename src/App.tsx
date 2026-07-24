@@ -163,8 +163,24 @@ function Sidebar({
           </button>
 
           <div className="flex flex-col items-center pt-20 lg:pt-8 mb-6">
-            {/* Logo removed here */}
-            <p className="mt-4 text-[10px] font-black text-white/40 uppercase tracking-[0.3em] font-sans">Lago di Caccia</p>
+            <Link to="/" onClick={() => setIsOpen(false)} className="flex flex-col items-center group">
+              <div className="w-20 h-20 sm:w-24 sm:h-24 bg-white/10 rounded-2xl flex items-center justify-center p-2 border border-white/20 shadow-lg backdrop-blur-sm group-hover:scale-105 transition-all">
+                <img 
+                  src="/logo_lago.png" 
+                  alt="Logo Lago" 
+                  className="max-h-full max-w-full object-contain"
+                  onError={(e) => {
+                    const target = e.target as HTMLElement;
+                    target.style.display = 'none';
+                    if (target.nextElementSibling) {
+                      (target.nextElementSibling as HTMLElement).style.display = 'block';
+                    }
+                  }}
+                />
+                <Bird className="text-accent-gold w-10 h-10 hidden" />
+              </div>
+            </Link>
+            <p className="mt-3 text-[10px] font-black text-white/50 uppercase tracking-[0.3em] font-sans">Lago di Caccia</p>
             
             {/* Mobile Font Size controls */}
             <div className="mt-4 flex items-center bg-white/10 rounded-lg p-0.5 gap-0.5 shadow-inner border border-white/15">
@@ -390,8 +406,22 @@ function Login() {
     <div className="min-h-screen bg-bg-body flex items-center justify-center p-4">
       <div className="max-w-md w-full bg-white p-8 sm:p-10 text-center rounded-xl shadow-2xl border-t-8 border-lake-green">
         <div className="mb-8 flex justify-center">
-          <div className="w-20 h-20 sm:w-24 sm:h-24 bg-white rounded-full flex items-center justify-center mx-auto shadow-xl border-4 border-lake-green/10 p-2">
-            <Bird className="text-lake-green w-10 h-10 sm:w-12 sm:h-12" />
+          <div className="w-24 h-24 sm:w-28 sm:h-28 bg-white rounded-2xl flex items-center justify-center mx-auto shadow-xl border-4 border-lake-green/10 p-2 overflow-hidden">
+            <img 
+              src="/logo_lago.png" 
+              alt="Gestione Lago Logo" 
+              className="max-h-full max-w-full object-contain"
+              onError={(e) => {
+                const target = e.target as HTMLElement;
+                target.style.display = 'none';
+                if (target.nextElementSibling) {
+                  (target.nextElementSibling as HTMLElement).style.display = 'flex';
+                }
+              }}
+            />
+            <div className="hidden w-full h-full items-center justify-center">
+              <Bird className="text-lake-green w-10 h-10 sm:w-12 sm:h-12" />
+            </div>
           </div>
         </div>
         <h1 className="text-2xl sm:text-3xl font-serif text-lake-green mb-2 sm:mb-4">Gestione Lago</h1>
@@ -525,12 +555,32 @@ function PrivateRoute({ children, allowPending = false }: { children: React.Reac
 }
 
 function Logo() {
+  const [version, setVersion] = React.useState(Date.now());
+
+  React.useEffect(() => {
+    const handleUpdate = () => setVersion(Date.now());
+    window.addEventListener('lake-logo-updated', handleUpdate);
+    return () => window.removeEventListener('lake-logo-updated', handleUpdate);
+  }, []);
+
   return (
     <div className="flex flex-col items-center justify-center">
       <Link to="/" className="group flex flex-col items-center">
         <div className="relative">
-          <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 group-active:scale-95 transition-all duration-300 border border-slate-100 p-2">
-            <Bird className="text-lake-green w-8 h-8" />
+          <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 group-active:scale-95 transition-all duration-300 border border-slate-100 p-1.5 overflow-hidden">
+            <img 
+              src={`/logo_lago.png?v=${version}`} 
+              alt="Logo Lago" 
+              className="max-h-full max-w-full object-contain"
+              onError={(e) => {
+                const target = e.target as HTMLElement;
+                target.style.display = 'none';
+                if (target.nextElementSibling) {
+                  (target.nextElementSibling as HTMLElement).style.display = 'block';
+                }
+              }}
+            />
+            <Bird className="text-lake-green w-8 h-8 hidden" />
           </div>
           <div className="absolute -bottom-1 -right-1 bg-accent-gold p-1 rounded-full shadow-sm">
             <Waves className="text-white" size={10} />

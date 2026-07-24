@@ -200,6 +200,54 @@ async function deletePdfFromFirestore() {
   }
 }
 
+async function saveLogoToFirestore(logoPath: string) {
+  if (!isFirebaseConfigured) return;
+  try {
+    const fileBuffer = fs.readFileSync(logoPath);
+    const base64Data = fileBuffer.toString('base64');
+    const chunkSize = 500 * 1024;
+    const chunks: string[] = [];
+    for (let i = 0; i < base64Data.length; i += chunkSize) {
+      chunks.push(base64Data.substring(i, i + chunkSize));
+    }
+    await restSetDoc('settings', 'lake_logo_metadata', {
+      filename: 'logo_lago.png',
+      totalChunks: chunks.length,
+      size: fileBuffer.length,
+      updatedAt: new Date().toISOString()
+    });
+    for (let i = 0; i < chunks.length; i++) {
+      await restSetDoc('settings', `lake_logo_chunk_${i}`, { data: chunks[i] });
+    }
+    console.log("[Firebase Server REST] Logo salvato correttamente su Firestore.");
+  } catch (error) {
+    console.error("[Firebase Server REST] Errore salvataggio Logo su Firestore:", error);
+  }
+}
+
+async function restoreLogoFromFirestore(logoPath: string): Promise<boolean> {
+  if (!isFirebaseConfigured) return false;
+  try {
+    const meta = await restGetDoc('settings', 'lake_logo_metadata');
+    if (!meta || !meta.totalChunks) return false;
+    let base64Full = "";
+    for (let i = 0; i < meta.totalChunks; i++) {
+      const chunkDoc = await restGetDoc('settings', `lake_logo_chunk_${i}`);
+      if (!chunkDoc) return false;
+      base64Full += chunkDoc.data || "";
+    }
+    const buffer = Buffer.from(base64Full, 'base64');
+    const dir = path.dirname(logoPath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(logoPath, buffer);
+    console.log("[Firebase Server REST] Logo ripristinato da Firestore:", logoPath);
+    return true;
+  } catch (error) {
+    console.error("[Firebase Server REST] Errore ripristino Logo:", error);
+    return false;
+  }
+}
+
 // Configure multer for PDF uploads
 const pdfStorage = multer.diskStorage({
   destination: function (_req, _file, cb) {
@@ -225,6 +273,36 @@ const uploadPdf = multer({
       cb(null, true);
     } else {
       cb(new Error('Only PDF files are allowed'));
+    }
+  }
+});
+
+// Configure multer for Logo uploads
+const logoStorage = multer.diskStorage({
+  destination: function (_req, _file, cb) {
+    const publicDir = path.join(process.cwd(), 'public');
+    try {
+      if (!fs.existsSync(publicDir)) {
+        fs.mkdirSync(publicDir, { recursive: true });
+      }
+      cb(null, publicDir);
+    } catch (err) {
+      cb(err as Error, publicDir);
+    }
+  },
+  filename: function (_req, _file, cb) {
+    cb(null, 'logo_lago.png');
+  }
+});
+
+const uploadLogo = multer({
+  storage: logoStorage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Solo file immagine sono consentiti'));
     }
   }
 });
@@ -458,6 +536,39 @@ Restituisci un array JSON di stringhe contenente solo gli ID delle ricette rilev
       res.status(500).json({ error: error.message || "Failed to generate recipe" });
     }
   });
+  // Logo API & Auto-restore
+  app.get("/logo_lago.png", async (req, res, next) => {
+    const logoPath = path.join(process.cwd(), 'public', 'logo_lago.png');
+    if (!fs.existsSync(logoPath)) {
+      await restoreLogoFromFirestore(logoPath);
+    }
+    next();
+  });
+
+  app.get("/api/admin/check-logo", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    const logoPath = path.join(process.cwd(), 'public', 'logo_lago.png');
+    let exists = fs.existsSync(logoPath);
+    if (!exists) {
+      exists = await restoreLogoFromFirestore(logoPath);
+    }
+    const size = exists ? fs.statSync(logoPath).size : 0;
+    res.json({ exists, name: 'logo_lago.png', size });
+  });
+
+  app.post("/api/admin/upload-logo", uploadLogo.single('logo'), async (req, res) => {
+    try {
+      const logoPath = path.join(process.cwd(), 'public', 'logo_lago.png');
+      if (fs.existsSync(logoPath)) {
+        await saveLogoToFirestore(logoPath);
+      }
+      res.json({ success: true, timestamp: Date.now() });
+    } catch (err: any) {
+      console.error("Errore salvataggio Logo su Firestore:", err);
+      res.status(500).json({ error: `Caricamento logo fallito nel backup cloud: ${err.message}` });
+    }
+  });
+
   // Admin / Regulation API
   app.get("/api/regulation/download", async (req, res) => {
     const pdfPath = path.join(process.cwd(), 'public', 'regulation.pdf');

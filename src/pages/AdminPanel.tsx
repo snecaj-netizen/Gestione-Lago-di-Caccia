@@ -38,6 +38,10 @@ export function AdminPanel() {
   const [uploadStatus, setUploadStatus] = useState<'success' | 'error' | null>(null);
   const [pdfInfo, setPdfInfo] = useState<{ exists: boolean, name?: string, size?: number, updatedAt?: string } | null>(null);
   
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [logoUploadStatus, setLogoUploadStatus] = useState<'success' | 'error' | null>(null);
+  const [logoTimestamp, setLogoTimestamp] = useState<number>(Date.now());
+  
   const [limits, setLimits] = useState<HuntingLimit[]>([]);
   const [extractingLimits, setExtractingLimits] = useState(false);
   const [cleaningDb, setCleaningDb] = useState(false);
@@ -272,6 +276,43 @@ export function AdminPanel() {
     } finally {
       setUploadingPdf(false);
       setTimeout(() => setUploadStatus(null), 5000);
+    }
+  };
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert("Solo i file immagine (PNG, JPG, WEBP) sono ammessi.");
+      return;
+    }
+
+    setUploadingLogo(true);
+    setLogoUploadStatus(null);
+
+    const formData = new FormData();
+    formData.append('logo', file);
+
+    try {
+      const response = await fetch('/api/admin/upload-logo', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (response.ok) {
+        setLogoUploadStatus('success');
+        setLogoTimestamp(Date.now());
+        window.dispatchEvent(new Event('lake-logo-updated'));
+      } else {
+        setLogoUploadStatus('error');
+      }
+    } catch (error) {
+      console.error("Logo upload error:", error);
+      setLogoUploadStatus('error');
+    } finally {
+      setUploadingLogo(false);
+      setTimeout(() => setLogoUploadStatus(null), 5000);
     }
   };
 
@@ -681,6 +722,64 @@ export function AdminPanel() {
           </form>
         </section>
       )}
+
+      <section className="card-polish !border-t-emerald-600">
+        <div className="flex items-center gap-2 mb-6">
+          <Upload size={18} className="text-emerald-600" />
+          <h2 className="text-lg font-bold text-slate-gray uppercase tracking-widest">Logo del Lago / Associazione</h2>
+        </div>
+        
+        <div className="p-6 bg-off-white/50 rounded-xl border border-slate-100 flex flex-col sm:flex-row items-center gap-6">
+          <div className="w-24 h-24 sm:w-28 sm:h-28 bg-white rounded-2xl flex items-center justify-center p-2 shadow-md border border-slate-200 overflow-hidden shrink-0">
+            <img 
+              src={`/logo_lago.png?v=${logoTimestamp}`} 
+              alt="Logo Attuale" 
+              className="max-h-full max-w-full object-contain"
+              onError={(e) => {
+                (e.target as HTMLElement).style.display = 'none';
+              }}
+            />
+          </div>
+
+          <div className="flex-1 space-y-3 text-center sm:text-left">
+            <div>
+              <p className="text-xs font-bold text-slate-700 uppercase tracking-wider">Logo Ufficiale App & PWA</p>
+              <p className="text-[11px] text-slate-500 font-medium">Carica una nuova immagine (PNG, JPG, WebP). Verrà applicata immediatamente nel menu, nella schermata di login e come icona dell'App installata (PWA).</p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 justify-center sm:justify-start">
+              <input 
+                type="file" 
+                accept="image/png,image/jpeg,image/webp"
+                id="logo-upload-input"
+                className="hidden"
+                onChange={handleLogoUpload}
+              />
+              <label 
+                htmlFor="logo-upload-input"
+                className={cn(
+                  "flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider transition-all cursor-pointer shadow-sm border",
+                  uploadingLogo 
+                    ? "bg-slate-100 text-slate-400 border-slate-200" 
+                    : "bg-emerald-600 text-white hover:bg-emerald-700 border-emerald-600 active:scale-95"
+                )}
+              >
+                <Upload size={16} />
+                {uploadingLogo ? 'Caricamento...' : 'Carica Nuovo Logo'}
+              </label>
+
+              {logoUploadStatus && (
+                <span className={cn(
+                  "text-xs font-bold uppercase py-1 px-3 rounded-full shadow-xs",
+                  logoUploadStatus === 'success' ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"
+                )}>
+                  {logoUploadStatus === 'success' ? 'Logo aggiornato con successo!' : 'Errore durante il caricamento'}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </section>
 
       <section className="card-polish !border-t-blue-500">
         <div className="flex items-center gap-2 mb-6">
