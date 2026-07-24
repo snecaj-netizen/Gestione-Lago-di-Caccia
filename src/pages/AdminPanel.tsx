@@ -730,11 +730,11 @@ export function AdminPanel() {
         </div>
         
         <div className="p-6 bg-off-white/50 rounded-xl border border-slate-100 flex flex-col sm:flex-row items-center gap-6">
-          <div className="w-24 h-24 sm:w-28 sm:h-28 bg-white rounded-2xl flex items-center justify-center p-2 shadow-md border border-slate-200 overflow-hidden shrink-0">
+          <div className="w-24 h-24 sm:w-28 sm:h-28 flex items-center justify-center p-1 shrink-0">
             <img 
               src={`/logo_lago.png?v=${logoTimestamp}`} 
               alt="Logo Attuale" 
-              className="max-h-full max-w-full object-contain"
+              className="max-h-full max-w-full object-contain mix-blend-multiply"
               onError={(e) => {
                 (e.target as HTMLElement).style.display = 'none';
               }}
