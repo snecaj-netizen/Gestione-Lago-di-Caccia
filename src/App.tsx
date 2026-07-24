@@ -150,7 +150,7 @@ function Sidebar({
       )}
 
       <aside className={cn(
-        "fixed inset-y-0 left-0 z-40 w-64 bg-lake-green text-white flex flex-col shadow-xl transform transition-transform duration-300 lg:translate-x-0 overflow-hidden",
+        "fixed inset-y-0 left-0 z-40 w-72 lg:w-64 bg-lake-green text-white flex flex-col shadow-xl transform transition-transform duration-300 lg:translate-x-0 overflow-hidden",
         isOpen ? "translate-x-0" : "-translate-x-full"
       )}>
         <div className="flex flex-col h-full relative overflow-y-auto scrollbar-none">
@@ -159,31 +159,31 @@ function Sidebar({
             onClick={() => setIsOpen(false)}
             className="lg:hidden absolute top-3 right-3 p-1.5 text-white/70 hover:text-white transition-colors z-50 active:scale-95 transition-all"
           >
-            <X size={24} />
+            <X size={26} />
           </button>
 
-          <div className="flex flex-col items-center pt-4 lg:pt-4 mb-2 px-4 shrink-0">
+          <div className="flex flex-col items-center pt-4 lg:pt-4 mb-3 px-4 shrink-0">
             <Link to="/" onClick={() => setIsOpen(false)} className="text-center group">
-              <h2 className="text-base font-serif font-bold text-white tracking-widest uppercase group-hover:text-accent-gold transition-colors">Lago di Caccia</h2>
+              <h2 className="text-lg font-serif font-bold text-white tracking-widest uppercase group-hover:text-accent-gold transition-colors">Lago di Caccia</h2>
             </Link>
             
             {/* Mobile Font Size controls */}
-            <div className="mt-2 flex items-center bg-white/10 rounded-lg p-0.5 gap-0.5 shadow-inner border border-white/15">
+            <div className="mt-2.5 flex items-center bg-white/10 rounded-lg p-0.5 gap-0.5 shadow-inner border border-white/15">
               <button 
                 onClick={decreaseFontSize}
                 disabled={scaleIndex === 0}
-                className="p-1 px-2.5 rounded hover:bg-white/10 text-white disabled:opacity-30 disabled:hover:bg-transparent transition-all text-xs font-black flex items-center justify-center min-w-[26px] h-[26px] cursor-pointer disabled:cursor-not-allowed active:scale-90"
+                className="p-1 px-3 rounded hover:bg-white/10 text-white disabled:opacity-30 disabled:hover:bg-transparent transition-all text-xs font-black flex items-center justify-center min-w-[28px] h-[28px] cursor-pointer disabled:cursor-not-allowed active:scale-90"
                 title="Riduci testo (A-)"
               >
                 A-
               </button>
-              <span className="text-[10px] font-black text-accent-gold px-2 uppercase select-none min-w-[32px] text-center">
+              <span className="text-[11px] font-black text-accent-gold px-2.5 uppercase select-none min-w-[36px] text-center">
                 {fontScale}%
               </span>
               <button 
                 onClick={increaseFontSize}
                 disabled={scaleIndex === FONT_SCALES.length - 1}
-                className="p-1 px-2.5 rounded hover:bg-white/10 text-white disabled:opacity-30 disabled:hover:bg-transparent transition-all text-xs font-black flex items-center justify-center min-w-[26px] h-[26px] cursor-pointer disabled:cursor-not-allowed active:scale-90"
+                className="p-1 px-3 rounded hover:bg-white/10 text-white disabled:opacity-30 disabled:hover:bg-transparent transition-all text-xs font-black flex items-center justify-center min-w-[28px] h-[28px] cursor-pointer disabled:cursor-not-allowed active:scale-90"
                 title="Aumenta testo (A+)"
               >
                 A+
@@ -191,53 +191,54 @@ function Sidebar({
             </div>
           </div>
           <nav className="flex-1">
-            <ul>
+            <ul className="space-y-0.5">
               {navItems.map((item) => (
                 <Link
                   key={item.path}
                   to={item.path}
                   onClick={() => setIsOpen(false)}
                   className={cn(
-                    "flex items-center gap-3 px-5 py-2.5 transition-all duration-200 border-l-4 font-medium text-sm",
+                    "flex items-center gap-3.5 px-5 py-3 transition-all duration-200 border-l-4 font-semibold text-base sm:text-base",
                     location.pathname === item.path 
-                      ? "bg-white/10 border-accent-gold text-white font-semibold" 
-                      : "border-transparent text-white/70 hover:bg-white/5 hover:text-white"
+                      ? "bg-white/15 border-accent-gold text-white font-bold shadow-xs" 
+                      : "border-transparent text-white/80 hover:bg-white/10 hover:text-white"
                   )}
                 >
-                  <item.icon size={18} className={cn(
-                    location.pathname === item.path ? "text-accent-gold" : "opacity-70"
+                  <item.icon size={22} className={cn(
+                    "shrink-0",
+                    location.pathname === item.path ? "text-accent-gold" : "opacity-80"
                   )} />
-                  {item.name}
+                  <span className="truncate">{item.name}</span>
                 </Link>
               ))}
             </ul>
           </nav>
 
-          <div className="mt-auto p-4 border-t border-white/10 space-y-2.5 shrink-0">
+          <div className="mt-auto p-4 border-t border-white/10 space-y-3 shrink-0">
             {deferredPrompt ? (
               <button 
                 onClick={handleInstallClick}
-                className="flex items-center gap-2.5 w-full text-xs font-bold text-accent-gold hover:text-white transition-colors bg-white/5 py-2.5 px-3 rounded-lg border border-accent-gold/20"
+                className="flex items-center gap-2.5 w-full text-sm font-bold text-accent-gold hover:text-white transition-colors bg-white/10 py-3 px-3.5 rounded-xl border border-accent-gold/30 active:scale-98"
               >
-                <Download size={16} />
+                <Download size={18} />
                 Installa App (PWA)
               </button>
             ) : (
-              <div className="px-3 py-1.5 bg-white/5 rounded-lg border border-white/10">
-                <p className="text-[10px] text-white/50 leading-tight">
+              <div className="px-3 py-2 bg-white/5 rounded-lg border border-white/10">
+                <p className="text-xs text-white/60 leading-tight">
                   Per installare: usa "Aggiungi a home" dal menu del browser.
                 </p>
               </div>
             )}
             <button 
               onClick={handleLogout}
-              className="flex items-center gap-2.5 w-full text-xs font-semibold text-white/60 hover:text-rose-400 transition-colors py-1"
+              className="flex items-center gap-2.5 w-full text-sm font-semibold text-white/70 hover:text-rose-300 transition-colors py-1.5 active:scale-98"
             >
-              <LogOut size={16} />
+              <LogOut size={18} />
               Esci dal portale
             </button>
             <div className="pt-1 text-center">
-              <p className="text-[9px] font-medium text-white/30 uppercase tracking-widest">
+              <p className="text-[10px] font-medium text-white/40 uppercase tracking-widest">
                 © 2026 Stefano Necaj
               </p>
             </div>
