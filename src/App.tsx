@@ -150,41 +150,40 @@ function Sidebar({
       )}
 
       <aside className={cn(
-        "fixed inset-y-0 left-0 z-40 w-64 bg-lake-green text-white flex flex-col shadow-xl transform transition-transform duration-300 lg:translate-x-0",
+        "fixed inset-y-0 left-0 z-40 w-64 bg-lake-green text-white flex flex-col shadow-xl transform transition-transform duration-300 lg:translate-x-0 overflow-hidden",
         isOpen ? "translate-x-0" : "-translate-x-full"
       )}>
-        <div className="flex flex-col h-full relative">
+        <div className="flex flex-col h-full relative overflow-y-auto scrollbar-none">
           {/* Mobile Close Button */}
           <button 
             onClick={() => setIsOpen(false)}
-            className="lg:hidden absolute top-4 right-4 p-2 text-white/70 hover:text-white transition-colors z-50 active:scale-95 transition-all"
+            className="lg:hidden absolute top-3 right-3 p-1.5 text-white/70 hover:text-white transition-colors z-50 active:scale-95 transition-all"
           >
-            <X size={28} />
+            <X size={24} />
           </button>
 
-          <div className="flex flex-col items-center pt-10 lg:pt-6 mb-4 px-4">
+          <div className="flex flex-col items-center pt-4 lg:pt-4 mb-2 px-4 shrink-0">
             <Link to="/" onClick={() => setIsOpen(false)} className="text-center group">
-              <h2 className="text-lg font-serif font-bold text-white tracking-wide group-hover:text-accent-gold transition-colors">Gestione Lago</h2>
-              <p className="text-[10px] font-black text-white/50 uppercase tracking-[0.25em]">Lago di Caccia</p>
+              <h2 className="text-base font-serif font-bold text-white tracking-widest uppercase group-hover:text-accent-gold transition-colors">Lago di Caccia</h2>
             </Link>
             
             {/* Mobile Font Size controls */}
-            <div className="mt-3 flex items-center bg-white/10 rounded-lg p-0.5 gap-0.5 shadow-inner border border-white/15">
+            <div className="mt-2 flex items-center bg-white/10 rounded-lg p-0.5 gap-0.5 shadow-inner border border-white/15">
               <button 
                 onClick={decreaseFontSize}
                 disabled={scaleIndex === 0}
-                className="p-1 px-3 rounded hover:bg-white/10 text-white disabled:opacity-30 disabled:hover:bg-transparent transition-all text-xs font-black flex items-center justify-center min-w-[28px] h-[28px] cursor-pointer disabled:cursor-not-allowed active:scale-90"
+                className="p-1 px-2.5 rounded hover:bg-white/10 text-white disabled:opacity-30 disabled:hover:bg-transparent transition-all text-xs font-black flex items-center justify-center min-w-[26px] h-[26px] cursor-pointer disabled:cursor-not-allowed active:scale-90"
                 title="Riduci testo (A-)"
               >
                 A-
               </button>
-              <span className="text-[10px] font-black text-accent-gold px-2.5 uppercase select-none min-w-[36px] text-center">
+              <span className="text-[10px] font-black text-accent-gold px-2 uppercase select-none min-w-[32px] text-center">
                 {fontScale}%
               </span>
               <button 
                 onClick={increaseFontSize}
                 disabled={scaleIndex === FONT_SCALES.length - 1}
-                className="p-1 px-3 rounded hover:bg-white/10 text-white disabled:opacity-30 disabled:hover:bg-transparent transition-all text-xs font-black flex items-center justify-center min-w-[28px] h-[28px] cursor-pointer disabled:cursor-not-allowed active:scale-90"
+                className="p-1 px-2.5 rounded hover:bg-white/10 text-white disabled:opacity-30 disabled:hover:bg-transparent transition-all text-xs font-black flex items-center justify-center min-w-[26px] h-[26px] cursor-pointer disabled:cursor-not-allowed active:scale-90"
                 title="Aumenta testo (A+)"
               >
                 A+
@@ -199,13 +198,13 @@ function Sidebar({
                   to={item.path}
                   onClick={() => setIsOpen(false)}
                   className={cn(
-                    "flex items-center gap-3 px-6 py-4 transition-all duration-200 border-l-4 font-medium",
+                    "flex items-center gap-3 px-5 py-2.5 transition-all duration-200 border-l-4 font-medium text-sm",
                     location.pathname === item.path 
-                      ? "bg-white/10 border-accent-gold text-white" 
+                      ? "bg-white/10 border-accent-gold text-white font-semibold" 
                       : "border-transparent text-white/70 hover:bg-white/5 hover:text-white"
                   )}
                 >
-                  <item.icon size={20} className={cn(
+                  <item.icon size={18} className={cn(
                     location.pathname === item.path ? "text-accent-gold" : "opacity-70"
                   )} />
                   {item.name}
@@ -214,17 +213,17 @@ function Sidebar({
             </ul>
           </nav>
 
-          <div className="mt-auto p-6 border-t border-white/10 space-y-4">
+          <div className="mt-auto p-4 border-t border-white/10 space-y-2.5 shrink-0">
             {deferredPrompt ? (
               <button 
                 onClick={handleInstallClick}
-                className="flex items-center gap-3 w-full text-xs font-bold text-accent-gold hover:text-white transition-colors bg-white/5 py-3 px-4 rounded-lg border border-accent-gold/20"
+                className="flex items-center gap-2.5 w-full text-xs font-bold text-accent-gold hover:text-white transition-colors bg-white/5 py-2.5 px-3 rounded-lg border border-accent-gold/20"
               >
-                <Download size={18} />
+                <Download size={16} />
                 Installa App (PWA)
               </button>
             ) : (
-              <div className="px-4 py-2 bg-white/5 rounded-lg border border-white/10">
+              <div className="px-3 py-1.5 bg-white/5 rounded-lg border border-white/10">
                 <p className="text-[10px] text-white/50 leading-tight">
                   Per installare: usa "Aggiungi a home" dal menu del browser.
                 </p>
@@ -232,12 +231,12 @@ function Sidebar({
             )}
             <button 
               onClick={handleLogout}
-              className="flex items-center gap-3 w-full text-sm font-semibold text-white/60 hover:text-rose-400 transition-colors"
+              className="flex items-center gap-2.5 w-full text-xs font-semibold text-white/60 hover:text-rose-400 transition-colors py-1"
             >
-              <LogOut size={18} />
+              <LogOut size={16} />
               Esci dal portale
             </button>
-            <div className="pt-2 text-center">
+            <div className="pt-1 text-center">
               <p className="text-[9px] font-medium text-white/30 uppercase tracking-widest">
                 © 2026 Stefano Necaj
               </p>
