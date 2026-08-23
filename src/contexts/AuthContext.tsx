@@ -4,13 +4,12 @@ import {
   signInWithPopup, 
   GoogleAuthProvider, 
   signOut, 
-  User,
-  signInWithEmailAndPassword 
+  User 
 } from 'firebase/auth';
 import { auth, db } from '../firebase';
-import { ensureUserProfile } from '../services';
+import { ensureUserProfile, getLocalCollection, saveLocalCollection, subscribeMockCollection } from '../services';
 import { UserProfile } from '../types';
-import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { safeLocalStorage } from '../lib/safeLocalStorage';
 
 interface AuthContextType {
@@ -29,70 +28,102 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Synchronize profile in real-time when user is logged in
+  useEffect(() => {
+    if (!user) return;
+
+    if (!db) {
+      const unsub = subscribeMockCollection('users', (list) => {
+        const found = list.find((u: any) => u.uid === user.uid || (user.email && (u.email === user.email || u.username === user.email)));
+        if (found) {
+          setProfile(found);
+        }
+      });
+      return () => unsub();
+    } else {
+      const userDocRef = doc(db, 'users', user.uid);
+      const unsub = onSnapshot(userDocRef, (snap) => {
+        if (snap.exists()) {
+          setProfile({ ...snap.data(), uid: snap.id } as UserProfile);
+        }
+      }, (err) => {
+        console.warn("Firestore profile subscription error:", err);
+      });
+      return () => unsub();
+    }
+  }, [user?.uid, user?.email]);
+
   useEffect(() => {
     let mounted = true;
     let isFetchingCustomProfile = false;
 
-    // Check local storage FIRST for immediate session recovery (useful for the custom admin login)
+    // Check local storage FIRST for immediate session recovery
     const persistedUser = safeLocalStorage.getItem('lake_app_user');
     if (persistedUser) {
       try {
         const userData = JSON.parse(persistedUser);
-        setUser(userData);
-        
-        // Handle hardcoded admin profile immediately
-        if (userData.uid === 'admin-id' || userData.email === 'snecaj@gmail.com') {
-          const adminProfile: UserProfile = {
-            uid: userData.uid,
-            email: 'snecaj@gmail.com',
-            displayName: 'Stefano',
-            role: 'admin',
-            isActive: true,
-            username: 'snecaj@gmail.com',
-            assignedDaysOfWeek: [],
-            bio: 'Amministratore del sistema',
-            location: 'Lago',
-            photoURL: '',
-            createdAt: new Date().toISOString()
-          };
-          setProfile(adminProfile);
-          setLoading(false);
+        if (mounted) setUser(userData);
+
+        if (!db) {
+          const localUsers = getLocalCollection('users');
+          let found = localUsers.find((u: any) => u.uid === userData.uid || (userData.email && (u.email === userData.email || u.username === userData.email)));
+          
+          if (!found && (userData.uid === 'admin-id' || userData.email === 'snecaj@gmail.com')) {
+            found = {
+              uid: 'admin-id',
+              email: 'snecaj@gmail.com',
+              displayName: 'Stefano',
+              username: 'snecaj@gmail.com',
+              password: 'admin',
+              role: 'admin',
+              isActive: true,
+              assignedDaysOfWeek: [0, 3],
+              seasonalQuota: 500
+            };
+            localUsers.push(found);
+            saveLocalCollection('users', localUsers);
+          }
+
+          if (found && mounted) {
+            setProfile(found);
+          }
+          if (mounted) setLoading(false);
         } else {
           isFetchingCustomProfile = true;
-          // Fetch real profile from Firestore for other credential users
-          if (!db) {
-            const localUsers = JSON.parse(safeLocalStorage.getItem('lake_db_users') || '[]');
-            const found = localUsers.find((u: any) => u.uid === userData.uid);
-            if (found && mounted) {
-              setProfile(found);
+          const docRef = doc(db, 'users', userData.uid);
+          getDoc(docRef).then(snap => {
+            if (mounted && snap.exists()) {
+              setProfile({ ...snap.data(), uid: snap.id } as UserProfile);
+            } else if (mounted && (userData.uid === 'admin-id' || userData.email === 'snecaj@gmail.com')) {
+              setProfile({
+                uid: userData.uid || 'admin-id',
+                email: 'snecaj@gmail.com',
+                displayName: 'Stefano',
+                username: 'snecaj@gmail.com',
+                password: 'admin',
+                role: 'admin',
+                isActive: true,
+                assignedDaysOfWeek: [],
+                seasonalQuota: 0
+              });
             }
-            isFetchingCustomProfile = false;
-            setLoading(false);
-          } else {
-            const docRef = doc(db, 'users', userData.uid);
-            getDoc(docRef).then(snap => {
-              if (mounted && snap.exists()) {
-                setProfile(snap.data() as UserProfile);
-              }
-              if (mounted) {
-                isFetchingCustomProfile = false;
-                setLoading(false);
-              }
-            }).catch(err => {
-              console.error("Error fetching persisted profile", err);
-              if (mounted) {
-                isFetchingCustomProfile = false;
-                setLoading(false);
-              }
-            });
-          }
+            if (mounted) {
+              isFetchingCustomProfile = false;
+              setLoading(false);
+            }
+          }).catch(err => {
+            console.error("Error fetching persisted profile", err);
+            if (mounted) {
+              isFetchingCustomProfile = false;
+              setLoading(false);
+            }
+          });
         }
       } catch (e) {
         console.error("Error parsing persisted user", e);
-        setLoading(false);
+        if (mounted) setLoading(false);
       }
     } else {
-      // If no persisted user and we have no firebase auth, set loading to false
       if (!auth && mounted) {
         setLoading(false);
       }
@@ -102,13 +133,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!mounted) return;
       
       if (firebaseUser) {
-        // Real Firebase Auth user (Google, etc)
         setUser(firebaseUser);
         const userProfile = await ensureUserProfile(firebaseUser);
         
         if (mounted) {
           setProfile(userProfile);
-          // Persist user for faster recovery on refresh
           safeLocalStorage.setItem('lake_app_user', JSON.stringify({ 
             uid: firebaseUser.uid, 
             email: firebaseUser.email,
@@ -118,7 +147,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setLoading(false);
         }
       } else {
-        // No Firebase user, check if we still have the local storage one (custom credentials or recently logged out)
         const checkPersisted = safeLocalStorage.getItem('lake_app_user');
         if (!checkPersisted) {
           if (mounted) {
@@ -127,9 +155,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setLoading(false);
           }
         } else {
-          // If we have a persisted user but Firebase says null, 
-          // we might be in the middle of a refresh for a custom credential user.
-          // Don't set user to null yet unless they are not currently fetching.
           if (mounted && !isFetchingCustomProfile) {
             setLoading(false);
           }
@@ -155,57 +180,99 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoading(true);
     safeLocalStorage.removeItem('lake_explicit_logout');
     try {
-      // Hardcoded fallback for admin login since Firestore might not be configured
-      if (username === 'snecaj@gmail.com' && password === 'admin') {
-        const adminProfile: UserProfile = {
-          uid: 'admin-id',
-          email: 'snecaj@gmail.com',
-          displayName: 'Stefano',
-          username: 'snecaj@gmail.com',
-          role: 'admin',
-          isActive: true,
-          assignedDaysOfWeek: [],
-          bio: 'Amministratore del sistema',
-          location: 'Lago',
-          photoURL: '',
-          createdAt: new Date().toISOString()
-        };
-        setUser({ uid: adminProfile.uid, email: adminProfile.email } as User);
-        setProfile(adminProfile);
-        safeLocalStorage.setItem('lake_app_user', JSON.stringify({ uid: adminProfile.uid, email: adminProfile.email }));
-        return;
-      }
+      const cleanUser = username.trim().toLowerCase();
 
       if (!db) {
-        const localUsers = JSON.parse(safeLocalStorage.getItem('lake_db_users') || safeLocalStorage.getItem('lake_users') || '[]');
-        const found = localUsers.find((u: any) => u.username === username && u.password === password);
-        if (!found) {
-          throw new Error('Credenziali non valide');
+        const localUsers = getLocalCollection('users');
+        const found = localUsers.find((u: any) => 
+          ((u.username && u.username.toLowerCase() === cleanUser) || 
+           (u.email && u.email.toLowerCase() === cleanUser)) && 
+          u.password === password
+        );
+
+        if (found) {
+          setUser({ uid: found.uid, email: found.email, displayName: found.displayName } as User);
+          setProfile(found);
+          safeLocalStorage.setItem('lake_app_user', JSON.stringify({ uid: found.uid, email: found.email, displayName: found.displayName }));
+          return;
         }
-        setUser({ uid: found.uid, email: found.email } as User);
-        setProfile(found);
-        safeLocalStorage.setItem('lake_app_user', JSON.stringify({ uid: found.uid, email: found.email }));
-        return;
+
+        // First-run admin fallback if no database user existed yet
+        if (cleanUser === 'snecaj@gmail.com' && password === 'admin') {
+          const adminProfile: UserProfile = {
+            uid: 'admin-id',
+            email: 'snecaj@gmail.com',
+            displayName: 'Stefano',
+            username: 'snecaj@gmail.com',
+            password: 'admin',
+            role: 'admin',
+            isActive: true,
+            assignedDaysOfWeek: [0, 3],
+            seasonalQuota: 500
+          };
+          localUsers.push(adminProfile);
+          saveLocalCollection('users', localUsers);
+          setUser({ uid: adminProfile.uid, email: adminProfile.email } as User);
+          setProfile(adminProfile);
+          safeLocalStorage.setItem('lake_app_user', JSON.stringify({ uid: adminProfile.uid, email: adminProfile.email }));
+          return;
+        }
+
+        throw new Error('Credenziali non valide');
       }
 
       // Find the profile with this username/password in Firestore
       const usersRef = collection(db, 'users');
-      const q = query(usersRef, where('username', '==', username), where('password', '==', password));
-      const querySnapshot = await getDocs(q);
+      let q = query(usersRef, where('username', '==', username.trim()), where('password', '==', password));
+      let querySnapshot = await getDocs(q);
       
       if (querySnapshot.empty) {
-        throw new Error('Credenziali non valide');
+        // Try searching by email
+        q = query(usersRef, where('email', '==', username.trim()), where('password', '==', password));
+        querySnapshot = await getDocs(q);
       }
 
-      const userProfile = querySnapshot.docs[0].data() as UserProfile;
-      
-      setUser({ uid: userProfile.uid, email: userProfile.email } as User);
-      setProfile(userProfile);
-      
-      safeLocalStorage.setItem('lake_app_user', JSON.stringify({
-        uid: userProfile.uid,
-        email: userProfile.email
-      }));
+      if (!querySnapshot.empty) {
+        const docSnap = querySnapshot.docs[0];
+        const userProfile = { ...docSnap.data(), uid: docSnap.id } as UserProfile;
+        
+        setUser({ uid: userProfile.uid, email: userProfile.email, displayName: userProfile.displayName } as User);
+        setProfile(userProfile);
+        
+        safeLocalStorage.setItem('lake_app_user', JSON.stringify({
+          uid: userProfile.uid,
+          email: userProfile.email,
+          displayName: userProfile.displayName
+        }));
+        return;
+      }
+
+      // Fallback for initial admin bootstrap in Firestore
+      if (cleanUser === 'snecaj@gmail.com' && password === 'admin') {
+        const checkAdminQ = query(usersRef, where('email', '==', 'snecaj@gmail.com'));
+        const checkAdminSnap = await getDocs(checkAdminQ);
+        if (checkAdminSnap.empty) {
+          const newAdminRef = doc(usersRef);
+          const adminProfile: UserProfile = {
+            uid: newAdminRef.id,
+            email: 'snecaj@gmail.com',
+            username: 'snecaj@gmail.com',
+            password: 'admin',
+            displayName: 'Stefano',
+            role: 'admin',
+            isActive: true,
+            assignedDaysOfWeek: [],
+            seasonalQuota: 0
+          };
+          await ensureUserProfile(adminProfile);
+          setUser({ uid: adminProfile.uid, email: adminProfile.email } as User);
+          setProfile(adminProfile);
+          safeLocalStorage.setItem('lake_app_user', JSON.stringify({ uid: adminProfile.uid, email: adminProfile.email }));
+          return;
+        }
+      }
+
+      throw new Error('Credenziali non valide');
     } catch (error) {
       console.error("Login Error:", error);
       throw error;
@@ -225,7 +292,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const finalProfile = profile && (profile.email === 'snecaj@gmail.com' || profile.uid === 'admin-id')
-    ? { ...profile, displayName: 'Stefano' }
+    ? { ...profile, displayName: profile.displayName || 'Stefano' }
     : profile;
 
   return (

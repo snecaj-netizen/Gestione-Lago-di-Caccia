@@ -7,8 +7,9 @@ import {
   subscribeToSettings 
 } from '../services';
 import { Transaction, UserProfile, LakeSettings } from '../types';
-import { User, Mail, Shield, CheckCircle2, AlertCircle, Lock, Wallet, Target, TrendingUp } from 'lucide-react';
+import { User, Mail, Shield, CheckCircle2, AlertCircle, Lock, Wallet, Target, TrendingUp, Eye, EyeOff } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { safeLocalStorage } from '../lib/safeLocalStorage';
 
 export function Profile() {
   const { profile } = useAuth();
@@ -16,7 +17,18 @@ export function Profile() {
   const [email, setEmail] = useState(profile?.email || '');
   const [username, setUsername] = useState(profile?.username || '');
   const [password, setPassword] = useState(profile?.password || '');
+  const [showPassword, setShowPassword] = useState(false);
   const [status, setStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
+
+  // Synchronize fields whenever profile is loaded or changed
+  useEffect(() => {
+    if (profile) {
+      setDisplayName(profile.displayName || '');
+      setEmail(profile.email || '');
+      setUsername(profile.username || '');
+      setPassword(profile.password || '');
+    }
+  }, [profile]);
 
   // Quota Data
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -78,9 +90,17 @@ export function Profile() {
         username: username.trim(),
         password: password
       });
+
+      // Update remembered credentials if active
+      if (safeLocalStorage.getItem('lake_remember_me') === 'true') {
+        if (username.trim()) safeLocalStorage.setItem('lake_username', username.trim());
+        if (password) safeLocalStorage.setItem('lake_password', password);
+      }
+
       setStatus('success');
       setTimeout(() => setStatus('idle'), 3000);
     } catch (error) {
+      console.error("Profile update error:", error);
       setStatus('error');
     }
   };
@@ -215,13 +235,23 @@ export function Profile() {
               <label className="text-[0.6rem] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
                 <Lock size={10} /> Password
               </label>
-              <input 
-                type="text"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-off-white border border-slate-200 rounded px-3 py-2 text-sm font-semibold text-slate-900 outline-none focus:border-lake-green transition-all"
-                placeholder="La tua password"
-              />
+              <div className="relative">
+                <input 
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full bg-off-white border border-slate-200 rounded px-3 py-2 pr-10 text-sm font-semibold text-slate-900 outline-none focus:border-lake-green transition-all"
+                  placeholder="La tua password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-lake-green p-1 transition-colors"
+                  title={showPassword ? "Nascondi password" : "Mostra password"}
+                >
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
               <p className="text-[9px] text-slate-400 font-medium">Usa una password sicura.</p>
             </div>
           </div>

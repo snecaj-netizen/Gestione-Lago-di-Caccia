@@ -88,30 +88,26 @@ if (typeof window !== 'undefined') {
         isActive: true,
         assignedDaysOfWeek: [0, 3],
         seasonalQuota: 500
-      },
-      {
-        uid: 'socio-1',
-        email: 'mario.rossi@example.com',
-        username: 'mario.rossi',
-        password: 'user1',
-        displayName: 'Mario Rossi',
-        role: 'socio',
-        isActive: true,
-        assignedDaysOfWeek: [1, 4],
-        seasonalQuota: 350
-      },
-      {
-        uid: 'socio-2',
-        email: 'luigi.verdi@example.com',
-        username: 'luigi.verdi',
-        password: 'user2',
-        displayName: 'Luigi Verdi',
-        role: 'quotista',
-        isActive: true,
-        assignedDaysOfWeek: [2, 5],
-        seasonalQuota: 200
       }
     ]));
+  } else {
+    // Purge test users if present in existing storage
+    try {
+      const existingUsers: any[] = JSON.parse(safeLocalStorage.getItem('lake_db_users') || '[]');
+      const filtered = existingUsers.filter(u => 
+        u.uid !== 'socio-1' && 
+        u.uid !== 'socio-2' && 
+        u.username !== 'mario.rossi' && 
+        u.username !== 'luigi.verdi' &&
+        u.email !== 'mario.rossi@example.com' &&
+        u.email !== 'luigi.verdi@example.com'
+      );
+      if (filtered.length !== existingUsers.length) {
+        safeLocalStorage.setItem('lake_db_users', JSON.stringify(filtered));
+      }
+    } catch (e) {
+      console.error(e);
+    }
   }
   if (!safeLocalStorage.getItem('lake_db_hunting_limits')) {
     safeLocalStorage.setItem('lake_db_hunting_limits', JSON.stringify([
@@ -183,30 +179,14 @@ if (typeof window !== 'undefined') {
   }
   if (!safeLocalStorage.getItem('lake_db_transactions')) {
     safeLocalStorage.setItem('lake_db_transactions', JSON.stringify([
-      { id: 'tx-1', date: '2026-05-15', amount: 500, type: 'quota', category: 'Quota Stagionale', description: 'Acconto Quota Stagionale', payerUid: 'socio-1', payerName: 'Mario Rossi' },
-      { id: 'tx-2', date: '2026-05-20', amount: 350, type: 'quota', category: 'Quota Stagionale', description: 'Saldatura Quota', payerUid: 'socio-2', payerName: 'Luigi Verdi' },
       { id: 'tx-3', date: '2026-06-01', amount: -3500, type: 'spesa', category: 'Affitto', description: 'Pagamento Affitto Annuale Lago', payerUid: 'admin-id', payerName: 'Stefano' }
     ]));
   }
   if (!safeLocalStorage.getItem('lake_db_harvests')) {
-    safeLocalStorage.setItem('lake_db_harvests', JSON.stringify([
-      { id: 'h-1', date: '2026-01-10', hunterUid: 'socio-1', hunterName: 'Mario Rossi', species: 'Germano Reale', count: 3, notes: 'Giornata ventosa, ottima cura.' },
-      { id: 'h-2', date: '2026-01-12', hunterUid: 'socio-2', hunterName: 'Luigi Verdi', species: 'Alzavola', count: 4, notes: 'Passo eccezionale all\'alba.' }
-    ]));
+    safeLocalStorage.setItem('lake_db_harvests', JSON.stringify([]));
   }
   if (!safeLocalStorage.getItem('lake_db_tesserino_entries')) {
-    safeLocalStorage.setItem('lake_db_tesserino_entries', JSON.stringify([
-      {
-        id: 'te-1',
-        date: '2026-01-10',
-        hunterUid: 'socio-1',
-        hunterName: 'Mario Rossi',
-        species: 'Germano Reale',
-        count: 3,
-        notes: 'Annotato regolarmente sul tesserino regionale cartaceo.',
-        createdAt: new Date().toISOString()
-      }
-    ]));
+    safeLocalStorage.setItem('lake_db_tesserino_entries', JSON.stringify([]));
   }
   if (!safeLocalStorage.getItem('lake_db_regulation_summary')) {
     safeLocalStorage.setItem('lake_db_regulation_summary', JSON.stringify([{
@@ -247,7 +227,7 @@ const addLocalDoc = (col: string, data: any) => {
 
 const updateLocalDoc = (col: string, id: string, updates: any) => {
   const list = getLocalCollection(col);
-  const idx = list.findIndex(item => item.id === id);
+  const idx = list.findIndex(item => item.id === id || item.uid === id);
   if (idx !== -1) {
     list[idx] = { ...list[idx], ...updates };
     saveLocalCollection(col, list);
@@ -256,14 +236,14 @@ const updateLocalDoc = (col: string, id: string, updates: any) => {
 
 const deleteLocalDoc = (col: string, id: string) => {
   const list = getLocalCollection(col);
-  const filtered = list.filter(item => item.id !== id);
+  const filtered = list.filter(item => item.id !== id && item.uid !== id);
   saveLocalCollection(col, filtered);
 };
 
 const setLocalDoc = (col: string, id: string, data: any) => {
   const list = getLocalCollection(col);
-  const idx = list.findIndex(item => item.id === id);
-  const docData = { ...data, id };
+  const idx = list.findIndex(item => item.id === id || item.uid === id);
+  const docData = { ...data, id, uid: data.uid || id };
   if (idx !== -1) {
     list[idx] = docData;
   } else {
@@ -497,8 +477,8 @@ export const ensureUserProfile = async (user: any): Promise<UserProfile> => {
         let changed = false;
         if (!found.isActive) { found.isActive = true; changed = true; }
         if (found.role !== 'admin') { found.role = 'admin'; changed = true; }
-        if (found.username !== 'snecaj@gmail.com') { found.username = 'snecaj@gmail.com'; changed = true; }
-        if (found.password !== 'admin') { found.password = 'admin'; changed = true; }
+        if (!found.username) { found.username = 'snecaj@gmail.com'; changed = true; }
+        if (!found.password) { found.password = 'admin'; changed = true; }
         if (changed) {
           saveLocalCollection('users', list);
         }
@@ -536,9 +516,9 @@ export const ensureUserProfile = async (user: any): Promise<UserProfile> => {
       
       if (!data.isActive) { updates.isActive = true; needsUpdate = true; }
       if (data.role !== 'admin') { updates.role = 'admin'; needsUpdate = true; }
-      if (data.username !== 'snecaj@gmail.com') { updates.username = 'snecaj@gmail.com'; needsUpdate = true; }
-      if (data.password !== 'admin') { updates.password = 'admin'; needsUpdate = true; }
- 
+      if (!data.username) { updates.username = 'snecaj@gmail.com'; needsUpdate = true; }
+      if (!data.password) { updates.password = 'admin'; needsUpdate = true; }
+
       if (needsUpdate) {
         await updateDoc(userDocRef, cleanData(updates));
         data = { ...data, ...updates };
@@ -611,9 +591,18 @@ export const deleteUser = async (uid: string) => {
 
 export const seedUsers = async () => {
   if (!db) {
-    const list = getLocalCollection('users');
+    let list = getLocalCollection('users');
+    // Remove test accounts
+    list = list.filter(u => 
+      u.uid !== 'socio-1' && 
+      u.uid !== 'socio-2' && 
+      u.username !== 'mario.rossi' && 
+      u.username !== 'luigi.verdi' &&
+      u.email !== 'mario.rossi@example.com' &&
+      u.email !== 'luigi.verdi@example.com'
+    );
     const adminEmail = 'snecaj@gmail.com';
-    const idx = list.findIndex(u => u.email === adminEmail);
+    const idx = list.findIndex(u => u.email === adminEmail || u.username === adminEmail);
     if (idx === -1) {
       list.push({
         uid: 'admin-id',
@@ -626,21 +615,39 @@ export const seedUsers = async () => {
         assignedDaysOfWeek: [],
         seasonalQuota: 0
       });
-      saveLocalCollection('users', list);
     } else {
       const u = list[idx];
-      if (u.username !== adminEmail || u.password !== 'admin' || !u.isActive || u.role !== 'admin') {
-        list[idx] = { ...u, username: adminEmail, password: 'admin', isActive: true, role: 'admin' };
-        saveLocalCollection('users', list);
+      let changed = false;
+      if (!u.isActive) { u.isActive = true; changed = true; }
+      if (u.role !== 'admin') { u.role = 'admin'; changed = true; }
+      if (!u.password) { u.password = 'admin'; changed = true; }
+      if (changed) {
+        list[idx] = u;
       }
     }
+    saveLocalCollection('users', list);
     console.log("Users seeded successfully (local)");
     return;
   }
   try {
+    const usersRef = collection(db, 'users');
+
+    // Clean up test users from Firestore if any exist
+    try {
+      const testUsernames = ['mario.rossi', 'luigi.verdi'];
+      for (const tUser of testUsernames) {
+        const qTest = query(usersRef, where('username', '==', tUser));
+        const testSnap = await getDocs(qTest);
+        for (const docItem of testSnap.docs) {
+          await deleteDoc(doc(db, 'users', docItem.id));
+        }
+      }
+    } catch (cleanErr) {
+      console.warn("Could not clean test users from Firestore:", cleanErr);
+    }
+
     // Check if admin exists
     const adminEmail = 'snecaj@gmail.com';
-    const usersRef = collection(db, 'users');
     const qAdmin = query(usersRef, where('email', '==', adminEmail));
     const adminSnap = await getDocs(qAdmin);
 
@@ -661,13 +668,13 @@ export const seedUsers = async () => {
       // Ensure admin has correct credentials
       const adminDoc = adminSnap.docs[0];
       const data = adminDoc.data();
-      if (data.username !== adminEmail || data.password !== 'admin' || !data.isActive || data.role !== 'admin') {
-        await updateDoc(doc(db, 'users', adminDoc.id), {
-          username: adminEmail,
-          password: 'admin',
-          isActive: true,
-          role: 'admin'
-        });
+      let needsUpdate = false;
+      const updates: any = {};
+      if (!data.isActive) { updates.isActive = true; needsUpdate = true; }
+      if (data.role !== 'admin') { updates.role = 'admin'; needsUpdate = true; }
+      if (!data.password) { updates.password = 'admin'; needsUpdate = true; }
+      if (needsUpdate) {
+        await updateDoc(doc(db, 'users', adminDoc.id), updates);
       }
     }
 
