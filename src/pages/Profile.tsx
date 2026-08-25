@@ -7,7 +7,7 @@ import {
   subscribeToSettings 
 } from '../services';
 import { Transaction, UserProfile, LakeSettings } from '../types';
-import { User, Mail, Shield, CheckCircle2, AlertCircle, Lock, Wallet, Target, TrendingUp, Eye, EyeOff } from 'lucide-react';
+import { User, Mail, Shield, CheckCircle2, AlertCircle, Lock, Wallet, Target, TrendingUp, Eye, EyeOff, Cake, Calendar } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { safeLocalStorage } from '../lib/safeLocalStorage';
 
@@ -17,6 +17,7 @@ export function Profile() {
   const [email, setEmail] = useState(profile?.email || '');
   const [username, setUsername] = useState(profile?.username || '');
   const [password, setPassword] = useState(profile?.password || '');
+  const [birthDate, setBirthDate] = useState(profile?.birthDate || '');
   const [showPassword, setShowPassword] = useState(false);
   const [status, setStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
 
@@ -27,6 +28,7 @@ export function Profile() {
       setEmail(profile.email || '');
       setUsername(profile.username || '');
       setPassword(profile.password || '');
+      setBirthDate(profile.birthDate || '');
     }
   }, [profile]);
 
@@ -88,7 +90,8 @@ export function Profile() {
         displayName: displayName.trim(),
         email: email.trim(),
         username: username.trim(),
-        password: password
+        password: password,
+        birthDate: birthDate.trim()
       });
 
       // Update remembered credentials if active
@@ -253,6 +256,19 @@ export function Profile() {
                 </button>
               </div>
               <p className="text-[9px] text-slate-400 font-medium">Usa una password sicura.</p>
+            </div>
+
+            <div className="space-y-1.5 md:col-span-2">
+              <label className="text-[0.6rem] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                <Cake size={10} className="text-accent-gold" /> Data di Nascita
+              </label>
+              <input 
+                type="date"
+                value={birthDate}
+                onChange={(e) => setBirthDate(e.target.value)}
+                className="w-full bg-off-white border border-slate-200 rounded px-3 py-2 text-sm font-semibold text-slate-900 outline-none focus:border-lake-green transition-all"
+              />
+              <p className="text-[9px] text-slate-400 font-medium">Inserisci la tua data di nascita per ricevere gli auguri dal gruppo del Lago!</p>
             </div>
           </div>
 

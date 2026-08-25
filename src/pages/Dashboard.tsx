@@ -6,6 +6,8 @@ import {
   subscribeToHuntingLimits
 } from '../services';
 import { Transaction, Harvest, UserProfile, HuntingLimit } from '../types';
+import { useAuth } from '../contexts/AuthContext';
+import { BirthdayBanner } from '../components/BirthdayBanner';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -42,6 +44,7 @@ const safeFormatDate = (dateStr: any, formatStr: string, options?: any) => {
 };
 
 export function Dashboard() {
+  const { profile } = useAuth();
   const [txs, setTxs] = useState<Transaction[]>([]);
   const [harvests, setHarvests] = useState<Harvest[]>([]);
   const [users, setUsers] = useState<UserProfile[]>([]);
@@ -132,7 +135,9 @@ export function Dashboard() {
   if (loading) return null;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
+      <BirthdayBanner users={users} />
+
       <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-serif text-lake-green">Gestione Lago di Caccia</h1>

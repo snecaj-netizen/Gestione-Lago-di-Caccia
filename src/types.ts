@@ -7,6 +7,7 @@ export interface UserProfile {
   role: 'admin' | 'socio' | 'quotista';
   isActive: boolean;
   assignedDaysOfWeek: number[]; // Array of 0-6
+  birthDate?: string; // YYYY-MM-DD
   seasonalQuota?: number;
   bio?: string;
   location?: string;

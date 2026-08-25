@@ -33,6 +33,7 @@ import { ChevronLeft, ChevronRight, User as UserIcon, Calendar as CalendarIcon, 
 import { cn } from '../lib/utils';
 import { Link } from 'react-router-dom';
 import { useWeather } from '../hooks/useWeather';
+import { BirthdayBanner } from '../components/BirthdayBanner';
 
 const safeFormatDate = (dateStr: any, formatStr: string, options?: any) => {
   try {
@@ -683,6 +684,8 @@ export function HuntingCalendar() {
 
   return (
     <div className="space-y-6">
+      <BirthdayBanner users={availableUsers} />
+
       <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-serif text-lake-green">Oggi al Lago</h1>

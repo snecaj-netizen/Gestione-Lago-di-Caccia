@@ -4,7 +4,7 @@ import { UserProfile, LakeSettings, HuntingTime, HuntingLimit } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
-import { Shield, UserCheck, UserX, Trash2, Mail, ShieldAlert, MapPin, Calendar, Save, UserPlus, X, Wallet, Plus, Clock, Edit2, Upload, FileText, Eye } from 'lucide-react';
+import { Shield, UserCheck, UserX, Trash2, Mail, ShieldAlert, MapPin, Calendar, Save, UserPlus, X, Wallet, Plus, Clock, Edit2, Upload, FileText, Eye, Cake, BellRing } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -80,6 +80,7 @@ export function AdminPanel() {
     email: '',
     username: '',
     password: '',
+    birthDate: '',
     role: 'quotista',
     assignedDaysOfWeek: [],
     seasonalQuota: 0
@@ -158,6 +159,7 @@ export function AdminPanel() {
       email: newUser.email.trim(),
       username: newUser.username?.trim() || newUser.email.trim(),
       password: newUser.password?.trim() || '',
+      birthDate: newUser.birthDate?.trim() || '',
       role: newUser.role,
       isActive: true,
       assignedDaysOfWeek: newUser.assignedDaysOfWeek || [],
@@ -167,7 +169,7 @@ export function AdminPanel() {
     setTimeout(() => {
       setShowAddModal(false);
       setUserCreatedStatus('idle');
-      setNewUser({ displayName: '', email: '', username: '', password: '', role: 'quotista', assignedDaysOfWeek: [], seasonalQuota: 0 });
+      setNewUser({ displayName: '', email: '', username: '', password: '', birthDate: '', role: 'quotista', assignedDaysOfWeek: [], seasonalQuota: 0 });
     }, 2000);
   };
 
@@ -179,6 +181,7 @@ export function AdminPanel() {
       email: editingUser.email.trim(),
       username: editingUser.username?.trim() || '',
       password: editingUser.password?.trim() || '',
+      birthDate: editingUser.birthDate?.trim() || '',
       role: editingUser.role,
       assignedDaysOfWeek: editingUser.assignedDaysOfWeek || [],
       seasonalQuota: editingUser.seasonalQuota ?? 0
@@ -506,6 +509,7 @@ export function AdminPanel() {
                 <th className="px-3 sm:px-6 py-3">Utente</th>
                 <th className="px-3 sm:px-6 py-3 text-center hidden sm:table-cell">Stato</th>
                 <th className="px-3 sm:px-6 py-3">Ruolo</th>
+                <th className="px-3 sm:px-6 py-3 hidden xl:table-cell">Data Nascita</th>
                 <th className="px-3 sm:px-6 py-3 hidden lg:table-cell">Quota (€)</th>
                 <th className="px-3 sm:px-6 py-3 hidden md:table-cell">Giorno Fisso</th>
                 <th className="px-3 sm:px-6 py-3 text-right">Azioni</th>
@@ -514,7 +518,7 @@ export function AdminPanel() {
             <tbody className="divide-y divide-slate-50">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-3 sm:px-6 py-10 text-center text-slate-300 italic font-medium">Caricamento utenti...</td>
+                  <td colSpan={7} className="px-3 sm:px-6 py-10 text-center text-slate-300 italic font-medium">Caricamento utenti...</td>
                 </tr>
               ) : users.map((user) => (
                 <tr key={user.uid || user.email} className="hover:bg-slate-50 transition-colors">
@@ -550,6 +554,16 @@ export function AdminPanel() {
                       <option value="socio">Socio</option>
                       <option value="admin">Admin</option>
                     </select>
+                  </td>
+                  <td className="px-3 sm:px-6 py-3 whitespace-nowrap hidden xl:table-cell">
+                    {user.birthDate ? (
+                      <span className="text-[10px] font-semibold text-slate-700 flex items-center gap-1">
+                        <Cake size={11} className="text-accent-gold shrink-0" />
+                        {safeFormatDate(user.birthDate, 'dd/MM/yyyy')}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-slate-300 font-medium italic">Non impostata</span>
+                    )}
                   </td>
                   <td className="px-3 sm:px-6 py-3 whitespace-nowrap hidden lg:table-cell">
                     <span className="text-[10px] font-bold text-slate-600">
@@ -1506,6 +1520,19 @@ export function AdminPanel() {
                 </div>
 
                 <div className="space-y-2">
+                  <label className="text-[0.65rem] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                    <Cake size={12} className="text-accent-gold" /> Data di Nascita
+                  </label>
+                  <input 
+                    type="date"
+                    value={newUser.birthDate || ''}
+                    onChange={(e) => setNewUser({...newUser, birthDate: e.target.value})}
+                    className="w-full bg-off-white border border-slate-200 rounded px-4 py-3 text-sm font-bold text-slate-900 outline-none focus:border-lake-green"
+                  />
+                  <p className="text-[9px] text-slate-400 italic">Usata per gli auguri e il banner di compleanno.</p>
+                </div>
+
+                <div className="space-y-2">
                   <label className="text-[0.65rem] font-black text-slate-400 uppercase tracking-widest">Ruolo Predefinito</label>
                   <select 
                     value={newUser.role}
@@ -1654,6 +1681,19 @@ export function AdminPanel() {
                     />
                   </div>
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[0.65rem] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                  <Cake size={12} className="text-accent-gold" /> Data di Nascita
+                </label>
+                <input 
+                  type="date"
+                  value={editingUser.birthDate || ''}
+                  onChange={(e) => setEditingUser({...editingUser, birthDate: e.target.value})}
+                  className="w-full bg-off-white border border-slate-200 rounded px-4 py-3 text-sm font-bold text-slate-900 outline-none focus:border-lake-green"
+                />
+                <p className="text-[9px] text-slate-400 italic">Data di nascita per auguri e banner.</p>
               </div>
 
               <div className="space-y-2">

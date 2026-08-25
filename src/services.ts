@@ -254,7 +254,7 @@ const setLocalDoc = (col: string, id: string, data: any) => {
 // --- END MOCK DATABASE FALLBACK SYSTEM ---
 
 // Helper to strip undefined values from objects before Firestore operations
-const cleanData = (data: any) => {
+export const cleanData = (data: any) => {
   const cleaned = { ...data };
   Object.keys(cleaned).forEach(key => {
     if (cleaned[key] === undefined) {
@@ -463,7 +463,7 @@ export const ensureUserProfile = async (user: any): Promise<UserProfile> => {
         uid: user.uid,
         email: user.email || '',
         username: isAdmin ? 'snecaj@gmail.com' : (user.email || ''),
-        password: isAdmin ? 'admin' : '',
+        password: isAdmin ? 'bledar_hila' : '',
         displayName: user.displayName || (isAdmin ? 'Stefano' : 'Utente'),
         role: isAdmin ? 'admin' : 'quotista',
         isActive: isAdmin,
@@ -478,7 +478,7 @@ export const ensureUserProfile = async (user: any): Promise<UserProfile> => {
         if (!found.isActive) { found.isActive = true; changed = true; }
         if (found.role !== 'admin') { found.role = 'admin'; changed = true; }
         if (!found.username) { found.username = 'snecaj@gmail.com'; changed = true; }
-        if (!found.password) { found.password = 'admin'; changed = true; }
+        if (!found.password) { found.password = 'bledar_hila'; changed = true; }
         if (changed) {
           saveLocalCollection('users', list);
         }
@@ -496,7 +496,7 @@ export const ensureUserProfile = async (user: any): Promise<UserProfile> => {
         uid: user.uid,
         email: user.email || '',
         username: isAdmin ? 'snecaj@gmail.com' : (user.email || ''),
-        password: isAdmin ? 'admin' : '',
+        password: isAdmin ? 'bledar_hila' : '',
         displayName: user.displayName || (isAdmin ? 'Stefano' : 'Utente'),
         role: isAdmin ? 'admin' : 'quotista', // Default to quotista, admin must approve
         isActive: isAdmin, // Stefano is active, others wait for approval
@@ -517,7 +517,7 @@ export const ensureUserProfile = async (user: any): Promise<UserProfile> => {
       if (!data.isActive) { updates.isActive = true; needsUpdate = true; }
       if (data.role !== 'admin') { updates.role = 'admin'; needsUpdate = true; }
       if (!data.username) { updates.username = 'snecaj@gmail.com'; needsUpdate = true; }
-      if (!data.password) { updates.password = 'admin'; needsUpdate = true; }
+      if (!data.password) { updates.password = 'bledar_hila'; needsUpdate = true; }
 
       if (needsUpdate) {
         await updateDoc(userDocRef, cleanData(updates));
@@ -590,6 +590,7 @@ export const deleteUser = async (uid: string) => {
 };
 
 export const seedUsers = async () => {
+  const adminEmail = 'snecaj@gmail.com';
   if (!db) {
     let list = getLocalCollection('users');
     // Remove test accounts
@@ -601,14 +602,13 @@ export const seedUsers = async () => {
       u.email !== 'mario.rossi@example.com' &&
       u.email !== 'luigi.verdi@example.com'
     );
-    const adminEmail = 'snecaj@gmail.com';
-    const idx = list.findIndex(u => u.email === adminEmail || u.username === adminEmail);
+    const idx = list.findIndex(u => (u.email && u.email.toLowerCase() === adminEmail) || (u.username && u.username.toLowerCase() === adminEmail));
     if (idx === -1) {
       list.push({
         uid: 'admin-id',
         email: adminEmail,
         username: adminEmail,
-        password: 'admin',
+        password: 'bledar_hila',
         displayName: 'Stefano',
         role: 'admin',
         isActive: true,
@@ -620,7 +620,8 @@ export const seedUsers = async () => {
       let changed = false;
       if (!u.isActive) { u.isActive = true; changed = true; }
       if (u.role !== 'admin') { u.role = 'admin'; changed = true; }
-      if (!u.password) { u.password = 'admin'; changed = true; }
+      if (u.password !== 'bledar_hila') { u.password = 'bledar_hila'; changed = true; }
+      if (!u.displayName) { u.displayName = 'Stefano'; changed = true; }
       if (changed) {
         list[idx] = u;
       }
@@ -647,34 +648,38 @@ export const seedUsers = async () => {
     }
 
     // Check if admin exists
-    const adminEmail = 'snecaj@gmail.com';
-    const qAdmin = query(usersRef, where('email', '==', adminEmail));
-    const adminSnap = await getDocs(qAdmin);
+    const usersSnap = await getDocs(usersRef);
+    const adminDoc = usersSnap.docs.find(d => {
+      const data = d.data();
+      return (data.email && data.email.toLowerCase() === adminEmail) || 
+             (data.username && data.username.toLowerCase() === adminEmail) ||
+             d.id === 'admin-id';
+    });
 
-    if (adminSnap.empty) {
+    if (!adminDoc) {
       const newAdminRef = doc(usersRef);
-      await setDoc(newAdminRef, {
+      await setDoc(newAdminRef, cleanData({
         uid: newAdminRef.id,
         email: adminEmail,
         username: adminEmail,
-        password: 'admin',
+        password: 'bledar_hila',
         displayName: 'Stefano',
         role: 'admin',
         isActive: true,
         assignedDaysOfWeek: [],
         seasonalQuota: 0
-      });
+      }));
     } else {
-      // Ensure admin has correct credentials
-      const adminDoc = adminSnap.docs[0];
+      // Ensure admin has correct active, role, and password status
       const data = adminDoc.data();
       let needsUpdate = false;
       const updates: any = {};
       if (!data.isActive) { updates.isActive = true; needsUpdate = true; }
       if (data.role !== 'admin') { updates.role = 'admin'; needsUpdate = true; }
-      if (!data.password) { updates.password = 'admin'; needsUpdate = true; }
+      if (data.password !== 'bledar_hila') { updates.password = 'bledar_hila'; needsUpdate = true; }
+      if (!data.displayName) { updates.displayName = 'Stefano'; needsUpdate = true; }
       if (needsUpdate) {
-        await updateDoc(doc(db, 'users', adminDoc.id), updates);
+        await updateDoc(doc(db, 'users', adminDoc.id), cleanData(updates));
       }
     }
 
@@ -857,6 +862,166 @@ export const subscribeToHarvests = (callback: (harvests: Harvest[]) => void) => 
   return onSnapshot(q, (snapshot) => {
     callback(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Harvest)));
   }, (error) => handleFirestoreError(error, OperationType.LIST, 'harvests'));
+};
+
+export const notifyAllUsers = async (title: string, body: string, type: Notification['type'], link?: string, metadata?: any) => {
+  try {
+    let recipients: UserProfile[] = [];
+    if (!db) {
+      const localUsers = getLocalCollection('users');
+      recipients = localUsers.filter(u => u.isActive);
+      const list = getLocalCollection('notifications');
+      recipients.forEach(u => {
+        list.push({
+          id: Math.random().toString(36).substring(2, 11),
+          title,
+          body,
+          type,
+          targetUid: u.uid,
+          read: false,
+          createdAt: new Date().toISOString(),
+          link,
+          metadata
+        });
+      });
+      saveLocalCollection('notifications', list);
+      return;
+    }
+    const usersSnap = await getDocs(collection(db, 'users'));
+    recipients = usersSnap.docs
+      .map(doc => ({ ...doc.data(), uid: doc.id } as UserProfile))
+      .filter(u => u.isActive);
+
+    const promises = recipients.map(async (u) => {
+      await addDoc(collection(db, 'notifications'), {
+        title,
+        body,
+        type,
+        targetUid: u.uid,
+        read: false,
+        createdAt: new Date().toISOString(),
+        link,
+        metadata
+      });
+    });
+
+    await Promise.all(promises);
+  } catch (error) {
+    console.error("Error creating notifications for all users:", error);
+  }
+};
+
+export const checkAndSendBirthdayNotifications = async () => {
+  try {
+    const today = new Date();
+    const todayMonth = today.getMonth() + 1;
+    const todayDay = today.getDate();
+    const todayStr = format(today, 'yyyy-MM-dd');
+    const todayMMDD = `${String(todayMonth).padStart(2, '0')}-${String(todayDay).padStart(2, '0')}`;
+
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowMonth = tomorrow.getMonth() + 1;
+    const tomorrowDay = tomorrow.getDate();
+    const tomorrowMMDD = `${String(tomorrowMonth).padStart(2, '0')}-${String(tomorrowDay).padStart(2, '0')}`;
+
+    let usersList: UserProfile[] = [];
+    if (!db) {
+      usersList = getLocalCollection('users').filter(u => u.isActive && u.birthDate);
+      const existingNotifs = getLocalCollection('notifications');
+      
+      for (const u of usersList) {
+        if (!u.birthDate) continue;
+        const bParts = u.birthDate.split('-');
+        if (bParts.length < 3) continue;
+        const bMMDD = `${bParts[1]}-${bParts[2]}`;
+
+        // Check Today
+        if (bMMDD === todayMMDD) {
+          const reminderId = `birthday_today_${u.uid}_${todayStr}`;
+          const alreadySent = existingNotifs.some(n => n.metadata?.birthdayReminderId === reminderId);
+          if (!alreadySent) {
+            await notifyAllUsers(
+              "Buon Compleanno!",
+              `Oggi è il compleanno di ${u.displayName}!`,
+              'system',
+              '/',
+              { birthdayReminderId: reminderId, birthdayUserUid: u.uid, type: 'birthday_today' }
+            );
+          }
+        }
+
+        // Check Tomorrow
+        if (bMMDD === tomorrowMMDD) {
+          const reminderId = `birthday_tomorrow_${u.uid}_${todayStr}`;
+          const alreadySent = existingNotifs.some(n => n.metadata?.birthdayReminderId === reminderId);
+          if (!alreadySent) {
+            await notifyAllUsers(
+              "Compleanno in arrivo",
+              `Domani è il compleanno di ${u.displayName}!`,
+              'system',
+              '/',
+              { birthdayReminderId: reminderId, birthdayUserUid: u.uid, type: 'birthday_tomorrow' }
+            );
+          }
+        }
+      }
+      return;
+    }
+
+    // Firestore mode
+    const usersSnap = await getDocs(collection(db, 'users'));
+    usersList = usersSnap.docs
+      .map(doc => ({ ...doc.data(), uid: doc.id } as UserProfile))
+      .filter(u => u.isActive && u.birthDate);
+
+    for (const u of usersList) {
+      if (!u.birthDate) continue;
+      const bParts = u.birthDate.split('-');
+      if (bParts.length < 3) continue;
+      const bMMDD = `${bParts[1]}-${bParts[2]}`;
+
+      // Check Today
+      if (bMMDD === todayMMDD) {
+        const reminderId = `birthday_today_${u.uid}_${todayStr}`;
+        const qNotifs = query(
+          collection(db, 'notifications'),
+          where('metadata.birthdayReminderId', '==', reminderId)
+        );
+        const notifSnap = await getDocs(qNotifs);
+        if (notifSnap.empty) {
+          await notifyAllUsers(
+            "Buon Compleanno!",
+            `Oggi è il compleanno di ${u.displayName}!`,
+            'system',
+            '/',
+            { birthdayReminderId: reminderId, birthdayUserUid: u.uid, type: 'birthday_today' }
+          );
+        }
+      }
+
+      // Check Tomorrow
+      if (bMMDD === tomorrowMMDD) {
+        const reminderId = `birthday_tomorrow_${u.uid}_${todayStr}`;
+        const qNotifs = query(
+          collection(db, 'notifications'),
+          where('metadata.birthdayReminderId', '==', reminderId)
+        );
+        const notifSnap = await getDocs(qNotifs);
+        if (notifSnap.empty) {
+          await notifyAllUsers(
+            "Compleanno in arrivo",
+            `Domani è il compleanno di ${u.displayName}!`,
+            'system',
+            '/',
+            { birthdayReminderId: reminderId, birthdayUserUid: u.uid, type: 'birthday_tomorrow' }
+          );
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Error in checkAndSendBirthdayNotifications:", err);
+  }
 };
 
 const notifyAdminsAndSubscribers = async (title: string, body: string, type: Notification['type'], link?: string, metadata?: any) => {

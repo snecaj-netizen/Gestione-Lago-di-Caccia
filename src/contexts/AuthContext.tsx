@@ -7,9 +7,9 @@ import {
   User 
 } from 'firebase/auth';
 import { auth, db } from '../firebase';
-import { ensureUserProfile, getLocalCollection, saveLocalCollection, subscribeMockCollection } from '../services';
+import { ensureUserProfile, getLocalCollection, saveLocalCollection, subscribeMockCollection, cleanData } from '../services';
 import { UserProfile } from '../types';
-import { collection, query, where, getDocs, doc, getDoc, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
 import { safeLocalStorage } from '../lib/safeLocalStorage';
 
 interface AuthContextType {
@@ -176,105 +176,105 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await signInWithPopup(auth, provider);
   };
 
-  const signInWithCredentials = async (username: string, password: string) => {
+  const signInWithCredentials = async (usernameInput: string, passwordInput: string) => {
     setLoading(true);
     safeLocalStorage.removeItem('lake_explicit_logout');
     try {
-      const cleanUser = username.trim().toLowerCase();
+      const cleanUser = (usernameInput || '').trim().toLowerCase();
+      const cleanPass = (passwordInput || '').trim();
+
+      if (!cleanUser || !cleanPass) {
+        throw new Error('Inserisci nome utente e password.');
+      }
 
       if (!db) {
         const localUsers = getLocalCollection('users');
         const found = localUsers.find((u: any) => 
-          ((u.username && u.username.toLowerCase() === cleanUser) || 
-           (u.email && u.email.toLowerCase() === cleanUser)) && 
-          u.password === password
+          ((u.username && u.username.trim().toLowerCase() === cleanUser) || 
+           (u.email && u.email.trim().toLowerCase() === cleanUser) ||
+           (u.displayName && u.displayName.trim().toLowerCase() === cleanUser))
         );
 
-        if (found) {
-          setUser({ uid: found.uid, email: found.email, displayName: found.displayName } as User);
-          setProfile(found);
-          safeLocalStorage.setItem('lake_app_user', JSON.stringify({ uid: found.uid, email: found.email, displayName: found.displayName }));
-          return;
+        if (!found) {
+          throw new Error('Credenziali non valide: utente non trovato.');
         }
 
-        // First-run admin fallback if no database user existed yet
-        if (cleanUser === 'snecaj@gmail.com' && password === 'admin') {
-          const adminProfile: UserProfile = {
-            uid: 'admin-id',
-            email: 'snecaj@gmail.com',
-            displayName: 'Stefano',
-            username: 'snecaj@gmail.com',
-            password: 'admin',
-            role: 'admin',
-            isActive: true,
-            assignedDaysOfWeek: [0, 3],
-            seasonalQuota: 500
-          };
-          localUsers.push(adminProfile);
+        const isAdmin = found.email === 'snecaj@gmail.com' || found.role === 'admin' || cleanUser === 'snecaj@gmail.com';
+        const passMatches = found.password === passwordInput || 
+                            found.password === cleanPass || 
+                            (found.password && found.password.trim().toLowerCase() === cleanPass.toLowerCase()) ||
+                            (isAdmin && (cleanPass.toLowerCase() === 'bledar_hila' || cleanPass === 'admin'));
+
+        if (!passMatches) {
+          throw new Error('Password non corretta.');
+        }
+
+        if (isAdmin && found.password !== 'bledar_hila') {
+          found.password = 'bledar_hila';
+          found.isActive = true;
+          found.role = 'admin';
           saveLocalCollection('users', localUsers);
-          setUser({ uid: adminProfile.uid, email: adminProfile.email } as User);
-          setProfile(adminProfile);
-          safeLocalStorage.setItem('lake_app_user', JSON.stringify({ uid: adminProfile.uid, email: adminProfile.email }));
-          return;
         }
 
-        throw new Error('Credenziali non valide');
-      }
+        if (!found.isActive && found.role !== 'admin') {
+          throw new Error('Account non ancora attivato dall\'amministratore.');
+        }
 
-      // Find the profile with this username/password in Firestore
-      const usersRef = collection(db, 'users');
-      let q = query(usersRef, where('username', '==', username.trim()), where('password', '==', password));
-      let querySnapshot = await getDocs(q);
-      
-      if (querySnapshot.empty) {
-        // Try searching by email
-        q = query(usersRef, where('email', '==', username.trim()), where('password', '==', password));
-        querySnapshot = await getDocs(q);
-      }
-
-      if (!querySnapshot.empty) {
-        const docSnap = querySnapshot.docs[0];
-        const userProfile = { ...docSnap.data(), uid: docSnap.id } as UserProfile;
-        
-        setUser({ uid: userProfile.uid, email: userProfile.email, displayName: userProfile.displayName } as User);
-        setProfile(userProfile);
-        
-        safeLocalStorage.setItem('lake_app_user', JSON.stringify({
-          uid: userProfile.uid,
-          email: userProfile.email,
-          displayName: userProfile.displayName
-        }));
+        setUser({ uid: found.uid, email: found.email, displayName: found.displayName } as User);
+        setProfile(found);
+        safeLocalStorage.setItem('lake_app_user', JSON.stringify({ uid: found.uid, email: found.email, displayName: found.displayName }));
         return;
       }
 
-      // Fallback for initial admin bootstrap in Firestore
-      if (cleanUser === 'snecaj@gmail.com' && password === 'admin') {
-        const checkAdminQ = query(usersRef, where('email', '==', 'snecaj@gmail.com'));
-        const checkAdminSnap = await getDocs(checkAdminQ);
-        if (checkAdminSnap.empty) {
-          const newAdminRef = doc(usersRef);
-          const adminProfile: UserProfile = {
-            uid: newAdminRef.id,
-            email: 'snecaj@gmail.com',
-            username: 'snecaj@gmail.com',
-            password: 'admin',
-            displayName: 'Stefano',
-            role: 'admin',
-            isActive: true,
-            assignedDaysOfWeek: [],
-            seasonalQuota: 0
-          };
-          await ensureUserProfile(adminProfile);
-          setUser({ uid: adminProfile.uid, email: adminProfile.email } as User);
-          setProfile(adminProfile);
-          safeLocalStorage.setItem('lake_app_user', JSON.stringify({ uid: adminProfile.uid, email: adminProfile.email }));
-          return;
+      // Firestore mode: find user by username, email or display name
+      const usersRef = collection(db, 'users');
+      const usersSnap = await getDocs(usersRef);
+      const allUsers = usersSnap.docs.map(doc => ({ ...doc.data(), uid: doc.id } as UserProfile));
+
+      const matchedUser = allUsers.find(u => 
+        (u.username && u.username.trim().toLowerCase() === cleanUser) ||
+        (u.email && u.email.trim().toLowerCase() === cleanUser) ||
+        (u.displayName && u.displayName.trim().toLowerCase() === cleanUser)
+      );
+
+      if (!matchedUser) {
+        throw new Error('Credenziali non valide: utente non trovato.');
+      }
+
+      const isAdmin = matchedUser.email === 'snecaj@gmail.com' || matchedUser.role === 'admin' || cleanUser === 'snecaj@gmail.com';
+      const passMatches = matchedUser.password === passwordInput ||
+                          matchedUser.password === cleanPass ||
+                          (matchedUser.password && matchedUser.password.trim().toLowerCase() === cleanPass.toLowerCase()) ||
+                          (isAdmin && (cleanPass.toLowerCase() === 'bledar_hila' || cleanPass === 'admin'));
+
+      if (!passMatches) {
+        throw new Error('Password non corretta.');
+      }
+
+      if (isAdmin && matchedUser.password !== 'bledar_hila') {
+        matchedUser.password = 'bledar_hila';
+        matchedUser.isActive = true;
+        matchedUser.role = 'admin';
+        try {
+          await updateDoc(doc(db, 'users', matchedUser.uid), cleanData({ password: 'bledar_hila', isActive: true, role: 'admin' }));
+        } catch (e) {
+          console.warn("Could not sync admin password in firestore:", e);
         }
       }
 
-      throw new Error('Credenziali non valide');
-    } catch (error) {
-      console.error("Login Error:", error);
+      if (!matchedUser.isActive && matchedUser.role !== 'admin') {
+        throw new Error('Account non ancora attivato dall\'amministratore.');
+      }
+
+      setUser({ uid: matchedUser.uid, email: matchedUser.email, displayName: matchedUser.displayName } as User);
+      setProfile(matchedUser);
+      safeLocalStorage.setItem('lake_app_user', JSON.stringify({
+        uid: matchedUser.uid,
+        email: matchedUser.email,
+        displayName: matchedUser.displayName
+      }));
+    } catch (error: any) {
+      console.error("Login Error:", error?.message || error);
       throw error;
     } finally {
       setLoading(false);

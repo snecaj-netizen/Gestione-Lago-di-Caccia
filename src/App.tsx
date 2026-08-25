@@ -50,12 +50,12 @@ import { Tesserino } from './pages/Tesserino';
 import { Regulation } from './pages/Regulation';
 import { NotificationCenter } from './components/NotificationCenter';
 import { PWAUpdatePrompt } from './components/PWAUpdatePrompt';
-import { it } from 'date-fns/locale/it';
+import { it } from 'date-fns/locale';
 import { format } from 'date-fns';
 import { db } from './firebase';
 import { collection, query, where, orderBy, limit, onSnapshot, getDocs } from 'firebase/firestore';
 import { Notification as AppNotification } from './types';
-import { seedUsers, createNotification } from './services';
+import { seedUsers, createNotification, checkAndSendBirthdayNotifications } from './services';
 
 function Sidebar({ 
   isOpen, 
@@ -470,7 +470,7 @@ function Login() {
           <button 
             type="submit"
             disabled={isSubmitting}
-            className="w-full bg-lake-green text-white font-bold py-4 px-6 rounded-lg transition-all shadow-lg active:scale-95 disabled:opacity-50 mt-6 uppercase text-xs tracking-widest hover:bg-lake-green/90"
+            className="w-full bg-lake-green text-white font-bold py-4 px-6 rounded-lg transition-all shadow-lg active:scale-95 disabled:opacity-50 mt-6 uppercase text-xs tracking-widest hover:bg-lake-green/90 cursor-pointer"
           >
             {isSubmitting ? 'Accesso in corso...' : 'Accedi al Portale'}
           </button>
@@ -710,6 +710,16 @@ function MainLayout() {
     };
 
     checkReminders();
+  }, [profile?.uid]);
+
+  // Check for birthdays (today & tomorrow) and send push/in-app notifications
+  React.useEffect(() => {
+    if (!profile?.uid) return;
+    checkAndSendBirthdayNotifications();
+    const interval = setInterval(() => {
+      checkAndSendBirthdayNotifications();
+    }, 1000 * 60 * 30); // check every 30 minutes
+    return () => clearInterval(interval);
   }, [profile?.uid]);
 
   // Handle mutual exclusivity
