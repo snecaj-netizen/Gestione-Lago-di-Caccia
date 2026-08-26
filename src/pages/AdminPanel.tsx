@@ -1,10 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { subscribeToUsers, updateUserProfile, subscribeToSettings, updateSettings, addUserManually, deleteUser, subscribeToHuntingTimes, addHuntingTime, deleteHuntingTime, updateHuntingTime, subscribeToHuntingLimits, saveHuntingLimit, deleteHuntingLimit, clearAllHuntingLimits, clearAllHuntingTimes } from '../services';
+import { 
+  subscribeToUsers, updateUserProfile, subscribeToSettings, updateSettings, 
+  addUserManually, deleteUser, subscribeToHuntingTimes, addHuntingTime, 
+  deleteHuntingTime, updateHuntingTime, subscribeToHuntingLimits, saveHuntingLimit, 
+  deleteHuntingLimit, clearAllHuntingLimits, clearAllHuntingTimes,
+  downloadDatabaseBackup, fetchAllDatabaseData, AppBackupData
+} from '../services';
 import { UserProfile, LakeSettings, HuntingTime, HuntingLimit } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
-import { Shield, UserCheck, UserX, Trash2, Mail, ShieldAlert, MapPin, Calendar, Save, UserPlus, X, Wallet, Plus, Clock, Edit2, Upload, FileText, Eye, Cake, BellRing } from 'lucide-react';
+import { 
+  Shield, UserCheck, UserX, Trash2, Mail, ShieldAlert, MapPin, Calendar, 
+  Save, UserPlus, X, Wallet, Plus, Clock, Edit2, Upload, FileText, Eye, 
+  Cake, BellRing, Download, Database, HardDriveDownload, CheckCircle2, 
+  Loader2, FileJson, Copy, Check, Info
+} from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -85,6 +96,44 @@ export function AdminPanel() {
     assignedDaysOfWeek: [],
     seasonalQuota: 0
   });
+
+  const [isExportingBackup, setIsExportingBackup] = useState(false);
+  const [copiedBackup, setCopiedBackup] = useState(false);
+  const [lastBackupInfo, setLastBackupInfo] = useState<AppBackupData | null>(null);
+  const [backupSuccessMessage, setBackupSuccessMessage] = useState<string | null>(null);
+
+  const handleExportBackup = async () => {
+    setIsExportingBackup(true);
+    try {
+      const backup = await downloadDatabaseBackup(currentUser?.email || currentUser?.displayName);
+      setLastBackupInfo(backup);
+      setBackupSuccessMessage(`Backup offline generato con successo! Scaricati ${backup.metadata.totalRecords} record totali.`);
+      setTimeout(() => {
+        setBackupSuccessMessage(null);
+      }, 7000);
+    } catch (error) {
+      console.error("Errore durante l'esportazione del backup:", error);
+      alert("Errore durante il salvataggio del backup. Riprova.");
+    } finally {
+      setIsExportingBackup(false);
+    }
+  };
+
+  const handleCopyJsonBackup = async () => {
+    try {
+      setIsExportingBackup(true);
+      const backup = await fetchAllDatabaseData(currentUser?.email || currentUser?.displayName);
+      setLastBackupInfo(backup);
+      await navigator.clipboard.writeText(JSON.stringify(backup, null, 2));
+      setCopiedBackup(true);
+      setTimeout(() => setCopiedBackup(false), 3000);
+    } catch (e) {
+      console.error("Errore copia JSON:", e);
+      alert("Impossibile copiare negli appunti.");
+    } finally {
+      setIsExportingBackup(false);
+    }
+  };
 
   useEffect(() => {
     const unsubUsers = subscribeToUsers(setUsers);
@@ -468,9 +517,42 @@ export function AdminPanel() {
       <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-serif text-lake-green">Pannello di Controllo</h1>
-          <p className="text-slate-gray font-medium">Gestione utenti, permessi e attivazioni account</p>
+          <p className="text-slate-gray font-medium">Gestione utenti, permessi, impostazioni e sicurezza dati</p>
         </div>
+
+        <button
+          onClick={handleExportBackup}
+          disabled={isExportingBackup}
+          className="flex items-center gap-2 px-4 py-2.5 bg-lake-green text-accent-gold font-bold text-xs uppercase tracking-wider rounded-lg shadow-md hover:bg-lake-green/90 active:scale-95 transition-all disabled:opacity-50"
+          title="Scarica un file .json con tutti i dati del lago"
+        >
+          {isExportingBackup ? (
+            <Loader2 size={16} className="animate-spin" />
+          ) : (
+            <HardDriveDownload size={16} />
+          )}
+          <span>{isExportingBackup ? 'Esportazione...' : 'Salva Backup (.JSON)'}</span>
+        </button>
       </header>
+
+      {backupSuccessMessage && (
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 flex items-center justify-between gap-3 shadow-sm"
+        >
+          <div className="flex items-center gap-3">
+            <CheckCircle2 size={20} className="text-emerald-600 shrink-0" />
+            <p className="text-xs sm:text-sm font-semibold">{backupSuccessMessage}</p>
+          </div>
+          <button
+            onClick={() => setBackupSuccessMessage(null)}
+            className="text-emerald-600 hover:text-emerald-800 text-xs font-bold uppercase p-1"
+          >
+            <X size={16} />
+          </button>
+        </motion.div>
+      )}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
         <div className="card-polish flex flex-col gap-2">
@@ -1431,6 +1513,98 @@ export function AdminPanel() {
               </tbody>
             </table>
           </div>
+        </div>
+      </section>
+
+      {/* Backup & Offline Data Export Section */}
+      <section className="card-polish !border-t-lake-green overflow-hidden shadow-sm">
+        <div className="p-4 sm:p-6 border-b border-slate-100 bg-off-white/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="p-1 rounded bg-lake-green/10 text-lake-green">
+                <Database size={16} />
+              </span>
+              <h2 className="text-sm font-bold text-slate-gray uppercase tracking-widest">Backup & Sicurezza Dati</h2>
+            </div>
+            <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">
+              Salva offline una copia di sicurezza completa in formato JSON di tutte le tabelle del database.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+            <button
+              onClick={handleCopyJsonBackup}
+              disabled={isExportingBackup}
+              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 bg-white border border-slate-200 text-slate-700 font-bold text-[11px] uppercase tracking-wider rounded-lg shadow-sm hover:bg-slate-50 transition-all disabled:opacity-50"
+              title="Copia l'intero database JSON negli appunti"
+            >
+              {copiedBackup ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
+              <span>{copiedBackup ? 'Copiato!' : 'Copia JSON'}</span>
+            </button>
+
+            <button
+              onClick={handleExportBackup}
+              disabled={isExportingBackup}
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-lake-green text-accent-gold font-black text-[11px] uppercase tracking-wider rounded-lg shadow-md hover:bg-lake-green/90 active:scale-95 transition-all disabled:opacity-50"
+            >
+              {isExportingBackup ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                <Download size={16} />
+              )}
+              <span>{isExportingBackup ? 'Generazione...' : 'Scarica Backup .JSON'}</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="p-4 sm:p-6 space-y-5">
+          <div className="bg-emerald-50/60 border border-emerald-100 rounded-xl p-4 flex items-start gap-3">
+            <Info size={20} className="text-lake-green shrink-0 mt-0.5" />
+            <div className="text-xs text-slate-600 leading-relaxed">
+              <p className="font-bold text-slate-900 mb-1">Cosa include questo backup offline?</p>
+              <p>
+                Il file <span className="font-mono font-bold text-slate-800 bg-white px-1 py-0.5 rounded border border-slate-200">.json</span> scaricato contiene l'estrazione completa di tutte le collezioni attive: 
+                <span className="font-semibold text-slate-800"> Anagrafica soci & quote</span>, 
+                <span className="font-semibold text-slate-800"> Calendario & prenotazioni</span>, 
+                <span className="font-semibold text-slate-800"> Orari venatori</span>, 
+                <span className="font-semibold text-slate-800"> Limiti specie & carniere</span>, 
+                <span className="font-semibold text-slate-800"> Cassa & transazioni contabili</span>, 
+                <span className="font-semibold text-slate-800"> Piano di bilancio</span>, 
+                <span className="font-semibold text-slate-800"> Abbattimenti registrati</span>, 
+                <span className="font-semibold text-slate-800"> Galleria fotografica</span>, 
+                <span className="font-semibold text-slate-800"> Ricettario</span> e 
+                <span className="font-semibold text-slate-800"> Voci del Tesserino venatorio</span>.
+              </p>
+            </div>
+          </div>
+
+          {lastBackupInfo && (
+            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-3 pb-2 border-b border-slate-200/60">
+                <div className="flex items-center gap-2">
+                  <FileJson size={16} className="text-lake-green" />
+                  <span className="text-xs font-bold text-slate-800">Ultimo backup elaborato:</span>
+                  <span className="text-xs text-slate-500 font-mono">
+                    {safeFormatDate(lastBackupInfo.metadata.exportDate, 'dd/MM/yyyy HH:mm:ss')}
+                  </span>
+                </div>
+                <span className="text-xs font-bold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-full">
+                  {lastBackupInfo.metadata.totalRecords} record esportati
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
+                {Object.entries(lastBackupInfo.metadata.counts).map(([colName, count]) => (
+                  <div key={colName} className="bg-white p-2 rounded-lg border border-slate-200/60 shadow-xs">
+                    <p className="text-[9px] font-bold text-slate-400 uppercase truncate">
+                      {colName.replace(/_/g, ' ')}
+                    </p>
+                    <p className="text-sm font-extrabold text-slate-800">{count}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </section>
 

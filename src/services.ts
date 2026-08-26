@@ -1458,3 +1458,145 @@ export const clearRegulationSummary = async () => {
   }
 };
 
+// --- DATA BACKUP & OFFLINE JSON EXPORT SERVICES ---
+export interface AppBackupData {
+  metadata: {
+    appName: string;
+    exportDate: string;
+    exportTimestamp: number;
+    exportedBy: string;
+    source: 'firestore' | 'local_storage' | 'hybrid';
+    counts: Record<string, number>;
+    totalRecords: number;
+  };
+  data: {
+    users: UserProfile[];
+    settings: any[];
+    hunting_days: HuntingDay[];
+    hunting_times: HuntingTime[];
+    hunting_limits: HuntingLimit[];
+    transactions: Transaction[];
+    budget_items: BudgetItem[];
+    harvests: Harvest[];
+    photos: HuntingPhoto[];
+    recipes: Recipe[];
+    tesserino_entries: TesserinoEntry[];
+    notifications: Notification[];
+    regulation_summary: any;
+  };
+}
+
+export const fetchAllDatabaseData = async (userEmail?: string): Promise<AppBackupData> => {
+  const collectionNames = [
+    'users',
+    'settings',
+    'hunting_days',
+    'hunting_times',
+    'hunting_limits',
+    'transactions',
+    'budget_items',
+    'harvests',
+    'photos',
+    'recipes',
+    'tesserino_entries',
+    'notifications'
+  ];
+
+  const resultData: Record<string, any[]> = {};
+  const counts: Record<string, number> = {};
+  let totalRecords = 0;
+  let source: 'firestore' | 'local_storage' | 'hybrid' = db ? 'firestore' : 'local_storage';
+
+  for (const colName of collectionNames) {
+    let items: any[] = [];
+    if (db) {
+      try {
+        const snap = await getDocs(collection(db, colName));
+        items = snap.docs.map(docSnap => ({ ...docSnap.data(), id: docSnap.id }));
+        if (items.length === 0) {
+          const localItems = getLocalCollection(colName);
+          if (localItems && localItems.length > 0) {
+            items = localItems;
+          }
+        }
+      } catch (err) {
+        console.warn(`Could not fetch ${colName} from Firestore, falling back to local:`, err);
+        items = getLocalCollection(colName);
+        source = 'hybrid';
+      }
+    } else {
+      items = getLocalCollection(colName);
+    }
+    resultData[colName] = items;
+    counts[colName] = items.length;
+    totalRecords += items.length;
+  }
+
+  // Also include regulation summary if present
+  let regulationSummary: any = null;
+  if (db) {
+    try {
+      const regSnap = await getDoc(doc(db, 'settings', 'regulation_summary'));
+      if (regSnap.exists()) {
+        regulationSummary = { ...regSnap.data(), id: regSnap.id };
+      }
+    } catch (e) {
+      console.warn("Could not fetch regulation_summary", e);
+    }
+  }
+  if (!regulationSummary) {
+    const localReg = getLocalCollection('regulation_summary');
+    if (localReg && localReg.length > 0) {
+      regulationSummary = localReg[0];
+    }
+  }
+
+  return {
+    metadata: {
+      appName: 'Gestione Caccia al Lago',
+      exportDate: new Date().toISOString(),
+      exportTimestamp: Date.now(),
+      exportedBy: userEmail || 'Stefano (Admin)',
+      source,
+      counts,
+      totalRecords
+    },
+    data: {
+      users: resultData['users'] || [],
+      settings: resultData['settings'] || [],
+      hunting_days: resultData['hunting_days'] || [],
+      hunting_times: resultData['hunting_times'] || [],
+      hunting_limits: resultData['hunting_limits'] || [],
+      transactions: resultData['transactions'] || [],
+      budget_items: resultData['budget_items'] || [],
+      harvests: resultData['harvests'] || [],
+      photos: resultData['photos'] || [],
+      recipes: resultData['recipes'] || [],
+      tesserino_entries: resultData['tesserino_entries'] || [],
+      notifications: resultData['notifications'] || [],
+      regulation_summary: regulationSummary
+    }
+  };
+};
+
+export const downloadDatabaseBackup = async (userEmail?: string): Promise<AppBackupData> => {
+  const backup = await fetchAllDatabaseData(userEmail);
+  const jsonStr = JSON.stringify(backup, null, 2);
+  const blob = new Blob([jsonStr], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  
+  const now = new Date();
+  const dateStr = format(now, 'yyyy-MM-dd_HH-mm');
+  const filename = `backup_caccia_lago_${dateStr}.json`;
+
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+
+  return backup;
+};
+
