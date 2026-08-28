@@ -170,11 +170,14 @@ if (typeof window !== 'undefined') {
   }
   if (!safeLocalStorage.getItem('lake_db_budget_items')) {
     safeLocalStorage.setItem('lake_db_budget_items', JSON.stringify([
-      { id: 'b1', label: 'Affitto Terreno/Lago', amount: 3500 },
-      { id: 'b2', label: 'Tasse e Concessioni Venatorie', amount: 1200 },
-      { id: 'b3', label: 'Mangime e Sementi per Canneti', amount: 800 },
-      { id: 'b4', label: 'Manutenzione Botti e Appostamenti', amount: 1500 },
-      { id: 'b5', label: 'Spese Amministrative e Assicurazioni', amount: 500 }
+      { id: 'b1', label: 'Affitto Terreno/Lago', amount: 3500, type: 'uscita' },
+      { id: 'b2', label: 'Tasse e Concessioni Venatorie', amount: 1200, type: 'uscita' },
+      { id: 'b3', label: 'Mangime e Sementi per Canneti', amount: 800, type: 'uscita' },
+      { id: 'b4', label: 'Manutenzione Botti e Appostamenti', amount: 1500, type: 'uscita' },
+      { id: 'b5', label: 'Spese Amministrative e Assicurazioni', amount: 500, type: 'uscita' },
+      { id: 'b6', label: 'Quota Stagionale', amount: 6500, type: 'entrata' },
+      { id: 'b7', label: 'Quota Giornaliera', amount: 1000, type: 'entrata' },
+      { id: 'b8', label: 'Contributi Straordinari Soci', amount: 500, type: 'entrata' }
     ]));
   }
   if (!safeLocalStorage.getItem('lake_db_transactions')) {
@@ -804,13 +807,25 @@ export const updateTransaction = async (id: string, updates: Partial<Transaction
 export const subscribeToBudgetItems = (callback: (items: BudgetItem[]) => void) => {
   if (!db) {
     return subscribeMockCollection('budget_items', (list) => {
-      const sorted = [...list].sort((a, b) => (a.label || '').localeCompare(b.label || ''));
+      const normalized = list.map(item => ({
+        ...item,
+        type: item.type || 'uscita'
+      }));
+      const sorted = [...normalized].sort((a, b) => (a.label || '').localeCompare(b.label || ''));
       callback(sorted);
     });
   }
   const q = query(collection(db, 'budget_items'), orderBy('label'));
   return onSnapshot(q, (snapshot) => {
-    callback(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as BudgetItem)));
+    const items = snapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        ...data,
+        id: doc.id,
+        type: data.type || 'uscita'
+      } as BudgetItem;
+    });
+    callback(items);
   }, (error) => handleFirestoreError(error, OperationType.LIST, 'budget_items'));
 };
 

@@ -77,7 +77,7 @@ export function Accounting() {
   const [formData, setFormData] = useState({
     date: format(new Date(), 'yyyy-MM-dd'),
     type: 'entrata' as 'entrata' | 'uscita',
-    category: 'Quota Stagionale',
+    category: '',
     amount: 0,
     description: '',
     huntingDayId: '',
@@ -86,6 +86,38 @@ export function Accounting() {
     memberUid: '',
     memberName: ''
   });
+
+  const getSortedBudgetCategories = (type: 'entrata' | 'uscita', itemsList: BudgetItem[]) => {
+    return itemsList
+      .filter(b => (b.type || 'uscita') === type)
+      .sort((a, b) => {
+        if (type === 'entrata') {
+          const isAStagionale = a.label.trim().toLowerCase().includes('stagional');
+          const isBStagionale = b.label.trim().toLowerCase().includes('stagional');
+          if (isAStagionale && !isBStagionale) return -1;
+          if (!isAStagionale && isBStagionale) return 1;
+        }
+        return (a.label || '').localeCompare(b.label || '');
+      });
+  };
+
+  const availableBudgetCategories = getSortedBudgetCategories(formData.type, budgetItems);
+
+  const handleTypeChange = (newType: 'entrata' | 'uscita') => {
+    const cats = getSortedBudgetCategories(newType, budgetItems);
+    const isCurrentValid = cats.some(c => c.label === formData.category);
+    setFormData({
+      ...formData,
+      type: newType,
+      category: isCurrentValid ? formData.category : (cats[0]?.label || '')
+    });
+  };
+
+  const getCategoryActual = (label: string, type: 'entrata' | 'uscita') => {
+    return items
+      .filter(t => t.type === type && (t.category || '').trim().toLowerCase() === label.trim().toLowerCase())
+      .reduce((acc, t) => acc + t.amount, 0);
+  };
 
   useEffect(() => {
     const unsubTx = subscribeToTransactions((data) => {
@@ -98,7 +130,16 @@ export function Accounting() {
     const unsubDays = subscribeToHuntingDays(setHuntingDays);
     const unsubUsers = subscribeToUsers(setUsers);
     const unsubSettings = subscribeToSettings(setSettings);
-    const unsubBudget = subscribeToBudgetItems(setBudgetItems);
+    const unsubBudget = subscribeToBudgetItems((bItems) => {
+      setBudgetItems(bItems);
+      setFormData(prev => {
+        if (!prev.category && bItems.length > 0) {
+          const sorted = getSortedBudgetCategories(prev.type, bItems);
+          if (sorted.length > 0) return { ...prev, category: sorted[0].label };
+        }
+        return prev;
+      });
+    });
 
     return () => {
       unsubTx();
@@ -445,47 +486,94 @@ export function Accounting() {
                 {budgetItems.length === 0 ? (
                   <p className="p-10 text-center text-xs text-slate-300 font-medium italic">Nessuna voce di budget definita</p>
                 ) : (
-                  budgetItems.map(item => (
-                    <div key={item.id} className={cn(
-                      "p-3 flex justify-between items-center group hover:bg-slate-50 transition-colors",
-                      editingBudgetItemId === item.id && "bg-purple-50"
-                    )}>
-                      <div>
-                        <p className="text-xs font-bold text-slate-800">{item.label}</p>
-                        <p className={cn("text-[9px] font-black uppercase tracking-widest", item.type === 'entrata' ? "text-emerald-500" : "text-rose-500")}>
-                          {item.type}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-sm font-bold text-slate-700">€{item.amount.toLocaleString()}</span>
-                        {profile?.role === 'admin' && (
-                          <div className="flex items-center gap-1">
-                            <button 
-                              onClick={() => {
-                                setEditingBudgetItemId(item.id);
-                                setNewBudgetItem({
-                                  label: item.label,
-                                  amount: item.amount,
-                                  type: item.type
-                                });
-                              }}
-                              className="p-1.5 text-slate-500 hover:text-purple-600 hover:bg-purple-50 rounded transition-colors"
-                              title="Modifica"
-                            >
-                              <Edit2 size={14} />
-                            </button>
-                            <button 
-                              onClick={() => deleteBudgetItem(item.id)}
-                              className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
-                              title="Elimina"
-                            >
-                              <Trash2 size={14} />
-                            </button>
+                  budgetItems.map(item => {
+                    const actual = getCategoryActual(item.label, item.type);
+                    const pct = item.amount > 0 ? (actual / item.amount) * 100 : 0;
+                    const isOverBudget = item.type === 'uscita' && actual > item.amount;
+                    const isGoalReached = item.type === 'entrata' && actual >= item.amount;
+
+                    return (
+                      <div key={item.id} className={cn(
+                        "p-3.5 flex flex-col gap-2 group hover:bg-slate-50 transition-colors",
+                        editingBudgetItemId === item.id && "bg-purple-50"
+                      )}>
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <p className="text-xs font-bold text-slate-800">{item.label}</p>
+                              <span className={cn(
+                                "text-[8px] font-black uppercase px-1.5 py-0.5 rounded border",
+                                item.type === 'entrata' 
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200" 
+                                  : "bg-rose-50 text-rose-700 border-rose-200"
+                              )}>
+                                {item.type}
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-slate-500 font-medium mt-0.5">
+                              {item.type === 'entrata' ? 'Incassato' : 'Speso'}: <span className="font-bold text-slate-900">€{actual.toLocaleString()}</span> di €{item.amount.toLocaleString()} previsti ({pct.toFixed(0)}%)
+                            </p>
                           </div>
-                        )}
+
+                          <div className="flex items-center gap-3">
+                            <span className="text-xs font-bold text-slate-700">Prev. €{item.amount.toLocaleString()}</span>
+                            {profile?.role === 'admin' && (
+                              <div className="flex items-center gap-1">
+                                <button 
+                                  onClick={() => {
+                                    setEditingBudgetItemId(item.id);
+                                    setNewBudgetItem({
+                                      label: item.label,
+                                      amount: item.amount,
+                                      type: item.type
+                                    });
+                                  }}
+                                  className="p-1 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded transition-colors"
+                                  title="Modifica"
+                                >
+                                  <Edit2 size={13} />
+                                </button>
+                                <button 
+                                  onClick={() => deleteBudgetItem(item.id)}
+                                  className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
+                                  title="Elimina"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Progress Bar & Status indicator */}
+                        <div className="space-y-1">
+                          <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                            <div 
+                              className={cn(
+                                "h-full rounded-full transition-all duration-500",
+                                item.type === 'entrata'
+                                  ? (isGoalReached ? "bg-emerald-500" : "bg-accent-gold")
+                                  : (isOverBudget ? "bg-rose-500" : "bg-slate-700")
+                              )}
+                              style={{ width: `${Math.min(pct, 100)}%` }}
+                            />
+                          </div>
+                          <div className="flex justify-between text-[9px] font-bold">
+                            <span className={cn(
+                              item.type === 'entrata'
+                                ? (isGoalReached ? "text-emerald-600" : "text-slate-400")
+                                : (isOverBudget ? "text-rose-600 font-black" : "text-slate-400")
+                            )}>
+                              {item.type === 'entrata'
+                                ? (isGoalReached ? '✓ Obiettivo raggiunto' : `Mancano €${Math.max(0, item.amount - actual).toLocaleString()}`)
+                                : (isOverBudget ? `⚠ Fuori budget di €${(actual - item.amount).toLocaleString()}` : `Disponibile residuo €${(item.amount - actual).toLocaleString()}`)}
+                            </span>
+                            <span className="text-slate-400">{pct.toFixed(1)}%</span>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </div>
@@ -573,10 +661,11 @@ export function Accounting() {
 
                 <button 
                   onClick={() => {
+                    const defaultIncomeCat = budgetItems.find(b => b.type === 'entrata' && b.label.toLowerCase().includes('stagional'))?.label || budgetItems.find(b => b.type === 'entrata')?.label || '';
                     setFormData({
                       ...formData,
                       type: 'entrata',
-                      category: 'Quota Stagionale',
+                      category: defaultIncomeCat,
                       payerUid: hunter.uid,
                       payerName: hunter.displayName,
                       memberUid: profile?.role === 'socio' ? profile.uid : ''
@@ -668,8 +757,10 @@ export function Accounting() {
       {(profile?.role === 'socio' || profile?.role === 'admin') && (
         <button
         onClick={() => {
+          const firstCat = availableBudgetCategories[0]?.label || '';
           setFormData({
             ...formData,
+            category: firstCat,
             memberUid: profile?.role === 'socio' ? profile.uid : ''
           });
           handleToggleModal('add');
@@ -702,8 +793,12 @@ export function Accounting() {
                   <Wallet size={24} />
                 </div>
                 <div>
-                  <h3 className="text-xl font-serif text-lake-green leading-none mb-1">Nuovo Movimento</h3>
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Registra una nuova entrata o uscita</p>
+                  <h3 className="text-xl font-serif text-lake-green leading-none mb-1">
+                    {editingTransactionId ? 'Modifica Movimento' : 'Nuovo Movimento'}
+                  </h3>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">
+                    {editingTransactionId ? 'Aggiorna i dettagli dell\'operazione' : 'Registra una nuova entrata o uscita dal budget'}
+                  </p>
                 </div>
               </div>
 
@@ -714,7 +809,7 @@ export function Accounting() {
                     <div className="grid grid-cols-2 gap-2">
                       <button
                         type="button"
-                        onClick={() => setFormData({ ...formData, type: 'entrata' })}
+                        onClick={() => handleTypeChange('entrata')}
                         className={cn(
                           "py-2 px-4 rounded font-bold text-xs uppercase tracking-widest border transition-all",
                           formData.type === 'entrata' 
@@ -726,7 +821,7 @@ export function Accounting() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => setFormData({ ...formData, type: 'uscita' })}
+                        onClick={() => handleTypeChange('uscita')}
                         className={cn(
                           "py-2 px-4 rounded font-bold text-xs uppercase tracking-widest border transition-all",
                           formData.type === 'uscita' 
@@ -739,18 +834,38 @@ export function Accounting() {
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[0.65rem] font-black text-slate-400 uppercase tracking-widest">Categoria</label>
-                    <input 
-                      list="categories"
+                    <div className="flex justify-between items-center">
+                      <label className="text-[0.65rem] font-black text-slate-400 uppercase tracking-widest">
+                        Categoria {formData.type === 'entrata' ? '(Voci Entrata Budget)' : '(Voci Uscita Budget)'}
+                      </label>
+                      {availableBudgetCategories.length === 0 && (profile?.role === 'admin' || profile?.role === 'socio') && (
+                        <button
+                          type="button"
+                          onClick={() => handleToggleModal('budget')}
+                          className="text-[9px] font-bold text-purple-600 hover:text-purple-800 uppercase underline"
+                        >
+                          + Budget
+                        </button>
+                      )}
+                    </div>
+                    <select 
                       required
-                      placeholder="Es. Quota Stagionale, Mangime..."
                       value={formData.category}
                       onChange={e => setFormData({ ...formData, category: e.target.value })}
                       className="w-full bg-off-white border border-slate-200 rounded px-4 py-2.5 text-sm font-bold text-slate-gray outline-none focus:border-lake-green"
-                    />
-                    <datalist id="categories">
-                      {categorySuggestions.map(s => <option key={s} value={s} />)}
-                    </datalist>
+                    >
+                      <option value="" disabled>-- Seleziona Voce di {formData.type === 'entrata' ? 'Entrata' : 'Uscita'} --</option>
+                      {availableBudgetCategories.map(b => (
+                        <option key={b.id} value={b.label}>
+                          {b.label}
+                        </option>
+                      ))}
+                    </select>
+                    {availableBudgetCategories.length === 0 && (
+                      <p className="text-[10px] text-amber-700 bg-amber-50 p-2 rounded border border-amber-200 font-medium">
+                        Nessuna voce di {formData.type} definita nel Budget Preventivo. Aggiungine una nella sezione "Budget Preventivo".
+                      </p>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <label className="text-[0.65rem] font-black text-slate-400 uppercase tracking-widest">Importo (€)</label>
@@ -797,13 +912,14 @@ export function Accounting() {
                           const participants = getParticipantsForDay(hDayId);
                           const dayExpenses = getDayTotalExpenses(hDayId);
                           const suggestedAmount = participants.length > 0 ? dayExpenses / participants.length : 0;
+                          const dailyCat = budgetItems.find(b => b.type === 'entrata' && (b.label.toLowerCase().includes('giornalier') || b.label.toLowerCase().includes('ospit')))?.label || budgetItems.find(b => b.type === 'entrata')?.label || formData.category;
 
                           setFormData({ 
                             ...formData, 
                             huntingDayId: hDayId,
                             payerUid: hDay?.assignedToUid || (participants.length === 1 ? participants[0].uid : ''),
                             payerName: hDay?.assignedToName || (participants.length === 1 ? participants[0].displayName : ''),
-                            category: hDay ? 'Quota Giornaliera' : formData.category,
+                            category: hDay ? dailyCat : formData.category,
                             amount: suggestedAmount > 0 ? parseFloat(suggestedAmount.toFixed(2)) : formData.amount
                           });
                         }}
