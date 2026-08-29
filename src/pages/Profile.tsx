@@ -7,12 +7,12 @@ import {
   subscribeToSettings 
 } from '../services';
 import { Transaction, UserProfile, LakeSettings } from '../types';
-import { User, Mail, Shield, CheckCircle2, AlertCircle, Lock, Wallet, Target, TrendingUp, Eye, EyeOff, Cake, Calendar } from 'lucide-react';
+import { User, Mail, Shield, CheckCircle2, AlertCircle, Lock, Wallet, Target, TrendingUp, Eye, EyeOff, Cake, Calendar, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { safeLocalStorage } from '../lib/safeLocalStorage';
 
 export function Profile() {
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const [displayName, setDisplayName] = useState(profile?.displayName || '');
   const [email, setEmail] = useState(profile?.email || '');
   const [username, setUsername] = useState(profile?.username || '');
@@ -20,6 +20,61 @@ export function Profile() {
   const [birthDate, setBirthDate] = useState(profile?.birthDate || '');
   const [showPassword, setShowPassword] = useState(false);
   const [status, setStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
+
+  const defaultFontSize = 120;
+
+  const [fontSize, setFontSize] = useState<number>(() => {
+    if (user?.uid) {
+      const userSpecific = safeLocalStorage.getItem(`lake_font_size_${user.uid}`);
+      if (userSpecific) {
+        const val = parseInt(userSpecific, 10);
+        if (!isNaN(val)) return val;
+      }
+    }
+    if (profile?.fontSize) {
+      return profile.fontSize;
+    }
+    const saved = safeLocalStorage.getItem('lake_font_size');
+    return saved ? parseInt(saved, 10) : defaultFontSize;
+  });
+
+  // Keep font size in sync with user profile or storage
+  useEffect(() => {
+    const activeUid = user?.uid || profile?.uid;
+    if (activeUid) {
+      const userSpecific = safeLocalStorage.getItem(`lake_font_size_${activeUid}`);
+      const val = userSpecific 
+        ? parseInt(userSpecific, 10) 
+        : (profile?.fontSize || (safeLocalStorage.getItem('lake_font_size') ? parseInt(safeLocalStorage.getItem('lake_font_size')!, 10) : defaultFontSize));
+      if (!isNaN(val) && val >= 80 && val <= 160) {
+        setFontSize(val);
+        document.documentElement.style.fontSize = `${(val / 100) * 16}px`;
+      }
+    }
+  }, [user?.uid, profile?.uid, profile?.fontSize]);
+
+  const changeFontSize = (delta: number) => {
+    const newSize = Math.min(150, Math.max(85, fontSize + delta));
+    setFontSize(newSize);
+    safeLocalStorage.setItem('lake_font_size', newSize.toString());
+    const activeUid = user?.uid || profile?.uid;
+    if (activeUid) {
+      safeLocalStorage.setItem(`lake_font_size_${activeUid}`, newSize.toString());
+      updateUserProfile(activeUid, { fontSize: newSize } as any).catch(() => {});
+    }
+    document.documentElement.style.fontSize = `${(newSize / 100) * 16}px`;
+  };
+
+  const resetFontSize = () => {
+    setFontSize(defaultFontSize);
+    safeLocalStorage.setItem('lake_font_size', defaultFontSize.toString());
+    const activeUid = user?.uid || profile?.uid;
+    if (activeUid) {
+      safeLocalStorage.setItem(`lake_font_size_${activeUid}`, defaultFontSize.toString());
+      updateUserProfile(activeUid, { fontSize: defaultFontSize } as any).catch(() => {});
+    }
+    document.documentElement.style.fontSize = `${(defaultFontSize / 100) * 16}px`;
+  };
 
   // Synchronize fields whenever profile is loaded or changed
   useEffect(() => {
@@ -269,6 +324,60 @@ export function Profile() {
                 className="w-full bg-off-white border border-slate-200 rounded px-3 py-2 text-sm font-semibold text-slate-900 outline-none focus:border-lake-green transition-all"
               />
               <p className="text-[9px] text-slate-400 font-medium">Inserisci la tua data di nascita per ricevere gli auguri dal gruppo del Lago!</p>
+            </div>
+
+            {/* Font Size Accessibility Setting */}
+            <div className="md:col-span-2 border-t border-slate-100 pt-6 mt-2">
+              <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-2">
+                <ZoomIn size={16} className="text-accent-gold" />
+                Dimensione Testo & Accessibilità
+              </h3>
+              <p className="text-xs text-slate-500 mb-4">
+                Regola la grandezza dei caratteri dell'applicazione per una lettura ottimale su smartphone (Default: <strong>120%</strong>).
+              </p>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-2 bg-off-white p-1.5 rounded-2xl border border-slate-200 shadow-inner">
+                  <button
+                    type="button"
+                    onClick={() => changeFontSize(-5)}
+                    disabled={fontSize <= 85}
+                    className="p-2.5 bg-slate-100 hover:bg-slate-200 disabled:opacity-40 rounded-xl transition-all text-slate-700 active:scale-95 cursor-pointer"
+                    title="Riduci font"
+                    aria-label="Riduci font"
+                  >
+                    <ZoomOut size={16} />
+                  </button>
+                  
+                  <div className="px-4 py-1.5 bg-white border border-slate-200 rounded-xl text-center min-w-[80px] shadow-sm">
+                    <span className="text-base font-black text-lake-green">{fontSize}%</span>
+                    {fontSize === defaultFontSize && (
+                      <span className="block text-[9px] text-accent-gold font-bold uppercase tracking-wider">Default</span>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => changeFontSize(5)}
+                    disabled={fontSize >= 150}
+                    className="p-2.5 bg-slate-100 hover:bg-slate-200 disabled:opacity-40 rounded-xl transition-all text-slate-700 active:scale-95 cursor-pointer"
+                    title="Ingrandisci font"
+                    aria-label="Ingrandisci font"
+                  >
+                    <ZoomIn size={16} />
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={resetFontSize}
+                  className="px-3.5 py-2.5 text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all text-xs font-bold flex items-center gap-1.5 active:scale-95 cursor-pointer border border-slate-200"
+                  title="Ripristina 120%"
+                >
+                  <RotateCcw size={14} />
+                  Ripristina (120%)
+                </button>
+              </div>
             </div>
           </div>
 

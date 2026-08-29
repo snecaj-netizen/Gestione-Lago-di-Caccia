@@ -8,6 +8,7 @@ export interface UserProfile {
   isActive: boolean;
   assignedDaysOfWeek: number[]; // Array of 0-6
   birthDate?: string; // YYYY-MM-DD
+  fontSize?: number; // User font zoom percentage (default: 120)
   seasonalQuota?: number;
   bio?: string;
   location?: string;

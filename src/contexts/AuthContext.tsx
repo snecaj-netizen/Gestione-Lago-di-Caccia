@@ -36,6 +36,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return null;
   });
 
+  // Apply default 120% font size or user custom size immediately
+  useEffect(() => {
+    try {
+      const activeUid = user?.uid;
+      let targetSize = 120;
+      if (activeUid) {
+        const userSize = safeLocalStorage.getItem(`lake_font_size_${activeUid}`);
+        if (userSize) {
+          const parsed = parseInt(userSize, 10);
+          if (!isNaN(parsed) && parsed >= 80 && parsed <= 160) targetSize = parsed;
+        }
+      }
+      if (targetSize === 120) {
+        const globalSize = safeLocalStorage.getItem('lake_font_size');
+        if (globalSize) {
+          const parsed = parseInt(globalSize, 10);
+          if (!isNaN(parsed) && parsed >= 80 && parsed <= 160) targetSize = parsed;
+        }
+      }
+      document.documentElement.style.fontSize = `${(targetSize / 100) * 16}px`;
+    } catch (e) {}
+  }, [user?.uid]);
+
   const [profile, setProfile] = useState<UserProfile | null>(() => {
     const persistedProfile = safeLocalStorage.getItem('lake_app_profile');
     if (persistedProfile) {

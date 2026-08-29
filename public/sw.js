@@ -1,5 +1,5 @@
 // Service Worker for Gestione Lago PWA
-const CACHE_NAME = 'gestione-lago-v1';
+const CACHE_NAME = 'gestione-lago-v2';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
