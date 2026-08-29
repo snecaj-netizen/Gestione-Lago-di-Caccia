@@ -921,16 +921,14 @@ function MainLayout() {
                       <p className="text-xs font-black text-slate-900">{profile?.displayName}</p>
                       <p className="text-[10px] font-bold text-lake-green uppercase tracking-tighter">{profile?.role}</p>
                     </div>
-                    {profile?.role !== 'admin' && (
-                      <Link 
-                        to="/profilo"
-                        onClick={() => setShowProfileMenu(false)}
-                        className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 hover:text-lake-green transition-colors"
-                      >
-                        <UserIcon size={14} />
-                        Il mio profilo
-                      </Link>
-                    )}
+                    <Link 
+                      to="/profilo"
+                      onClick={() => setShowProfileMenu(false)}
+                      className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 hover:text-lake-green transition-colors"
+                    >
+                      <UserIcon size={14} />
+                      Il mio profilo
+                    </Link>
                     <button 
                       onClick={() => {
                         setShowProfileMenu(false);
