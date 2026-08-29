@@ -1,55 +1,5 @@
 import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
-import { safeLocalStorage, safeSessionStorage } from './lib/safeLocalStorage';
-
-// Try to polyfill window.localStorage and window.sessionStorage if blocked by third-party iframe cookie/storage rules
-function applyStoragePolyfills() {
-  if (typeof window === 'undefined') return;
-
-  // 1. Try to redefine on Window.prototype (this intercepts both direct accesses 'localStorage' and 'window.localStorage')
-  try {
-    Object.defineProperty(Window.prototype, 'localStorage', {
-      get() { return safeLocalStorage; },
-      configurable: true,
-    });
-  } catch (e) {
-    console.warn("Could not polyfill localStorage on Window.prototype:", e);
-  }
-
-  try {
-    Object.defineProperty(Window.prototype, 'sessionStorage', {
-      get() { return safeSessionStorage; },
-      configurable: true,
-    });
-  } catch (e) {
-    console.warn("Could not polyfill sessionStorage on Window.prototype:", e);
-  }
-
-  // 2. Try to redefine directly on window object as a fallback
-  try {
-    Object.defineProperty(window, 'localStorage', {
-      value: safeLocalStorage,
-      configurable: true,
-      enumerable: true,
-      writable: true,
-    });
-  } catch (e) {
-    // Expected in many browsers if non-configurable
-  }
-
-  try {
-    Object.defineProperty(window, 'sessionStorage', {
-      value: safeSessionStorage,
-      configurable: true,
-      enumerable: true,
-      writable: true,
-    });
-  } catch (e) {
-    // Expected in many browsers if non-configurable
-  }
-}
-
-applyStoragePolyfills();
 
 // Intercept and safely wrap window.alert to avoid crash in sandboxed/restricted iframe environments
 try {

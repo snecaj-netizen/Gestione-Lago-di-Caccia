@@ -24,9 +24,51 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(() => {
+    const persisted = safeLocalStorage.getItem('lake_app_user');
+    if (persisted) {
+      try {
+        return JSON.parse(persisted);
+      } catch (e) {
+        console.warn("Failed to parse initial user session", e);
+      }
+    }
+    return null;
+  });
+
+  const [profile, setProfile] = useState<UserProfile | null>(() => {
+    const persistedProfile = safeLocalStorage.getItem('lake_app_profile');
+    if (persistedProfile) {
+      try {
+        return JSON.parse(persistedProfile);
+      } catch (e) {
+        console.warn("Failed to parse initial user profile", e);
+      }
+    }
+    const persistedUser = safeLocalStorage.getItem('lake_app_user');
+    if (persistedUser) {
+      try {
+        const u = JSON.parse(persistedUser);
+        if (u.email === 'snecaj@gmail.com' || u.uid === 'admin-id') {
+          return {
+            uid: u.uid || 'admin-id',
+            email: 'snecaj@gmail.com',
+            displayName: u.displayName || 'Stefano',
+            role: 'admin',
+            isActive: true,
+            assignedDaysOfWeek: [],
+            seasonalQuota: 0
+          };
+        }
+      } catch (e) {}
+    }
+    return null;
+  });
+
+  const [loading, setLoading] = useState<boolean>(() => {
+    const persistedUser = safeLocalStorage.getItem('lake_app_user');
+    return !persistedUser;
+  });
 
   // Synchronize profile in real-time when user is logged in
   useEffect(() => {
@@ -37,6 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const found = list.find((u: any) => u.uid === user.uid || (user.email && (u.email === user.email || u.username === user.email)));
         if (found) {
           setProfile(found);
+          safeLocalStorage.setItem('lake_app_profile', JSON.stringify(found));
         }
       });
       return () => unsub();
@@ -44,7 +87,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const userDocRef = doc(db, 'users', user.uid);
       const unsub = onSnapshot(userDocRef, (snap) => {
         if (snap.exists()) {
-          setProfile({ ...snap.data(), uid: snap.id } as UserProfile);
+          const freshData = { ...snap.data(), uid: snap.id } as UserProfile;
+          setProfile(freshData);
+          safeLocalStorage.setItem('lake_app_profile', JSON.stringify(freshData));
         }
       }, (err) => {
         console.warn("Firestore profile subscription error:", err);
@@ -55,9 +100,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
-    let isFetchingCustomProfile = false;
 
-    // Check local storage FIRST for immediate session recovery
+    // Check local storage / background check
     const persistedUser = safeLocalStorage.getItem('lake_app_user');
     if (persistedUser) {
       try {
@@ -74,7 +118,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               email: 'snecaj@gmail.com',
               displayName: 'Stefano',
               username: 'snecaj@gmail.com',
-              password: 'admin',
+              password: 'bledar_hila',
               role: 'admin',
               isActive: true,
               assignedDaysOfWeek: [0, 3],
@@ -86,35 +130,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
           if (found && mounted) {
             setProfile(found);
+            safeLocalStorage.setItem('lake_app_profile', JSON.stringify(found));
           }
           if (mounted) setLoading(false);
         } else {
-          isFetchingCustomProfile = true;
           const docRef = doc(db, 'users', userData.uid);
           getDoc(docRef).then(snap => {
             if (mounted && snap.exists()) {
-              setProfile({ ...snap.data(), uid: snap.id } as UserProfile);
+              const pData = { ...snap.data(), uid: snap.id } as UserProfile;
+              setProfile(pData);
+              safeLocalStorage.setItem('lake_app_profile', JSON.stringify(pData));
             } else if (mounted && (userData.uid === 'admin-id' || userData.email === 'snecaj@gmail.com')) {
-              setProfile({
+              const defaultAdmin: UserProfile = {
                 uid: userData.uid || 'admin-id',
                 email: 'snecaj@gmail.com',
                 displayName: 'Stefano',
                 username: 'snecaj@gmail.com',
-                password: 'admin',
+                password: 'bledar_hila',
                 role: 'admin',
                 isActive: true,
                 assignedDaysOfWeek: [],
                 seasonalQuota: 0
-              });
+              };
+              setProfile(defaultAdmin);
+              safeLocalStorage.setItem('lake_app_profile', JSON.stringify(defaultAdmin));
             }
             if (mounted) {
-              isFetchingCustomProfile = false;
               setLoading(false);
             }
           }).catch(err => {
             console.error("Error fetching persisted profile", err);
             if (mounted) {
-              isFetchingCustomProfile = false;
               setLoading(false);
             }
           });
@@ -144,6 +190,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             displayName: firebaseUser.displayName,
             photoURL: firebaseUser.photoURL
           }));
+          safeLocalStorage.setItem('lake_app_profile', JSON.stringify(userProfile));
           setLoading(false);
         }
       } else {
@@ -155,7 +202,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setLoading(false);
           }
         } else {
-          if (mounted && !isFetchingCustomProfile) {
+          if (mounted) {
             setLoading(false);
           }
         }
@@ -223,6 +270,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser({ uid: found.uid, email: found.email, displayName: found.displayName } as User);
         setProfile(found);
         safeLocalStorage.setItem('lake_app_user', JSON.stringify({ uid: found.uid, email: found.email, displayName: found.displayName }));
+        safeLocalStorage.setItem('lake_app_profile', JSON.stringify(found));
         return;
       }
 
@@ -273,6 +321,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         email: matchedUser.email,
         displayName: matchedUser.displayName
       }));
+      safeLocalStorage.setItem('lake_app_profile', JSON.stringify(matchedUser));
     } catch (error: any) {
       console.error("Login Error:", error?.message || error);
       throw error;
@@ -283,9 +332,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     if (auth) {
-      await signOut(auth);
+      try {
+        await signOut(auth);
+      } catch (e) {}
     }
     safeLocalStorage.removeItem('lake_app_user');
+    safeLocalStorage.removeItem('lake_app_profile');
     safeLocalStorage.setItem('lake_explicit_logout', 'true');
     setUser(null);
     setProfile(null);

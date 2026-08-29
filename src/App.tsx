@@ -282,13 +282,13 @@ function Login() {
   const { signInWithCredentials, user, profile } = useAuth();
   const navigate = useNavigate();
   const [rememberMe, setRememberMe] = React.useState(() => {
-    return safeLocalStorage.getItem('lake_remember_me') === 'true';
+    return safeLocalStorage.getItem('lake_remember_me') !== 'false';
   });
   const [username, setUsername] = React.useState(() => {
-    return safeLocalStorage.getItem('lake_remember_me') === 'true' ? (safeLocalStorage.getItem('lake_username') || '') : '';
+    return safeLocalStorage.getItem('lake_username') || '';
   });
   const [password, setPassword] = React.useState(() => {
-    return safeLocalStorage.getItem('lake_remember_me') === 'true' ? (safeLocalStorage.getItem('lake_password') || '') : '';
+    return safeLocalStorage.getItem('lake_password') || '';
   });
   const [showPassword, setShowPassword] = React.useState(false);
   const [error, setError] = React.useState('');
@@ -296,18 +296,22 @@ function Login() {
   const [deferredPrompt, setDeferredPrompt] = React.useState<any>(null);
 
   React.useEffect(() => {
-    if (user && profile?.isActive) {
+    if (user && (profile?.isActive || profile?.role === 'admin' || user.email === 'snecaj@gmail.com')) {
       navigate('/', { replace: true });
     }
   }, [user, profile, navigate]);
 
   React.useEffect(() => {
     const isExplicitLogout = safeLocalStorage.getItem('lake_explicit_logout') === 'true';
-    if (rememberMe && username && password && !user && !isSubmitting && !isExplicitLogout) {
+    const isRemembered = safeLocalStorage.getItem('lake_remember_me') !== 'false';
+    const savedUser = safeLocalStorage.getItem('lake_username');
+    const savedPass = safeLocalStorage.getItem('lake_password');
+
+    if (isRemembered && savedUser && savedPass && !user && !isSubmitting && !isExplicitLogout) {
       const performAutoLogin = async () => {
         setIsSubmitting(true);
         try {
-          await signInWithCredentials(username, password);
+          await signInWithCredentials(savedUser, savedPass);
           navigate('/', { replace: true });
         } catch (err: any) {
           console.warn("Auto-login failed:", err);
