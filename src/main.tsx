@@ -60,6 +60,20 @@ try {
 
 import App from './App.tsx';
 import './index.css';
+
+// Register PWA Service Worker
+if (typeof window !== 'undefined' && 'serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js', { scope: '/' })
+      .then((reg) => {
+        console.log('PWA: ServiceWorker registration successful with scope:', reg.scope);
+      })
+      .catch((err) => {
+        console.warn('PWA: ServiceWorker registration failed:', err);
+      });
+  });
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />

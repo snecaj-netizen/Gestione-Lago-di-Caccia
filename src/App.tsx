@@ -48,6 +48,7 @@ import { Gallery } from './pages/Gallery';
 import { Recipes } from './pages/Recipes';
 import { Tesserino } from './pages/Tesserino';
 import { Regulation } from './pages/Regulation';
+import { InstallModal } from './components/InstallModal';
 import { NotificationCenter } from './components/NotificationCenter';
 import { PWAUpdatePrompt } from './components/PWAUpdatePrompt';
 import { it } from 'date-fns/locale';
@@ -78,6 +79,10 @@ function Sidebar({
   const location = useLocation();
   const [showLogoutConfirm, setShowLogoutConfirm] = React.useState(false);
   const [deferredPrompt, setDeferredPrompt] = React.useState<any>(null);
+  const [showInstallModal, setShowInstallModal] = React.useState(false);
+
+  const isStandalone = typeof window !== 'undefined' && 
+    (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true);
 
   // Close sidebar on path change
   React.useEffect(() => {
@@ -96,11 +101,14 @@ function Sidebar({
   }, []);
 
   const handleInstallClick = async () => {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === 'accepted') {
-      setDeferredPrompt(null);
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setDeferredPrompt(null);
+      }
+    } else {
+      setShowInstallModal(true);
     }
   };
 
@@ -215,20 +223,14 @@ function Sidebar({
           </nav>
 
           <div className="mt-auto p-4 border-t border-white/10 space-y-3 shrink-0">
-            {deferredPrompt ? (
+            {!isStandalone && (
               <button 
                 onClick={handleInstallClick}
-                className="flex items-center gap-2.5 w-full text-sm font-bold text-accent-gold hover:text-white transition-colors bg-white/10 py-3 px-3.5 rounded-xl border border-accent-gold/30 active:scale-98"
+                className="flex items-center justify-center gap-2.5 w-full text-sm font-bold text-lake-green bg-accent-gold hover:bg-accent-gold/90 transition-all py-3 px-3.5 rounded-xl shadow-md border border-accent-gold/40 active:scale-98 cursor-pointer"
               >
                 <Download size={18} />
-                Installa App (PWA)
+                Installa App sul Telefono
               </button>
-            ) : (
-              <div className="px-3 py-2 bg-white/5 rounded-lg border border-white/10">
-                <p className="text-xs text-white/60 leading-tight">
-                  Per installare: usa "Aggiungi a home" dal menu del browser.
-                </p>
-              </div>
             )}
             <button 
               onClick={handleLogout}
@@ -245,6 +247,14 @@ function Sidebar({
           </div>
         </div>
       </aside>
+
+      {/* PWA Install Guide Modal */}
+      <InstallModal 
+        isOpen={showInstallModal}
+        onClose={() => setShowInstallModal(false)}
+        deferredPrompt={deferredPrompt}
+        onNativeInstall={handleInstallClick}
+      />
 
       {/* Logout Confirmation Modal */}
       {showLogoutConfirm && (
@@ -294,6 +304,10 @@ function Login() {
   const [error, setError] = React.useState('');
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [deferredPrompt, setDeferredPrompt] = React.useState<any>(null);
+  const [showInstallModal, setShowInstallModal] = React.useState(false);
+
+  const isStandalone = typeof window !== 'undefined' && 
+    (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true);
 
   React.useEffect(() => {
     if (user && (profile?.isActive || profile?.role === 'admin' || user.email === 'snecaj@gmail.com')) {
@@ -360,12 +374,15 @@ function Login() {
   }, []);
 
   const handleInstall = async () => {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    console.log(`PWA: User choice: ${outcome}`);
-    if (outcome === 'accepted') {
-      setDeferredPrompt(null);
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      console.log(`PWA: User choice: ${outcome}`);
+      if (outcome === 'accepted') {
+        setDeferredPrompt(null);
+      }
+    } else {
+      setShowInstallModal(true);
     }
   };
 
@@ -480,18 +497,26 @@ function Login() {
           </button>
         </form>
 
-        {deferredPrompt && (
+        {!isStandalone && (
           <div className="mt-8 pt-6 border-t border-slate-100 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Installazione Consigliata</p>
             <button 
+              type="button"
               onClick={handleInstall}
-              className="w-full bg-accent-gold text-lake-green font-black py-3 px-6 rounded-lg transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 uppercase text-[0.65rem] tracking-[0.2em] hover:bg-accent-gold/90 border border-lake-green/10"
+              className="w-full bg-accent-gold text-lake-green font-black py-3.5 px-6 rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 uppercase text-[0.7rem] tracking-[0.15em] hover:bg-accent-gold/90 border border-lake-green/10 cursor-pointer"
             >
               <Download size={16} />
               Installa App Sul Telefono
             </button>
           </div>
         )}
+
+        <InstallModal 
+          isOpen={showInstallModal}
+          onClose={() => setShowInstallModal(false)}
+          deferredPrompt={deferredPrompt}
+          onNativeInstall={handleInstall}
+        />
       </div>
     </div>
   );
