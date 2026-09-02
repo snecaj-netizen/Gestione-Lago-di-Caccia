@@ -926,6 +926,76 @@ export const notifyAllUsers = async (title: string, body: string, type: Notifica
   }
 };
 
+export const sendBirthdayNotifications = async (birthdayUser: UserProfile, isToday: boolean, reminderId: string) => {
+  try {
+    let recipients: UserProfile[] = [];
+    if (!db) {
+      const localUsers = getLocalCollection('users');
+      recipients = localUsers.filter(u => u.isActive);
+      const list = getLocalCollection('notifications');
+      
+      recipients.forEach(u => {
+        if (!isToday && u.uid === birthdayUser.uid) {
+          // Do not send tomorrow's notification to the birthday person themselves
+          return;
+        }
+
+        const isSelf = u.uid === birthdayUser.uid;
+        const title = isSelf ? "Buon Compleanno!" : (isToday ? "Buon Compleanno!" : "Compleanno in arrivo");
+        const body = isSelf 
+          ? "Tanti auguri di buon compleanno da tutto il gruppo del Lago! 🎂🎉"
+          : (isToday ? `Oggi è il compleanno di ${birthdayUser.displayName}!` : `Domani è il compleanno di ${birthdayUser.displayName}!`);
+
+        list.push({
+          id: Math.random().toString(36).substring(2, 11),
+          title,
+          body,
+          type: 'system',
+          targetUid: u.uid,
+          read: false,
+          createdAt: new Date().toISOString(),
+          link: '/',
+          metadata: { birthdayReminderId: reminderId, birthdayUserUid: birthdayUser.uid, type: isToday ? 'birthday_today' : 'birthday_tomorrow' }
+        });
+      });
+      saveLocalCollection('notifications', list);
+      return;
+    }
+
+    const usersSnap = await getDocs(collection(db, 'users'));
+    recipients = usersSnap.docs
+      .map(doc => ({ ...doc.data(), uid: doc.id } as UserProfile))
+      .filter(u => u.isActive);
+
+    const promises = recipients.map(async (u) => {
+      if (!isToday && u.uid === birthdayUser.uid) {
+        return; // Skip tomorrow notification for the birthday person
+      }
+
+      const isSelf = u.uid === birthdayUser.uid;
+      const title = isSelf ? "Buon Compleanno!" : (isToday ? "Buon Compleanno!" : "Compleanno in arrivo");
+      const body = isSelf 
+        ? "Tanti auguri di buon compleanno da tutto il gruppo del Lago! 🎂🎉"
+        : (isToday ? `Oggi è il compleanno di ${birthdayUser.displayName}!` : `Domani è il compleanno di ${birthdayUser.displayName}!`);
+
+      await addDoc(collection(db, 'notifications'), cleanData({
+        title,
+        body,
+        type: 'system',
+        targetUid: u.uid,
+        read: false,
+        createdAt: new Date().toISOString(),
+        link: '/',
+        metadata: { birthdayReminderId: reminderId, birthdayUserUid: birthdayUser.uid, type: isToday ? 'birthday_today' : 'birthday_tomorrow' }
+      }));
+    });
+
+    await Promise.all(promises);
+  } catch (error) {
+    console.error("Error creating birthday notifications:", error);
+  }
+};
+
 export const checkAndSendBirthdayNotifications = async () => {
   try {
     const today = new Date();
@@ -956,13 +1026,7 @@ export const checkAndSendBirthdayNotifications = async () => {
           const reminderId = `birthday_today_${u.uid}_${todayStr}`;
           const alreadySent = existingNotifs.some(n => n.metadata?.birthdayReminderId === reminderId);
           if (!alreadySent) {
-            await notifyAllUsers(
-              "Buon Compleanno!",
-              `Oggi è il compleanno di ${u.displayName}!`,
-              'system',
-              '/',
-              { birthdayReminderId: reminderId, birthdayUserUid: u.uid, type: 'birthday_today' }
-            );
+            await sendBirthdayNotifications(u, true, reminderId);
           }
         }
 
@@ -971,13 +1035,7 @@ export const checkAndSendBirthdayNotifications = async () => {
           const reminderId = `birthday_tomorrow_${u.uid}_${todayStr}`;
           const alreadySent = existingNotifs.some(n => n.metadata?.birthdayReminderId === reminderId);
           if (!alreadySent) {
-            await notifyAllUsers(
-              "Compleanno in arrivo",
-              `Domani è il compleanno di ${u.displayName}!`,
-              'system',
-              '/',
-              { birthdayReminderId: reminderId, birthdayUserUid: u.uid, type: 'birthday_tomorrow' }
-            );
+            await sendBirthdayNotifications(u, false, reminderId);
           }
         }
       }
@@ -1005,13 +1063,7 @@ export const checkAndSendBirthdayNotifications = async () => {
         );
         const notifSnap = await getDocs(qNotifs);
         if (notifSnap.empty) {
-          await notifyAllUsers(
-            "Buon Compleanno!",
-            `Oggi è il compleanno di ${u.displayName}!`,
-            'system',
-            '/',
-            { birthdayReminderId: reminderId, birthdayUserUid: u.uid, type: 'birthday_today' }
-          );
+          await sendBirthdayNotifications(u, true, reminderId);
         }
       }
 
@@ -1024,13 +1076,7 @@ export const checkAndSendBirthdayNotifications = async () => {
         );
         const notifSnap = await getDocs(qNotifs);
         if (notifSnap.empty) {
-          await notifyAllUsers(
-            "Compleanno in arrivo",
-            `Domani è il compleanno di ${u.displayName}!`,
-            'system',
-            '/',
-            { birthdayReminderId: reminderId, birthdayUserUid: u.uid, type: 'birthday_tomorrow' }
-          );
+          await sendBirthdayNotifications(u, false, reminderId);
         }
       }
     }
@@ -1184,11 +1230,31 @@ export const deleteHarvest = async (harvestId: string) => {
 
 // Notifications
 export const subscribeToUserNotifications = (uid: string, callback: (notifications: Notification[]) => void) => {
+  const processNotifications = (list: Notification[]) => {
+    const filtered = list.filter(n => {
+      if (n.targetUid !== uid) return false;
+      if (n.metadata?.type === 'birthday_tomorrow' && n.metadata?.birthdayUserUid === uid) {
+        return false;
+      }
+      return true;
+    }).map(n => {
+      if (n.metadata?.type === 'birthday_today' && n.metadata?.birthdayUserUid === uid) {
+        return {
+          ...n,
+          title: "Buon Compleanno!",
+          body: "Tanti auguri di buon compleanno da tutto il gruppo del Lago! 🎂🎉"
+        };
+      }
+      return n;
+    });
+
+    const sorted = [...filtered].sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    callback(sorted);
+  };
+
   if (!db) {
     return subscribeMockCollection('notifications', (list) => {
-      const filtered = list.filter(n => n.targetUid === uid);
-      const sorted = [...filtered].sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
-      callback(sorted);
+      processNotifications(list);
     });
   }
   const q = query(
@@ -1197,7 +1263,8 @@ export const subscribeToUserNotifications = (uid: string, callback: (notificatio
     orderBy('createdAt', 'desc')
   );
   return onSnapshot(q, (snapshot) => {
-    callback(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Notification)));
+    const list = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Notification));
+    processNotifications(list);
   }, (error) => handleFirestoreError(error, OperationType.LIST, 'notifications'));
 };
 

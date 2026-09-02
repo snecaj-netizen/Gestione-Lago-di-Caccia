@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Bell, X, Check, Trash2, Target, Wallet, Info, Camera, ExternalLink } from 'lucide-react';
 import { subscribeToUserNotifications, markNotificationAsRead, deleteNotification, markAllNotificationsAsRead, deleteAllNotifications } from '../services';
 import { Notification } from '../types';
@@ -90,7 +91,8 @@ export function NotificationCenter({ isOpen, onToggle }: { isOpen: boolean, onTo
     <div className="relative">
       <button 
         onClick={() => onToggle(!isOpen)}
-        className="relative p-2 text-slate-500 hover:text-lake-green transition-colors bg-white rounded-full shadow-sm border border-slate-100"
+        className="relative p-2 text-slate-500 hover:text-lake-green transition-colors bg-white rounded-full shadow-sm border border-slate-100 cursor-pointer"
+        aria-label="Notifiche"
       >
         <Bell size={20} />
         {unreadCount > 0 && (
@@ -100,26 +102,46 @@ export function NotificationCenter({ isOpen, onToggle }: { isOpen: boolean, onTo
         )}
       </button>
 
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 10 }}
-            className="absolute right-0 mt-3 w-80 sm:w-96 bg-white rounded-xl shadow-2xl border border-slate-100 z-[70] overflow-hidden origin-top-right"
-          >
-              <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-off-white/50">
+      {createPortal(
+        <>
+          {/* Backdrop for mobile */}
+          <AnimatePresence>
+            {isOpen && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => onToggle(false)}
+                className="fixed inset-0 bg-slate-900/40 backdrop-blur-[2px] z-[9998] sm:hidden"
+              />
+            )}
+          </AnimatePresence>
+
+          <AnimatePresence>
+            {isOpen && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                className={cn(
+                  "z-[9999] bg-white rounded-2xl sm:rounded-xl shadow-2xl border border-slate-100 overflow-hidden flex flex-col",
+                  "fixed inset-x-2 top-16 bottom-12 sm:absolute sm:inset-auto sm:right-8 sm:top-20 sm:w-96 sm:max-h-[85vh]",
+                  "origin-top-right"
+                )}
+              >
+              <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-off-white/50 shrink-0">
                 <h3 className="text-xs font-black text-lake-green uppercase tracking-widest">Notifiche</h3>
                 <button 
                   onClick={() => onToggle(false)}
-                  className="text-slate-400 hover:text-slate-600"
+                  className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                  aria-label="Chiudi notifiche"
                 >
-                  <X size={16} />
+                  <X size={18} />
                 </button>
               </div>
 
                {notifications.length > 0 && (
-                <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-100 flex justify-between items-center text-[10px]">
+                <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-100 flex justify-between items-center text-[10px] shrink-0">
                   <button
                     onClick={handleMarkAllAsRead}
                     disabled={unreadCount === 0}
@@ -162,9 +184,9 @@ export function NotificationCenter({ isOpen, onToggle }: { isOpen: boolean, onTo
                 </div>
               )}
 
-              <div className="max-h-[70vh] overflow-y-auto scrollbar-hide bg-white">
+              <div className="flex-1 overflow-y-auto scrollbar-hide bg-white min-h-0">
                 {notifications.length === 0 ? (
-                  <div className="p-8 text-center">
+                  <div className="p-8 text-center flex flex-col items-center justify-center h-full">
                     <Bell size={32} className="mx-auto text-slate-200 mb-2" />
                     <p className="text-xs font-medium text-slate-400">Nessuna notifica</p>
                   </div>
@@ -203,7 +225,7 @@ export function NotificationCenter({ isOpen, onToggle }: { isOpen: boolean, onTo
                                     e.stopPropagation();
                                     markNotificationAsRead(n.id);
                                   }}
-                                  className="text-[9px] font-black text-lake-green uppercase tracking-widest flex items-center gap-1 hover:underline"
+                                  className="text-[9px] font-black text-lake-green uppercase tracking-widest flex items-center gap-1 hover:underline cursor-pointer"
                                 >
                                   <Check size={10} /> Segna come letta
                                 </button>
@@ -213,7 +235,7 @@ export function NotificationCenter({ isOpen, onToggle }: { isOpen: boolean, onTo
                                   e.stopPropagation();
                                   deleteNotification(n.id);
                                 }}
-                                className="text-[9px] font-black text-rose-400 uppercase tracking-widest flex items-center gap-1 hover:text-rose-600 transition-colors opacity-0 group-hover:opacity-100"
+                                className="text-[9px] font-black text-rose-400 uppercase tracking-widest flex items-center gap-1 hover:text-rose-600 transition-colors opacity-0 group-hover:opacity-100 cursor-pointer"
                               >
                                 <Trash2 size={10} /> Elimina
                               </button>
@@ -227,13 +249,16 @@ export function NotificationCenter({ isOpen, onToggle }: { isOpen: boolean, onTo
               </div>
               
               {notifications.length > 0 && (
-                <div className="p-3 bg-slate-50 text-center border-t border-slate-100">
+                <div className="p-3 bg-slate-50 text-center border-t border-slate-100 shrink-0">
                   <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Le notifiche scadono dopo 30 giorni</p>
                 </div>
               )}
             </motion.div>
-        )}
-      </AnimatePresence>
+          )}
+        </AnimatePresence>
+        </>,
+        document.body
+      )}
     </div>
   );
 }

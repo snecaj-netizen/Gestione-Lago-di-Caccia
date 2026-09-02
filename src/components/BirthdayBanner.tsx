@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { UserProfile } from '../types';
 import { Cake, Sparkles, Calendar, PartyPopper, X } from 'lucide-react';
 import { motion } from 'motion/react';
+import { useAuth } from '../contexts/AuthContext';
 
 interface BirthdayBannerProps {
   users: UserProfile[];
@@ -10,6 +11,7 @@ interface BirthdayBannerProps {
 
 export function BirthdayBanner({ users }: BirthdayBannerProps) {
   const [dismissed, setDismissed] = useState(false);
+  const { profile, user } = useAuth();
 
   // Compute live birthdays
   const { todayBirthdays, tomorrowBirthdays } = useMemo(() => {
@@ -43,7 +45,24 @@ export function BirthdayBanner({ users }: BirthdayBannerProps) {
     return { todayBirthdays: todayList, tomorrowBirthdays: tomorrowList };
   }, [users]);
 
-  const hasRealBirthdays = todayBirthdays.length > 0 || tomorrowBirthdays.length > 0;
+  const currentUid = profile?.uid || user?.uid;
+  const currentEmail = profile?.email || user?.email;
+
+  const isUserBirthdayToday = todayBirthdays.some(u => 
+    (currentUid && u.uid === currentUid) || 
+    (currentEmail && u.email === currentEmail)
+  );
+
+  const filteredTomorrowBirthdays = tomorrowBirthdays.filter(u => {
+    if (!currentUid && !currentEmail) return true;
+    if (currentUid && u.uid === currentUid) return false;
+    if (currentEmail && u.email === currentEmail) return false;
+    return true;
+  });
+
+  const showToday = todayBirthdays.length > 0;
+  const showTomorrow = filteredTomorrowBirthdays.length > 0;
+  const hasRealBirthdays = isUserBirthdayToday || showToday || showTomorrow;
 
   if (!hasRealBirthdays || dismissed) {
     return null;
@@ -57,13 +76,45 @@ export function BirthdayBanner({ users }: BirthdayBannerProps) {
     return `${names.slice(0, -1).join(', ')} e ${names[names.length - 1]}`;
   };
 
-  const showToday = todayBirthdays.length > 0;
-  const showTomorrow = tomorrowBirthdays.length > 0;
-
   return (
     <div className="space-y-3">
-      {/* REAL BIRTHDAY TODAY */}
-      {showToday && (
+      {/* PERSONALIZED BIRTHDAY GREETING FOR THE BIRTHDAY PERSON TODAY */}
+      {isUserBirthdayToday ? (
+        <motion.div 
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="relative overflow-hidden rounded-xl bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 p-4 sm:p-5 text-white shadow-lg border border-amber-400/40"
+        >
+          <div className="absolute right-0 top-0 -mr-6 -mt-6 h-32 w-32 rounded-full bg-white/10 blur-xl pointer-events-none" />
+          <div className="flex items-center justify-between gap-4 relative z-10">
+            <div className="flex items-center gap-3 sm:gap-4">
+              <div className="flex h-11 w-11 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-xl bg-white/20 backdrop-blur-md shadow-inner border border-white/30 text-accent-gold">
+                <PartyPopper size={24} className="animate-bounce" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="bg-white/25 text-white text-[9px] font-black uppercase px-2 py-0.5 rounded tracking-widest inline-flex items-center gap-1">
+                    <Cake size={11} /> Buon Compleanno!
+                  </span>
+                  <span className="text-[10px] text-amber-100 font-medium">Messaggio speciale per te 🥳</span>
+                </div>
+                <h3 className="text-base sm:text-lg md:text-xl font-bold tracking-tight text-white drop-shadow-sm">
+                  Tanti auguri di buon compleanno da tutto il gruppo del Lago! 🎂🎉
+                </h3>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setDismissed(true)}
+              className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors shrink-0 cursor-pointer"
+              title="Chiudi avviso"
+            >
+              <X size={18} />
+            </button>
+          </div>
+        </motion.div>
+      ) : showToday ? (
+        /* REAL BIRTHDAY TODAY FOR OTHER USERS */
         <motion.div 
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -90,16 +141,16 @@ export function BirthdayBanner({ users }: BirthdayBannerProps) {
 
             <button
               onClick={() => setDismissed(true)}
-              className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors shrink-0"
+              className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors shrink-0 cursor-pointer"
               title="Chiudi avviso"
             >
               <X size={18} />
             </button>
           </div>
         </motion.div>
-      )}
+      ) : null}
 
-      {/* REAL BIRTHDAY TOMORROW */}
+      {/* REAL BIRTHDAY TOMORROW (EXCLUDING THE USER THEMSELVES) */}
       {showTomorrow && (
         <motion.div 
           initial={{ opacity: 0, y: -10 }}
@@ -119,14 +170,14 @@ export function BirthdayBanner({ users }: BirthdayBannerProps) {
                   <span className="text-[10px] text-emerald-100/80 font-medium">Non dimenticare di fare gli auguri domani!</span>
                 </div>
                 <h3 className="text-base sm:text-lg md:text-xl font-bold tracking-tight text-accent-gold drop-shadow-sm">
-                  Domani è il compleanno di {formatNames(tomorrowBirthdays)}! 🎂
+                  Domani è il compleanno di {formatNames(filteredTomorrowBirthdays)}! 🎂
                 </h3>
               </div>
             </div>
 
             <button
               onClick={() => setDismissed(true)}
-              className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors shrink-0"
+              className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors shrink-0 cursor-pointer"
               title="Chiudi avviso"
             >
               <X size={18} />
@@ -137,3 +188,4 @@ export function BirthdayBanner({ users }: BirthdayBannerProps) {
     </div>
   );
 }
+
