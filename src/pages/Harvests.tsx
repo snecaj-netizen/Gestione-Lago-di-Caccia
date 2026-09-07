@@ -61,11 +61,15 @@ export function Harvests() {
   const [items, setItems] = useState<Harvest[]>([]);
   const [loading, setLoading] = useState(true);
   
-  const showModal = searchParams.get('modal') === 'record';
-  const showDeleteConfirm = searchParams.get('modal') === 'delete';
+  const [showModalState, setShowModalState] = useState<boolean>(() => searchParams.get('modal') === 'record');
+  const [showDeleteConfirmState, setShowDeleteConfirmState] = useState<boolean>(() => searchParams.get('modal') === 'delete');
   const highlightId = searchParams.get('highlight');
 
+  const showModal = showModalState;
+  const showDeleteConfirm = showDeleteConfirmState;
+
   const setShowModal = (val: boolean) => {
+    setShowModalState(val);
     if (val) {
       setSearchParams({ modal: 'record' });
     } else {
@@ -74,6 +78,7 @@ export function Harvests() {
   };
 
   const setShowDeleteConfirm = (val: boolean) => {
+    setShowDeleteConfirmState(val);
     if (val) {
       setSearchParams({ modal: 'delete' });
     } else {
@@ -266,12 +271,16 @@ export function Harvests() {
       {/* Modal Tool (Add/Edit) */}
       <AnimatePresence>
         {showModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-lake-green/80 backdrop-blur-sm">
+          <div 
+            className="fixed inset-0 w-full h-full z-50 overflow-y-auto flex items-center justify-center p-4 sm:p-6 bg-lake-green/90 backdrop-blur-md"
+            onClick={() => setShowModal(false)}
+          >
             <motion.div 
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="bg-white rounded-lg p-6 sm:p-8 max-w-xl w-full shadow-2xl border-t-8 border-accent-gold relative max-h-[90vh] overflow-y-auto"
+              className="bg-white rounded-lg p-6 sm:p-8 max-w-xl w-full shadow-2xl border-t-8 border-accent-gold relative my-auto max-h-[90vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
             >
               <button 
                 onClick={() => setShowModal(false)}
@@ -471,12 +480,16 @@ export function Harvests() {
       {/* Delete Confirmation Modal */}
       <AnimatePresence>
         {showDeleteConfirm && itemToDelete && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-rose-950/40 backdrop-blur-sm">
+          <div 
+            className="fixed inset-0 w-full h-full z-50 overflow-y-auto flex items-center justify-center p-4 sm:p-6 bg-rose-950/50 backdrop-blur-md"
+            onClick={() => setShowDeleteConfirm(false)}
+          >
             <motion.div
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="bg-white rounded-lg p-6 sm:p-8 max-w-sm w-full shadow-2xl border-t-8 border-rose-600 relative"
+              className="bg-white rounded-lg p-6 sm:p-8 max-w-sm w-full shadow-2xl border-t-8 border-rose-600 relative my-auto max-h-[90vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
             >
               <h3 className="text-xl font-serif text-slate-900 mb-2">Conferma Eliminazione</h3>
               <p className="text-sm text-slate-500 mb-6">

@@ -46,11 +46,18 @@ export function Accounting() {
   const [items, setItems] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   
-  const showAdd = searchParams.get('modal') === 'add';
-  const showQuotaConfig = searchParams.get('modal') === 'quota';
-  const showBudgetConfig = searchParams.get('modal') === 'budget';
+  const [activeModal, setActiveModal] = useState<'quota' | 'budget' | 'add' | null>(() => {
+    const m = searchParams.get('modal');
+    if (m === 'quota' || m === 'budget' || m === 'add') return m;
+    return null;
+  });
+  
+  const showAdd = activeModal === 'add';
+  const showQuotaConfig = activeModal === 'quota';
+  const showBudgetConfig = activeModal === 'budget';
 
   const handleToggleModal = (modalName: 'quota' | 'budget' | 'add' | null) => {
+    setActiveModal(modalName);
     if (!modalName) {
       setSearchParams({});
       setEditingTransactionId(null);
@@ -774,12 +781,16 @@ export function Accounting() {
       {/* Add Transaction Modal */}
       <AnimatePresence>
         {showAdd && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-lake-green/80 backdrop-blur-sm">
+          <div 
+            className="fixed inset-0 w-full h-full z-50 overflow-y-auto flex items-center justify-center p-4 sm:p-6 bg-lake-green/90 backdrop-blur-md"
+            onClick={() => handleToggleModal(null)}
+          >
             <motion.div 
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="bg-white rounded-lg p-6 sm:p-8 max-w-2xl w-full shadow-2xl border-t-8 border-accent-gold relative max-h-[90vh] overflow-y-auto"
+              className="bg-white rounded-lg p-6 sm:p-8 max-w-2xl w-full shadow-2xl border-t-8 border-accent-gold relative my-auto max-h-[90vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
             >
               <button 
                 onClick={() => handleToggleModal(null)}
@@ -1014,10 +1025,9 @@ export function Accounting() {
                       </label>
                       <select 
                         required={formData.type === 'entrata'}
-                        disabled={profile?.role === 'socio'}
-                        value={formData.memberUid || (profile?.role === 'socio' ? profile.uid : '')}
+                        value={formData.memberUid || ''}
                         onChange={e => setFormData({ ...formData, memberUid: e.target.value })}
-                        className="w-full bg-white border border-slate-200 rounded px-3 py-2 text-sm font-bold text-slate-gray outline-none focus:border-lake-green disabled:bg-slate-50"
+                        className="w-full bg-white border border-slate-200 rounded px-3 py-2 text-sm font-bold text-slate-gray outline-none focus:border-lake-green"
                       >
                         <option value="">Seleziona Socio...</option>
                         {users.filter(u => u.isActive && (u.role === 'socio' || u.role === 'admin')).map(user => (
@@ -1036,10 +1046,9 @@ export function Accounting() {
                       </label>
                       <select 
                         required={formData.type === 'uscita'}
-                        disabled={profile?.role === 'socio'}
-                        value={formData.memberUid || (profile?.role === 'socio' ? profile.uid : '')}
+                        value={formData.memberUid || ''}
                         onChange={e => setFormData({ ...formData, memberUid: e.target.value })}
-                        className="w-full bg-white border border-slate-200 rounded px-3 py-2 text-sm font-bold text-slate-gray outline-none focus:border-lake-green disabled:bg-slate-50"
+                        className="w-full bg-white border border-slate-200 rounded px-3 py-2 text-sm font-bold text-slate-gray outline-none focus:border-lake-green"
                       >
                         <option value="">Seleziona Socio...</option>
                         {users.filter(u => u.isActive && (u.role === 'socio' || u.role === 'admin')).map(user => (
@@ -1179,12 +1188,16 @@ export function Accounting() {
       {/* Delete Confirmation Modal */}
       <AnimatePresence>
         {deleteConfirmId && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+          <div 
+            className="fixed inset-0 w-full h-full z-50 overflow-y-auto flex items-center justify-center p-4 sm:p-6 bg-slate-900/50 backdrop-blur-sm"
+            onClick={() => setDeleteConfirmId(null)}
+          >
             <motion.div 
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
-              className="bg-white rounded-xl p-6 max-w-sm w-full shadow-2xl"
+              className="bg-white rounded-xl p-6 max-w-sm w-full shadow-2xl my-auto max-h-[90vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
             >
               <h3 className="text-lg font-bold text-slate-800 mb-2">Conferma eliminazione</h3>
               <p className="text-sm text-slate-500 mb-6">Sei sicuro di voler eliminare questa operazione? Questa azione non può essere annullata.</p>
