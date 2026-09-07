@@ -285,29 +285,34 @@ export function Accounting() {
       finalData.memberName = profile.displayName;
     }
 
-    if (editingTransactionId) {
-        await updateTransaction(editingTransactionId, {
-          ...finalData,
-        });
-        setEditingTransactionId(null);
-    } else {
-        await addTransaction({
-          ...finalData,
-          createdBy: profile.uid
-        });
+    try {
+      if (editingTransactionId) {
+          await updateTransaction(editingTransactionId, {
+            ...finalData,
+          });
+          setEditingTransactionId(null);
+      } else {
+          await addTransaction({
+            ...finalData,
+            createdBy: profile.uid
+          });
+      }
+      setFormData({ 
+        ...formData, 
+        category: '', 
+        amount: 0, 
+        description: '',
+        huntingDayId: '',
+        payerUid: '',
+        payerName: '',
+        memberUid: '',
+        memberName: ''
+      });
+      handleToggleModal(null);
+    } catch (err: any) {
+      console.error(err);
+      alert("Errore durante il salvataggio: " + (err.message || "Errore sconosciuto"));
     }
-    setFormData({ 
-      ...formData, 
-      category: '', 
-      amount: 0, 
-      description: '',
-      huntingDayId: '',
-      payerUid: '',
-      payerName: '',
-      memberUid: '',
-      memberName: ''
-    });
-    handleToggleModal(null);
   };
 
   return (
@@ -1211,8 +1216,13 @@ export function Accounting() {
                 <button 
                   onClick={async () => {
                     if (deleteConfirmId) {
-                      await deleteTransaction(deleteConfirmId);
-                      setDeleteConfirmId(null);
+                      try {
+                        await deleteTransaction(deleteConfirmId);
+                        setDeleteConfirmId(null);
+                      } catch (err: any) {
+                        console.error(err);
+                        alert("Errore durante l'eliminazione: " + (err.message || "Errore sconosciuto"));
+                      }
                     }
                   }}
                   className="flex-1 px-4 py-2 bg-rose-600 text-white font-bold rounded-lg hover:bg-rose-700"

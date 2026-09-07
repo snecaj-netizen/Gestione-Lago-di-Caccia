@@ -174,19 +174,29 @@ export function Harvests() {
       hunterName: profile.role === 'admin' ? formData.hunterName : profile.displayName
     };
 
-    if (editingItem) {
-      await updateHarvest(editingItem.id, submissionData);
-    } else {
-      await addHarvest(submissionData);
+    try {
+      if (editingItem) {
+        await updateHarvest(editingItem.id, submissionData);
+      } else {
+        await addHarvest(submissionData);
+      }
+      setShowModal(false);
+    } catch (err: any) {
+      console.error(err);
+      alert("Errore durante il salvataggio: " + (err.message || "Errore sconosciuto"));
     }
-    setShowModal(false);
   };
 
   const handleDelete = async () => {
     if (!itemToDelete) return;
-    await deleteHarvest(itemToDelete.id);
-    setShowDeleteConfirm(false);
-    setItemToDelete(null);
+    try {
+      await deleteHarvest(itemToDelete.id);
+      setShowDeleteConfirm(false);
+      setItemToDelete(null);
+    } catch (err: any) {
+      console.error(err);
+      alert("Errore durante l'eliminazione: " + (err.message || "Errore sconosciuto"));
+    }
   };
 
   const filteredItems = items.filter(item => {

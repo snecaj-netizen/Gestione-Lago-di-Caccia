@@ -3,16 +3,8 @@ import { getAuth, Auth } from 'firebase/auth';
 import { initializeFirestore, Firestore, getDocFromServer, doc } from 'firebase/firestore';
 
 // Firebase configuration
-// We prioritize VITE_ prefixed environment variables which are exposed via vite.config.ts
-const firebaseConfig = {
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  firestoreDatabaseId: import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || '(default)',
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-};
+import firebaseConfig from '../firebase-applet-config.json';
+
 
 const isConfigured = !!firebaseConfig.projectId && !!firebaseConfig.appId && !!firebaseConfig.apiKey;
 

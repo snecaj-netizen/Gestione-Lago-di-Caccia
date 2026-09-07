@@ -1,48 +1,3 @@
-// ===============================================================
-// Assumed Data Model
-// ===============================================================
-//
-// Collection: users
-// Document ID: {uid}
-// Fields:
-//   - uid: string (required) - Firebase Auth UID
-//   - email: string (required) - user email
-//   - displayName: string (optional) - name
-//   - role: string (required) - 'admin', 'socio', 'quotista'
-//   - isActive: bool (required) - access control toggle
-//   - assignedDaysOfWeek: list (optional) - days of week (0-6)
-//   - seasonalQuota: number (optional) - manual seasonal quota
-//
-// Collection: hunting_days
-// Document ID: {dateString} (YYYY-MM-DD)
-// Fields:
-//   - date: string (required) - YYYY-MM-DD
-//   - assignedToUid: string (required) - UID of holder
-//   - assignedToName: string (required) - Name of holder
-//   - type: string (required) - 'socio' | 'quotista'
-//   - notes: string (optional)
-//
-// Collection: transactions
-// Document ID: auto-generated
-// Fields:
-//   - date: string (required) - YYYY-MM-DD
-//   - type: string (required) - 'entrata' | 'uscita'
-//   - category: string (required) - for auto-suggest
-//   - amount: number (required) - positive value
-//   - description: string (optional)
-//   - createdBy: string (required) - UID of creator
-//
-// Collection: harvests
-// Document ID: auto-generated
-// Fields:
-//   - date: string (required) - YYYY-MM-DD
-//   - species: string (required) - for auto-suggest
-//   - count: number (required)
-//   - hunterUid: string (required)
-//   - hunterName: string (required)
-//
-// ===============================================================
-
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -50,7 +5,7 @@ service cloud.firestore {
     match /{document=**} {
       allow read, write: if false;
     }
-
+    
     match /test/connection {
       allow read: if true;
     }
@@ -62,7 +17,7 @@ service cloud.firestore {
     function isSignedIn() {
       return request.auth != null;
     }
-
+    
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
@@ -74,8 +29,8 @@ service cloud.firestore {
 
     function isSocio() {
       // Socios include admins or users with the 'socio' role
-      let hasSocioRole = exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-                         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "socio";
+      let hasSocioRole = exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+                          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "socio";
       return isAdmin() || hasSocioRole;
     }
 
@@ -83,8 +38,8 @@ service cloud.firestore {
       // Stefano is always active. Others must have profile isActive == true
       return isSignedIn() && (
         (request.auth.token.email == "snecaj@gmail.com") ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isActive == true)
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isActive == true)
       );
     }
 
@@ -111,6 +66,7 @@ service cloud.firestore {
     // ===============================================================
     // Collection Rules
     // ===============================================================
+
     // NOTE: Application uses custom username/password login. 
     // To support this without a backend and with Firestore rules, 
     // we allow unauthenticated reads on certain collections.
@@ -130,13 +86,10 @@ service cloud.firestore {
                (!("password" in data) || (data.password is string && data.password.size() <= 100)) &&
                data.keys().hasAll(["uid", "email", "role", "isActive", "displayName"]);
       }
-
+      
       allow get, list: if true; 
-      
       allow create: if true;
-      
       allow update: if true;
-      
       allow delete: if true;
     }
 
@@ -149,7 +102,6 @@ service cloud.firestore {
                data.type in ["socio", "quotista"] &&
                (!("notes" in data) || (data.notes is string && data.notes.size() <= 500));
       }
-
       allow read, write: if true;
     }
 
@@ -162,7 +114,6 @@ service cloud.firestore {
                data.amount is number && data.amount > 0 &&
                (!("description" in data) || (data.description is string && data.description.size() <= 500));
       }
-
       allow read, write: if true;
     }
 
@@ -175,7 +126,6 @@ service cloud.firestore {
                data.hunterUid is string && data.hunterUid.size() <= 128 &&
                data.hunterName is string && data.hunterName.size() <= 100;
       }
-
       allow read, write: if true;
     }
 
@@ -194,7 +144,6 @@ service cloud.firestore {
                data.userName is string && data.userName.size() <= 100 &&
                data.createdAt is string;
       }
-
       allow read, write: if true;
     }
 
@@ -212,17 +161,17 @@ service cloud.firestore {
     match /hunting_limits/{document=**} {
       allow read, write: if true;
     }
-
+    
     // Notifications
     match /notifications/{notificationId} {
       allow read, write: if true;
     }
-
+    
     // Recipes
     match /recipes/{recipeId} {
       allow read, write: if true;
     }
-
+    
     // Tesserino Entries (Admin personal official card tracker)
     match /tesserino_entries/{entryId} {
       allow read, write: if true;
