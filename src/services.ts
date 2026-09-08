@@ -1681,3 +1681,51 @@ export const downloadDatabaseBackup = async (userEmail?: string): Promise<AppBac
   return backup;
 };
 
+export const restoreDatabaseFromBackup = async (backupData: AppBackupData): Promise<{ restoredCount: number, results: Record<string, number> }> => {
+  if (!backupData || !backupData.data) {
+    throw new Error("File di backup JSON non valido o vuoto.");
+  }
+
+  const collectionsMap = backupData.data;
+  let restoredCount = 0;
+  const results: Record<string, number> = {};
+
+  for (const [colName, items] of Object.entries(collectionsMap)) {
+    if (!items) continue;
+    
+    if (colName === 'regulation_summary') {
+      try {
+        const item = items as any;
+        if (item) {
+          const docRef = doc(db, 'settings', 'regulation_summary');
+          await setDoc(docRef, cleanData(item));
+          results[colName] = 1;
+          restoredCount++;
+        }
+      } catch (e) {
+        console.error("Error restoring regulation_summary:", e);
+      }
+      continue;
+    }
+
+    const list = Array.isArray(items) ? items : [items];
+    let colCount = 0;
+
+    for (const item of list) {
+      if (!item || !item.id) continue;
+      try {
+        const docRef = doc(db, colName, String(item.id));
+        await setDoc(docRef, cleanData(item));
+        colCount++;
+        restoredCount++;
+      } catch (e) {
+        console.error(`Error restoring doc ${item.id} in ${colName}:`, e);
+      }
+    }
+    results[colName] = colCount;
+  }
+
+  return { restoredCount, results };
+};
+
+

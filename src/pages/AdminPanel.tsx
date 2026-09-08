@@ -4,7 +4,7 @@ import {
   addUserManually, deleteUser, subscribeToHuntingTimes, addHuntingTime, 
   deleteHuntingTime, updateHuntingTime, subscribeToHuntingLimits, saveHuntingLimit, 
   deleteHuntingLimit, clearAllHuntingLimits, clearAllHuntingTimes,
-  downloadDatabaseBackup, fetchAllDatabaseData, AppBackupData
+  downloadDatabaseBackup, fetchAllDatabaseData, AppBackupData, restoreDatabaseFromBackup
 } from '../services';
 import { UserProfile, LakeSettings, HuntingTime, HuntingLimit } from '../types';
 import { useAuth } from '../contexts/AuthContext';
@@ -98,6 +98,8 @@ export function AdminPanel() {
   });
 
   const [isExportingBackup, setIsExportingBackup] = useState(false);
+  const [isRestoringBackup, setIsRestoringBackup] = useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
   const [copiedBackup, setCopiedBackup] = useState(false);
   const [lastBackupInfo, setLastBackupInfo] = useState<AppBackupData | null>(null);
   const [backupSuccessMessage, setBackupSuccessMessage] = useState<string | null>(null);
@@ -116,6 +118,33 @@ export function AdminPanel() {
       alert("Errore durante il salvataggio del backup. Riprova.");
     } finally {
       setIsExportingBackup(false);
+    }
+  };
+
+  const handleFileRestore = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!confirm(`Sei sicuro di voler ripristinare il database dal file di backup "${file.name}"?\nTutti i record presenti nel file verranno caricati e integrati nel database.`)) {
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    setIsRestoringBackup(true);
+    try {
+      const text = await file.text();
+      const parsedData = JSON.parse(text) as AppBackupData;
+      const res = await restoreDatabaseFromBackup(parsedData);
+      setBackupSuccessMessage(`Ripristino completato con successo! Ripristinati ${res.restoredCount} record in totale.`);
+      setTimeout(() => {
+        setBackupSuccessMessage(null);
+      }, 10000);
+    } catch (err: any) {
+      console.error("Errore durante il ripristino del backup:", err);
+      alert(`Errore durante il ripristino: ${err.message || 'File JSON non valido'}`);
+    } finally {
+      setIsRestoringBackup(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
@@ -1553,6 +1582,27 @@ export function AdminPanel() {
                 <Download size={16} />
               )}
               <span>{isExportingBackup ? 'Generazione...' : 'Scarica Backup .JSON'}</span>
+            </button>
+
+            <input 
+              type="file" 
+              accept=".json" 
+              ref={fileInputRef} 
+              onChange={handleFileRestore} 
+              className="hidden" 
+            />
+
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isRestoringBackup}
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-emerald-700 text-white font-black text-[11px] uppercase tracking-wider rounded-lg shadow-md hover:bg-emerald-800 active:scale-95 transition-all disabled:opacity-50"
+            >
+              {isRestoringBackup ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                <Upload size={16} />
+              )}
+              <span>{isRestoringBackup ? 'Ripristino...' : 'Carica Backup .JSON'}</span>
             </button>
           </div>
         </div>
