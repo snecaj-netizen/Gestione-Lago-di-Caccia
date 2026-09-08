@@ -831,7 +831,29 @@ La stagione corrente inizia il ${seasonStart || '2024-09-01'} e termina il ${sea
     app.use(express.static(distPath));
     
     app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
+      const indexPath = path.join(distPath, "index.html");
+      fs.readFile(indexPath, 'utf8', (err, htmlData) => {
+        if (err) {
+          return res.sendFile(indexPath);
+        }
+        
+        const configScript = `
+          <script>
+            window.__RUNTIME_CONFIG__ = {
+              VITE_FIREBASE_PROJECT_ID: ${JSON.stringify(process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID || '')},
+              VITE_FIREBASE_APP_ID: ${JSON.stringify(process.env.FIREBASE_APP_ID || process.env.VITE_FIREBASE_APP_ID || '')},
+              VITE_FIREBASE_API_KEY: ${JSON.stringify(process.env.FIREBASE_API_KEY || process.env.VITE_FIREBASE_API_KEY || '')},
+              VITE_FIREBASE_AUTH_DOMAIN: ${JSON.stringify(process.env.FIREBASE_AUTH_DOMAIN || process.env.VITE_FIREBASE_AUTH_DOMAIN || '')},
+              VITE_FIREBASE_FIRESTORE_DATABASE_ID: ${JSON.stringify(process.env.FIREBASE_FIRESTORE_DATABASE_ID || process.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || '(default)')},
+              VITE_FIREBASE_STORAGE_BUCKET: ${JSON.stringify(process.env.FIREBASE_STORAGE_BUCKET || process.env.VITE_FIREBASE_STORAGE_BUCKET || '')},
+              VITE_FIREBASE_MESSAGING_SENDER_ID: ${JSON.stringify(process.env.FIREBASE_MESSAGING_SENDER_ID || process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '')}
+            };
+          </script>
+        `;
+        
+        const modifiedHtml = htmlData.replace('</head>', `${configScript}</head>`);
+        res.send(modifiedHtml);
+      });
     });
   }
 
