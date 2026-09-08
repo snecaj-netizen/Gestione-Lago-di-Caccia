@@ -4,16 +4,26 @@ import { initializeFirestore, Firestore, getDocFromServer, doc } from 'firebase/
 
 // Firebase configuration
 // We prioritize runtime injected config (for Railway/production) or fallback to Vite build-time env vars
-const runtimeConfig = (typeof window !== 'undefined' && (window as any).__RUNTIME_CONFIG__) || {};
+const getEnv = (key: string) => {
+  if (typeof window !== 'undefined' && (window as any).__RUNTIME_CONFIG__?.[key]) {
+    return (window as any).__RUNTIME_CONFIG__[key];
+  }
+  try {
+    if (typeof import.meta !== 'undefined' && (import.meta as any).env?.[key]) {
+      return (import.meta as any).env[key];
+    }
+  } catch (e) {}
+  return process.env[key] || '';
+};
 
 const firebaseConfig = {
-  projectId: runtimeConfig.VITE_FIREBASE_PROJECT_ID || import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  appId: runtimeConfig.VITE_FIREBASE_APP_ID || import.meta.env.VITE_FIREBASE_APP_ID,
-  apiKey: runtimeConfig.VITE_FIREBASE_API_KEY || import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: runtimeConfig.VITE_FIREBASE_AUTH_DOMAIN || import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  firestoreDatabaseId: runtimeConfig.VITE_FIREBASE_FIRESTORE_DATABASE_ID || import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || '(default)',
-  storageBucket: runtimeConfig.VITE_FIREBASE_STORAGE_BUCKET || import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: runtimeConfig.VITE_FIREBASE_MESSAGING_SENDER_ID || import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  projectId: getEnv('VITE_FIREBASE_PROJECT_ID') || getEnv('FIREBASE_PROJECT_ID'),
+  appId: getEnv('VITE_FIREBASE_APP_ID') || getEnv('FIREBASE_APP_ID'),
+  apiKey: getEnv('VITE_FIREBASE_API_KEY') || getEnv('FIREBASE_API_KEY'),
+  authDomain: getEnv('VITE_FIREBASE_AUTH_DOMAIN') || getEnv('FIREBASE_AUTH_DOMAIN'),
+  firestoreDatabaseId: getEnv('VITE_FIREBASE_FIRESTORE_DATABASE_ID') || getEnv('FIREBASE_FIRESTORE_DATABASE_ID') || '(default)',
+  storageBucket: getEnv('VITE_FIREBASE_STORAGE_BUCKET') || getEnv('FIREBASE_STORAGE_BUCKET'),
+  messagingSenderId: getEnv('VITE_FIREBASE_MESSAGING_SENDER_ID') || getEnv('FIREBASE_MESSAGING_SENDER_ID'),
 };
 
 

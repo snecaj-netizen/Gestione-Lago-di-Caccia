@@ -537,6 +537,95 @@ Restituisci un array JSON di stringhe contenente solo gli ID delle ricette rilev
     }
   });
   // Logo API & Auto-restore
+  async function migrateDataFromOldProject() {
+    const oldProj = 'gen-lang-client-0749758961';
+    const oldKey = 'AIzaSyD2dyS8Kwfk3ezsLBDD7eUXPhGotufV1Co';
+    const oldDbs = ['ai-studio-7a54f228-75ee-41f0-9810-719cd287b2b7', '(default)'];
+
+    const collections = [
+      'notifications',
+      'hunting_days',
+      'users',
+      'hunting_times',
+      'photos',
+      'transactions',
+      'budget_items',
+      'harvests',
+      'recipes',
+      'hunting_limits',
+      'tesserino_entries'
+    ];
+
+    let totalMigrated = 0;
+    const results: Record<string, number> = {};
+
+    for (const col of collections) {
+      let docs: any[] = [];
+      let success = false;
+
+      for (const dbId of oldDbs) {
+        try {
+          const listUrl = `https://firestore.googleapis.com/v1/projects/${oldProj}/databases/${dbId}/documents/${col}?key=${oldKey}`;
+          const listRes = await fetch(listUrl);
+          if (listRes.ok) {
+            const listJson = await listRes.json();
+            docs = listJson.documents || [];
+            success = true;
+            break;
+          } else {
+            const txt = await listRes.text();
+            console.log(`Failed fetch old col ${col} with db ${dbId}: ${listRes.status} - ${txt}`);
+          }
+        } catch (e: any) {
+          console.log(`Exception fetch old col ${col} with db ${dbId}:`, e.message);
+        }
+      }
+
+      if (!success) {
+        results[col] = 0;
+        continue;
+      }
+
+      let count = 0;
+      for (const docObj of docs) {
+        try {
+          const nameParts = docObj.name.split('/');
+          const docId = nameParts[nameParts.length - 1];
+
+          const rawFields = docObj.fields || {};
+          const parsedFields: Record<string, any> = {};
+          for (const [key, valObj] of Object.entries(rawFields) as any) {
+            if (valObj.stringValue !== undefined) parsedFields[key] = valObj.stringValue;
+            else if (valObj.doubleValue !== undefined) parsedFields[key] = Number(valObj.doubleValue);
+            else if (valObj.integerValue !== undefined) parsedFields[key] = parseInt(valObj.integerValue, 10);
+            else if (valObj.booleanValue !== undefined) parsedFields[key] = valObj.booleanValue;
+            else if (valObj.nullValue !== undefined) parsedFields[key] = null;
+          }
+
+          await restSetDoc(col, docId, parsedFields);
+          count++;
+          totalMigrated++;
+        } catch (docErr) {
+          console.error(`Error migrating doc in ${col}:`, docErr);
+        }
+      }
+      results[col] = count;
+      console.log(`Migrated ${count} documents for collection ${col}`);
+    }
+
+    return { totalMigrated, results };
+  }
+
+  app.post("/api/admin/migrate-db", async (req, res) => {
+    try {
+      const report = await migrateDataFromOldProject();
+      res.json({ success: true, message: "Migrazione completata con successo!", report });
+    } catch (err: any) {
+      console.error("Migration failed:", err);
+      res.status(500).json({ error: `Migrazione fallita: ${err.message}` });
+    }
+  });
+
   app.get("/logo_lago.png", async (req, res, next) => {
     const logoPath = path.join(process.cwd(), 'public', 'logo_lago.png');
     if (!fs.existsSync(logoPath)) {

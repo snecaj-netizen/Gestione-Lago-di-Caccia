@@ -661,10 +661,7 @@ function MainLayout() {
 
     const q = query(
       collection(db, 'notifications'),
-      where('targetUid', '==', profile.uid),
-      where('read', '==', false),
-      orderBy('createdAt', 'desc'),
-      limit(5)
+      where('targetUid', '==', profile.uid)
     );
 
     let isInitial = true;
@@ -677,18 +674,20 @@ function MainLayout() {
       snapshot.docChanges().forEach((change) => {
         if (change.type === 'added') {
           const notif = change.doc.data() as AppNotification;
-          try {
-            if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-              new Notification(notif.title, {
-                body: notif.body,
-                icon: '/logo.png' // Adjust if logo path differs
-              }).onclick = () => {
-                if (notif.link) navigate(notif.link);
-                window.focus();
-              };
+          if (!notif.read) {
+            try {
+              if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+                new Notification(notif.title, {
+                  body: notif.body,
+                  icon: '/logo.png' // Adjust if logo path differs
+                }).onclick = () => {
+                  if (notif.link) navigate(notif.link);
+                  window.focus();
+                };
+              }
+            } catch (e) {
+              console.warn("Could not display browser notification in this environment:", e);
             }
-          } catch (e) {
-            console.warn("Could not display browser notification in this environment:", e);
           }
         }
       });
