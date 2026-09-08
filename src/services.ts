@@ -1259,8 +1259,7 @@ export const subscribeToUserNotifications = (uid: string, callback: (notificatio
   }
   const q = query(
     collection(db, 'notifications'), 
-    where('targetUid', '==', uid),
-    orderBy('createdAt', 'desc')
+    where('targetUid', '==', uid)
   );
   return onSnapshot(q, (snapshot) => {
     const list = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Notification));

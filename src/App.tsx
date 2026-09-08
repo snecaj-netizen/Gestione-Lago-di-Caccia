@@ -718,12 +718,12 @@ function MainLayout() {
         const reminderId = `reminder_${profile.uid}_${tomorrowStr}`;
         const qNotifs = query(
           collection(db, 'notifications'),
-          where('targetUid', '==', profile.uid),
-          where('metadata.reminderId', '==', reminderId)
+          where('targetUid', '==', profile.uid)
         );
         const notifSnap = await getDocs(qNotifs);
+        const alreadySent = notifSnap.docs.some(d => d.data().metadata?.reminderId === reminderId);
 
-        if (notifSnap.empty) {
+        if (!alreadySent) {
           // Send reminder
           await createNotification({
             title: "Promemoria Caccia",
