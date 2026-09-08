@@ -121,21 +121,25 @@ export function AdminPanel() {
     }
   };
 
-  const handleFileRestore = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const [pendingRestoreFile, setPendingRestoreFile] = useState<File | null>(null);
+
+  const handleFileRestore = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setPendingRestoreFile(file);
+  };
 
-    if (!confirm(`Sei sicuro di voler ripristinare il database dal file di backup "${file.name}"?\nTutti i record presenti nel file verranno caricati e integrati nel database.`)) {
-      if (fileInputRef.current) fileInputRef.current.value = '';
-      return;
-    }
+  const executeRestore = async (replaceExisting: boolean) => {
+    if (!pendingRestoreFile) return;
+    const file = pendingRestoreFile;
+    setPendingRestoreFile(null);
 
     setIsRestoringBackup(true);
     try {
       const text = await file.text();
       const parsedData = JSON.parse(text) as AppBackupData;
-      const res = await restoreDatabaseFromBackup(parsedData);
-      setBackupSuccessMessage(`Ripristino completato con successo! Ripristinati ${res.restoredCount} record in totale.`);
+      const res = await restoreDatabaseFromBackup(parsedData, replaceExisting);
+      setBackupSuccessMessage(`Ripristino completato con successo! Ripristinati ${res.restoredCount} record in totale (${replaceExisting ? 'Sostituzione completa' : 'Unione/Aggiunta'}).`);
       setTimeout(() => {
         setBackupSuccessMessage(null);
       }, 10000);
@@ -1987,6 +1991,56 @@ export function AdminPanel() {
           </div>
         </div>
       )}
+
+      {/* Restore Backup Options Modal */}
+      <AnimatePresence>
+        {pendingRestoreFile && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-950/50 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="bg-white rounded-2xl p-6 sm:p-8 max-w-md w-full shadow-2xl border-t-8 border-lake-green relative"
+            >
+              <div className="flex flex-col items-center text-center">
+                <div className="w-16 h-16 bg-lake-green/10 rounded-full flex items-center justify-center mb-4 text-lake-green">
+                  <Upload size={32} />
+                </div>
+                <h3 className="text-xl font-serif text-slate-900 mb-2">Modalità di Ripristino</h3>
+                <p className="text-sm text-slate-600 mb-6">
+                  File selezionato: <span className="font-bold text-slate-900">{pendingRestoreFile.name}</span>
+                  <br />
+                  Come desideri procedere con i dati contenuti nel file di backup?
+                </p>
+
+                <div className="flex flex-col w-full gap-3">
+                  <button
+                    onClick={() => executeRestore(true)}
+                    className="w-full py-3.5 bg-amber-600 hover:bg-amber-700 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-md shadow-amber-200"
+                  >
+                    Sostituisci Tutto (Cancella dati attuali)
+                  </button>
+                  <button
+                    onClick={() => executeRestore(false)}
+                    className="w-full py-3.5 bg-lake-green hover:bg-lake-green/90 text-accent-gold font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-md"
+                  >
+                    Unisci / Aggiungi (Conserva dati attuali)
+                  </button>
+                  <button
+                    onClick={() => {
+                      setPendingRestoreFile(null);
+                      if (fileInputRef.current) fileInputRef.current.value = '';
+                    }}
+                    className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-xs uppercase tracking-wider rounded-xl transition-all"
+                  >
+                    Annulla
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Delete User Confirmation Modal */}
       <AnimatePresence>

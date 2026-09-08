@@ -1681,7 +1681,10 @@ export const downloadDatabaseBackup = async (userEmail?: string): Promise<AppBac
   return backup;
 };
 
-export const restoreDatabaseFromBackup = async (backupData: AppBackupData): Promise<{ restoredCount: number, results: Record<string, number> }> => {
+export const restoreDatabaseFromBackup = async (
+  backupData: AppBackupData,
+  replaceExisting: boolean = false
+): Promise<{ restoredCount: number, results: Record<string, number> }> => {
   if (!backupData || !backupData.data) {
     throw new Error("File di backup JSON non valido o vuoto.");
   }
@@ -1706,6 +1709,16 @@ export const restoreDatabaseFromBackup = async (backupData: AppBackupData): Prom
         console.error("Error restoring regulation_summary:", e);
       }
       continue;
+    }
+
+    if (replaceExisting) {
+      try {
+        const existingSnapshot = await getDocs(collection(db, colName));
+        const deletePromises = existingSnapshot.docs.map(d => deleteDoc(d.ref));
+        await Promise.all(deletePromises);
+      } catch (delErr) {
+        console.error(`Error clearing collection ${colName} before replacement:`, delErr);
+      }
     }
 
     const list = Array.isArray(items) ? items : [items];
