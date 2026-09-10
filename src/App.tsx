@@ -329,6 +329,10 @@ function Login() {
           navigate('/', { replace: true });
         } catch (err: any) {
           console.warn("Auto-login failed:", err);
+          safeLocalStorage.removeItem('lake_remember_me');
+          safeLocalStorage.removeItem('lake_username');
+          safeLocalStorage.removeItem('lake_password');
+          setError(err?.message || 'Credenziali non valide o sessione scaduta.');
         } finally {
           setIsSubmitting(false);
         }

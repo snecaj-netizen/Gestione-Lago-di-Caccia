@@ -86,12 +86,14 @@ const ColorLegend = () => {
     <div className="flex flex-row justify-between items-start gap-2 sm:gap-4 p-2 bg-slate-50 border border-slate-100 rounded-lg overflow-x-auto scrollbar-hide">
       {/* Wind Legend */}
       <div className="flex flex-col gap-1 min-w-max">
-        <span className="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-tighter shrink-0">🌬️ Vento</span>
+        <span className="text-[8px] sm:text-[9px] font-black text-slate-700 uppercase tracking-tighter shrink-0 flex items-center gap-1">
+          <Wind size={12} className="text-blue-600" /> Vento
+        </span>
         <div className="flex items-center">
           {windScale.map(v => (
             <div key={v} className="flex flex-col items-center">
-              <div className="w-2.5 h-1.5 sm:w-5 sm:h-2.5" style={{ backgroundColor: getWindColor(v) }} />
-              <span className="text-[7px] sm:text-[8px] font-bold text-slate-400 leading-none mt-1">{v}</span>
+              <div className="w-2.5 h-1.5 sm:w-5 sm:h-2.5 shadow-sm" style={{ backgroundColor: getWindColor(v) }} />
+              <span className="text-[7px] sm:text-[8px] font-bold text-slate-500 leading-none mt-1">{v}</span>
             </div>
           ))}
         </div>
@@ -99,12 +101,20 @@ const ColorLegend = () => {
 
       {/* Rain Legend */}
       <div className="flex flex-col gap-1 min-w-max">
-        <span className="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-tighter shrink-0">🌧️ Pioggia</span>
+        <span className="text-[8px] sm:text-[9px] font-black text-slate-700 uppercase tracking-tighter shrink-0 flex items-center gap-1">
+          <CloudRain size={12} className="text-sky-600" /> Pioggia
+        </span>
         <div className="flex items-center">
           {rainScale.map(v => (
             <div key={v} className="flex flex-col items-center">
-              <div className="w-2.5 h-1.5 sm:w-5 sm:h-2.5" style={{ backgroundColor: getRainColor(v) }} />
-              <span className="text-[7px] sm:text-[8px] font-bold text-slate-400 leading-none mt-1">{v}</span>
+              <div 
+                className={cn(
+                  "w-2.5 h-1.5 sm:w-5 sm:h-2.5 shadow-sm",
+                  v === 0 ? "border border-slate-300 bg-slate-200" : ""
+                )} 
+                style={v > 0 ? { backgroundColor: getRainColor(v) } : undefined} 
+              />
+              <span className="text-[7px] sm:text-[8px] font-bold text-slate-500 leading-none mt-1">{v}</span>
             </div>
           ))}
         </div>
@@ -112,12 +122,14 @@ const ColorLegend = () => {
 
       {/* Temp Legend */}
       <div className="flex flex-col gap-1 min-w-max">
-        <span className="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-tighter shrink-0">🌡️ Temp</span>
+        <span className="text-[8px] sm:text-[9px] font-black text-slate-700 uppercase tracking-tighter shrink-0 flex items-center gap-1">
+          <Thermometer size={12} className="text-red-600" /> Temp
+        </span>
         <div className="flex items-center">
           {tempScale.map(v => (
             <div key={v} className="flex flex-col items-center">
-              <div className="w-2.5 h-1.5 sm:w-5 sm:h-2.5" style={{ backgroundColor: getTempColor(v) }} />
-              <span className="text-[7px] sm:text-[8px] font-bold text-slate-400 leading-none mt-1">{v}</span>
+              <div className="w-2.5 h-1.5 sm:w-5 sm:h-2.5 shadow-sm" style={{ backgroundColor: getTempColor(v) }} />
+              <span className="text-[7px] sm:text-[8px] font-bold text-slate-500 leading-none mt-1">{v}</span>
             </div>
           ))}
         </div>
@@ -291,14 +303,14 @@ export function WeatherPage() {
             
             {/* New Chart Component: Compact Heatmap Style */}
             <div className="p-1 sm:p-4 mb-0.5">
-              <div className="h-24 sm:h-32 w-full mb-1">
+              <div className="h-44 sm:h-52 w-full mb-1">
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart 
                     data={selectedDay.hourly.map(h => ({ 
                       ...h, 
-                      vArea: [0.35, 0.65], 
-                      pArea: [1.35, 1.65], 
-                      tArea: [2.35, 2.65]
+                      vArea: [0.25, 0.75], 
+                      pArea: [1.25, 1.75], 
+                      tArea: [2.25, 2.75]
                     }))}
                     margin={{ top: 0, right: 10, left: 0, bottom: 0 }}
                   >
@@ -363,18 +375,25 @@ export function WeatherPage() {
                       type="number"
                       domain={[0, 3.0]}
                       ticks={[0.5, 1.5, 2.5]}
-                      tickFormatter={(val) => {
-                        if (val === 0.5) return 'VENTO';
-                        if (val === 1.5) return 'PIOGGIA';
-                        if (val === 2.5) return 'TEMP';
-                        return '';
+                      tick={(props) => {
+                        const { x, y, payload } = props;
+                        const val = payload.value;
+                        return (
+                          <g transform={`translate(${x},${y})`}>
+                            <foreignObject x={-26} y={-10} width={24} height={20} className="overflow-visible">
+                              <div className="flex items-center justify-center w-full h-full bg-white rounded-sm border border-slate-200 shadow-xs">
+                                {val === 0.5 && <Wind size={12} className="text-blue-600" strokeWidth={2.5} />}
+                                {val === 1.5 && <CloudRain size={12} className="text-sky-600" strokeWidth={2.5} />}
+                                {val === 2.5 && <Thermometer size={12} className="text-red-600" strokeWidth={2.5} />}
+                              </div>
+                            </foreignObject>
+                          </g>
+                        );
                       }}
                       stroke="#475569"
-                      fontSize={window.innerWidth < 640 ? 8 : 10}
                       tickLine={false}
                       axisLine={false}
-                      width={65}
-                      fontWeight="900"
+                      width={30}
                     />
                     <Tooltip content={<CustomTooltip />} />
                     
