@@ -779,39 +779,7 @@ function MainLayout() {
     setIsOpen(val);
   };
 
-  // Swipe back logic
-  React.useEffect(() => {
-    let touchStartX = 0;
-    let touchStartY = 0;
-    
-    const handleTouchStart = (e: TouchEvent) => {
-      touchStartX = e.touches[0].clientX;
-      touchStartY = e.touches[0].clientY;
-    };
-    
-    const handleTouchEnd = (e: TouchEvent) => {
-      const touchEndX = e.changedTouches[0].clientX;
-      const touchEndY = e.changedTouches[0].clientY;
-      
-      const dx = touchEndX - touchStartX;
-      const dy = touchEndY - touchStartY;
-      
-      // Left-to-right swipe (back)
-      if (dx > 70 && Math.abs(dy) < 30) {
-        // Only swipe back if we are not at root
-        if (location.pathname !== '/') {
-          navigate(-1);
-        }
-      }
-    };
-    
-    window.addEventListener('touchstart', handleTouchStart);
-    window.addEventListener('touchend', handleTouchEnd);
-    return () => {
-      window.removeEventListener('touchstart', handleTouchStart);
-      window.removeEventListener('touchend', handleTouchEnd);
-    };
-  }, [location.pathname, navigate]);
+
 
   const confirmLogout = () => {
     logout();
