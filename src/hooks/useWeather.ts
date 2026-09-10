@@ -54,8 +54,10 @@ export function useWeather(lat?: number, lon?: number) {
           
           const hourly: HourlyForecast[] = data.hourly.time.slice(startIdx, endIdx).map((timeStr: string, h: number) => {
             const idx = startIdx + h;
+            const rawTime = timeStr.includes('T') ? timeStr.split('T')[1] : timeStr;
+            const time = rawTime.substring(0, 5);
             return {
-              time: timeStr.split('T')[1],
+              time,
               temp: data.hourly.temperature_2m[idx],
               windSpeed: data.hourly.wind_speed_10m[idx],
               windDirection: getWindDirection(data.hourly.wind_direction_10m[idx]),
