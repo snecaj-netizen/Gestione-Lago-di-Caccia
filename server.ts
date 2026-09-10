@@ -404,7 +404,7 @@ async function startServer() {
     if (latitude === undefined || longitude === undefined) return res.status(400).json({ error: "Missing coords" });
 
     const fetchForecast = async () => {
-      const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&hourly=temperature_2m,precipitation_probability,precipitation,wind_speed_10m,wind_direction_10m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,wind_speed_10m_max,wind_direction_10m_dominant,precipitation_probability_max,precipitation_sum&timezone=auto`;
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&hourly=temperature_2m,precipitation_probability,precipitation,wind_speed_10m,wind_direction_10m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,wind_speed_10m_max,wind_direction_10m_dominant,precipitation_probability_max,precipitation_sum&forecast_days=14&timezone=auto`;
       const response = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
       if (!response.ok) throw new Error(`Status ${response.status}`);
       return await response.json();
@@ -424,8 +424,8 @@ async function startServer() {
     } catch (error) {
       console.warn("Weather API fallback triggered due to:", error);
       
-      // Generate robust mock Open-Meteo structure for 7 days
-      const daysCount = 7;
+      // Generate robust mock Open-Meteo structure for 14 days
+      const daysCount = 14;
       const dailyTimes: string[] = [];
       const dailyMax: number[] = [];
       const dailyMin: number[] = [];
