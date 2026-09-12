@@ -109,8 +109,10 @@ if (typeof window !== 'undefined') {
       console.error(e);
     }
   }
-  if (!safeLocalStorage.getItem('lake_db_hunting_limits')) {
-    safeLocalStorage.setItem('lake_db_hunting_limits', JSON.stringify([
+  try {
+    const limitsStr = safeLocalStorage.getItem('lake_db_hunting_limits');
+    let limits = limitsStr ? JSON.parse(limitsStr) : [];
+    const defaultLimits = [
       { id: '1', species: 'Alzavola', dailyLimit: 5, seasonalLimit: 25, huntingPeriod: '15/09/2024 - 31/01/2025' },
       { id: '2', species: 'Beccaccino', dailyLimit: 3, seasonalLimit: 15, huntingPeriod: '15/09/2024 - 31/01/2025' },
       { id: '3', species: 'Canapiglia', dailyLimit: 5, seasonalLimit: 25, huntingPeriod: '15/09/2024 - 31/01/2025' },
@@ -119,14 +121,31 @@ if (typeof window !== 'undefined') {
       { id: '6', species: 'Germano Reale', dailyLimit: 8, seasonalLimit: 40, huntingPeriod: '15/09/2024 - 31/01/2025' },
       { id: '7', species: 'Mestolone', dailyLimit: 5, seasonalLimit: 25, huntingPeriod: '15/09/2024 - 31/01/2025' },
       { id: '8', species: 'Moretta', dailyLimit: 5, seasonalLimit: 25, huntingPeriod: '01/11/2024 - 31/01/2025' },
-      { id: '9', species: 'Moriglione', dailyLimit: 5, seasonalLimit: 25, huntingPeriod: '15/09/2024 - 31/01/2025' },
-      { id: '10', species: 'Pavoncella', dailyLimit: 2, seasonalLimit: 10, huntingPeriod: '15/09/2024 - 31/01/2025' },
+      { id: '9', species: 'Moriglione', dailyLimit: 4, seasonalLimit: 4, huntingPeriod: '15/09/2024 - 31/01/2025', notes: 'Deroga ATC' },
+      { id: '10', species: 'Pavoncella', dailyLimit: 2, seasonalLimit: 2, huntingPeriod: '15/09/2024 - 31/01/2025', notes: 'Deroga ATC' },
       { id: '11', species: 'Marzaiola', dailyLimit: 5, seasonalLimit: 25, huntingPeriod: '15/09/2024 - 31/01/2025' },
       { id: '12', species: 'Folaga', dailyLimit: 5, seasonalLimit: 25, huntingPeriod: '15/09/2024 - 31/01/2025' },
       { id: '13', species: 'Gallinella d\'acqua', dailyLimit: 5, seasonalLimit: 25, huntingPeriod: '15/09/2024 - 31/01/2025' },
       { id: '14', species: 'Porciglione', dailyLimit: 5, seasonalLimit: 25, huntingPeriod: '15/09/2024 - 31/01/2025' },
       { id: '15', species: 'Frullino', dailyLimit: 2, seasonalLimit: 10, huntingPeriod: '15/09/2024 - 31/01/2025' }
-    ]));
+    ];
+    if (limits.length === 0) {
+      safeLocalStorage.setItem('lake_db_hunting_limits', JSON.stringify(defaultLimits));
+    } else {
+      // Force update Moriglione and Pavoncella to the new deroga limits
+      limits = limits.map((l: any) => {
+        if (l.species === 'Moriglione') {
+          return { ...l, dailyLimit: 4, seasonalLimit: 4 };
+        }
+        if (l.species === 'Pavoncella') {
+          return { ...l, dailyLimit: 2, seasonalLimit: 2 };
+        }
+        return l;
+      });
+      safeLocalStorage.setItem('lake_db_hunting_limits', JSON.stringify(limits));
+    }
+  } catch (e) {
+    console.error(e);
   }
   if (!safeLocalStorage.getItem('lake_db_hunting_times')) {
     safeLocalStorage.setItem('lake_db_hunting_times', JSON.stringify([
@@ -1391,13 +1410,36 @@ export const deleteRecipe = async (id: string) => {
 export const subscribeToHuntingLimits = (callback: (limits: HuntingLimit[]) => void) => {
   if (!db) {
     return subscribeMockCollection('hunting_limits', (list) => {
-      const sorted = [...list].sort((a, b) => (a.species || '').localeCompare(b.species || ''));
+      const updated = list.map(l => {
+        if (l.species === 'Moriglione') return { ...l, dailyLimit: 4, seasonalLimit: 4, notes: l.notes || 'Deroga ATC' };
+        if (l.species === 'Pavoncella') return { ...l, dailyLimit: 2, seasonalLimit: 2, notes: l.notes || 'Deroga ATC' };
+        return l;
+      });
+      saveLocalCollection('hunting_limits', updated);
+      const sorted = [...updated].sort((a, b) => (a.species || '').localeCompare(b.species || ''));
       callback(sorted);
     });
   }
   const q = query(collection(db, 'hunting_limits'), orderBy('species'));
   return onSnapshot(q, (snapshot) => {
-    callback(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as HuntingLimit)));
+    let limits = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as HuntingLimit));
+    
+    // Force update in Firestore if needed
+    limits = limits.map(l => {
+      if (l.species === 'Moriglione' && (l.dailyLimit !== 4 || l.seasonalLimit !== 4)) {
+        const updated = { ...l, dailyLimit: 4, seasonalLimit: 4, notes: l.notes || 'Deroga ATC' };
+        setDoc(doc(db, 'hunting_limits', l.id), cleanData(updated)).catch(() => {});
+        return updated;
+      }
+      if (l.species === 'Pavoncella' && (l.dailyLimit !== 2 || l.seasonalLimit !== 2)) {
+        const updated = { ...l, dailyLimit: 2, seasonalLimit: 2, notes: l.notes || 'Deroga ATC' };
+        setDoc(doc(db, 'hunting_limits', l.id), cleanData(updated)).catch(() => {});
+        return updated;
+      }
+      return l;
+    });
+
+    callback(limits);
   }, (error) => handleFirestoreError(error, OperationType.LIST, 'hunting_limits'));
 };
 
