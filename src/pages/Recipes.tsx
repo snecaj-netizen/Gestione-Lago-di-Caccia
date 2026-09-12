@@ -675,15 +675,15 @@ export function Recipes() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto"
+            className="fixed inset-0 bg-white md:bg-slate-900/60 md:backdrop-blur-sm z-50 md:flex md:items-center md:justify-center md:p-4 overflow-y-auto"
           >
             <motion.div
-              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              initial={{ scale: 0.95, opacity: 0, y: 10 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl relative"
+              exit={{ scale: 0.95, opacity: 0, y: 10 }}
+              className="bg-white min-h-screen md:min-h-0 md:rounded-3xl w-full md:max-w-2xl md:shadow-2xl relative flex flex-col"
             >
-              <div className="p-8">
+              <div className="p-6 md:p-8 flex-grow">
                 <header className="flex justify-between items-start mb-8">
                   <div>
                     <h2 className="text-2xl font-black text-slate-gray uppercase tracking-tighter">
