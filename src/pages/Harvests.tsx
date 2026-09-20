@@ -233,7 +233,7 @@ export function Harvests() {
   const isSeasonalLimitExceeded = currentLimit && currentLimit.seasonalLimit > 0 && projectedSeasonal > currentLimit.seasonalLimit;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 pb-24 sm:pb-12">
       <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-serif text-lake-green">Catture & Abbattimenti</h1>
@@ -530,11 +530,11 @@ export function Harvests() {
           <table className="w-full text-left min-w-[320px]">
             <thead className="bg-off-white border-b border-slate-100 uppercase tracking-widest text-[0.6rem] sm:text-[0.65rem] font-black text-slate-400">
               <tr>
-                <th className="px-3 sm:px-6 py-3 font-bold">Data</th>
-                <th className="px-3 sm:px-6 py-3 font-bold">Specie</th>
-                <th className="px-3 sm:px-6 py-3 font-bold hidden md:table-cell">Cacciatore</th>
-                <th className="px-3 sm:px-6 py-3 font-bold text-right">Q.tà</th>
-                <th className="px-3 sm:px-6 py-3 font-bold text-right">Azioni</th>
+                <th className="pl-3 sm:pl-6 pr-1 sm:pr-2 py-3 font-bold text-left w-14 sm:w-16">Azioni</th>
+                <th className="px-2 sm:px-4 py-3 font-bold">Data</th>
+                <th className="px-2 sm:px-4 py-3 font-bold">Specie</th>
+                <th className="px-2 sm:px-4 py-3 font-bold hidden md:table-cell">Cacciatore</th>
+                <th className="pl-2 pr-3 sm:pr-6 py-3 font-bold text-right">Q.tà</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
@@ -555,10 +555,39 @@ export function Harvests() {
                     item.id === highlightId ? "bg-lake-green/10" : ""
                   )}
                 >
-                  <td className="px-3 sm:px-6 py-3 text-xs sm:text-sm font-medium text-slate-600 whitespace-nowrap">
+                  <td className="pl-3 sm:pl-6 pr-1 sm:pr-2 py-3 text-left whitespace-nowrap">
+                    <div className="flex items-center gap-1.5 sm:gap-2">
+                      {canManage(item) ? (
+                        <>
+                          <button 
+                            onClick={() => handleOpenEdit(item)}
+                            className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-lake-green transition-colors"
+                            title="Modifica cattura"
+                            aria-label="Modifica"
+                          >
+                            <Edit2 size={15} />
+                          </button>
+                          <button 
+                            onClick={() => {
+                              setItemToDelete(item);
+                              setShowDeleteConfirm(true);
+                            }}
+                            className="p-1.5 rounded hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors"
+                            title="Elimina cattura"
+                            aria-label="Elimina"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </>
+                      ) : (
+                        <span className="w-8 inline-block" />
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-2 sm:px-4 py-3 text-xs sm:text-sm font-medium text-slate-600 whitespace-nowrap">
                     {safeFormatDate(item.date, 'dd MMM', { locale: it })}
                   </td>
-                  <td className="px-3 sm:px-6 py-3 whitespace-nowrap">
+                  <td className="px-2 sm:px-4 py-3 whitespace-nowrap">
                     <div className="flex items-center gap-2">
                       <Target size={12} className="text-lake-green opacity-40 shrink-0 hidden sm:block" />
                       <span className="text-xs sm:text-sm font-semibold text-lake-green">
@@ -566,34 +595,11 @@ export function Harvests() {
                       </span>
                     </div>
                   </td>
-                  <td className="px-3 sm:px-6 py-3 text-[10px] sm:text-xs text-slate-400 font-medium italic whitespace-nowrap hidden md:table-cell">
+                  <td className="px-2 sm:px-4 py-3 text-[10px] sm:text-xs text-slate-400 font-medium italic whitespace-nowrap hidden md:table-cell">
                     {item.hunterName}
                   </td>
-                  <td className="px-3 sm:px-6 py-3 text-right font-black text-sm sm:text-lg text-slate-900 tracking-tighter">
+                  <td className="pl-2 pr-3 sm:pr-6 py-3 text-right font-black text-sm sm:text-lg text-slate-900 tracking-tighter">
                     {item.count}
-                  </td>
-                  <td className="px-3 sm:px-6 py-3 text-right">
-                    <div className="flex justify-end gap-2">
-                      {canManage(item) && (
-                        <>
-                          <button 
-                            onClick={() => handleOpenEdit(item)}
-                            className="p-1 text-slate-400 hover:text-lake-green transition-colors"
-                          >
-                            <Edit2 size={14} />
-                          </button>
-                          <button 
-                            onClick={() => {
-                              setItemToDelete(item);
-                              setShowDeleteConfirm(true);
-                            }}
-                            className="p-1 text-slate-400 hover:text-rose-600 transition-colors"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </>
-                      )}
-                    </div>
                   </td>
                 </tr>
               ))}
