@@ -1,15 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { 
   addHarvest, 
+  addHarvestsBatch,
   updateHarvest,
   deleteHarvest,
   subscribeToHarvests,
   subscribeToUsers,
-  subscribeToHuntingLimits
+  subscribeToHuntingLimits,
+  subscribeToHuntingDays,
+  getAssignedHuntersForDate
 } from '../services';
-import { Harvest, UserProfile, HuntingLimit } from '../types';
+import { Harvest, UserProfile, HuntingLimit, HuntingDay } from '../types';
 import { useAuth } from '../contexts/AuthContext';
-import { Plus, Target, Trash2, Search, Filter, X, Edit2, User, ChevronDown, ShieldAlert } from 'lucide-react';
+import { Plus, Target, Trash2, Search, Filter, X, Edit2, User, ChevronDown, ShieldAlert, Users, Info } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -91,6 +94,7 @@ export function Harvests() {
   const [showSpeciesList, setShowSpeciesList] = useState(false);
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [limits, setLimits] = useState<HuntingLimit[]>([]);
+  const [huntingDays, setHuntingDays] = useState<HuntingDay[]>([]);
 
   const [formData, setFormData] = useState<{
     date: string;
@@ -118,11 +122,13 @@ export function Harvests() {
     });
 
     const unsubLimits = subscribeToHuntingLimits(setLimits);
+    const unsubHuntingDays = subscribeToHuntingDays(setHuntingDays);
 
     return () => {
       unsubHarvests();
       unsubUsers();
       unsubLimits();
+      unsubHuntingDays();
     };
   }, []);
 
@@ -135,14 +141,21 @@ export function Harvests() {
     }
   }, [highlightId, loading]);
 
+  // Calculate assigned hunters for the selected date
+  const assignedHuntersForSelectedDate = getAssignedHuntersForDate(formData.date, huntingDays, users);
+  
+  // Permission check: Admin can insert for any day; Non-admin can only insert if assigned to that day
+  const isUserAssignedToSelectedDate = Boolean(profile && assignedHuntersForSelectedDate.some(h => h.uid === profile.uid));
+  const canUserInsertForSelectedDate = profile?.role === 'admin' || isUserAssignedToSelectedDate;
+
   const handleOpenAdd = () => {
     setEditingItem(null);
     setFormData({
       date: format(new Date(), 'yyyy-MM-dd'),
       species: '',
       count: '',
-      hunterUid: profile?.uid || '',
-      hunterName: profile?.displayName || ''
+      hunterUid: '',
+      hunterName: ''
     });
     setShowModal(true);
   };
@@ -163,6 +176,15 @@ export function Harvests() {
     e.preventDefault();
     if (!profile) return;
     
+    // Check permission for the selected date
+    const assignedHunters = getAssignedHuntersForDate(formData.date, huntingDays, users);
+    const isAssigned = assignedHunters.some(h => h.uid === profile.uid);
+
+    if (profile.role !== 'admin' && !isAssigned) {
+      alert(`Non sei autorizzato a registrare abbattimenti per il ${formData.date}. Possono registrare solo i cacciatori assegnati a questa data o l'amministratore.`);
+      return;
+    }
+
     // Non-admins must use the list
     if (profile.role !== 'admin' && !SPECIES_LIST.includes(formData.species)) {
       alert('Per favore, seleziona una specie valida dalla lista.');
@@ -175,23 +197,48 @@ export function Harvests() {
       return;
     }
 
-    // Ensure hunter information is set
-    // For admins, it might have been selected. For others, it's pre-filled or automatic.
-    const submissionData = {
-      ...formData,
-      count: parsedCount,
-      // Safety: always ensure name matches UID if it's the current user, 
-      // or if admin selected a different user, keep those.
-      // But if we're not admin, force current user.
-      hunterUid: profile.role === 'admin' ? formData.hunterUid : profile.uid,
-      hunterName: profile.role === 'admin' ? formData.hunterName : profile.displayName
-    };
-
     try {
       if (editingItem) {
-        await updateHarvest(editingItem.id, submissionData);
+        // Editing an existing single record
+        await updateHarvest(editingItem.id, {
+          date: formData.date,
+          species: formData.species,
+          count: parsedCount,
+          hunterUid: formData.hunterUid || editingItem.hunterUid,
+          hunterName: formData.hunterName || editingItem.hunterName
+        });
       } else {
-        await addHarvest(submissionData);
+        // Adding new harvest: Automatic distribution among assigned hunters for that date
+        // If no hunters assigned (e.g. admin inserting on unassigned day), fall back to creator
+        const targetHunters = assignedHunters.length > 0 
+          ? assignedHunters 
+          : [{ uid: profile.uid, displayName: profile.displayName, role: profile.role }];
+
+        const numHunters = targetHunters.length;
+        const baseShare = Math.floor(parsedCount / numHunters);
+        const remainder = parsedCount % numHunters;
+
+        const harvestsToAdd: Omit<Harvest, 'id'>[] = [];
+
+        targetHunters.forEach((hunter, index) => {
+          // If remainder > 0 or count < numHunters, assign the extra/remainder to the first hunter
+          const hunterCount = index === 0 ? (baseShare + remainder) : baseShare;
+          if (hunterCount > 0) {
+            harvestsToAdd.push({
+              date: formData.date,
+              species: formData.species,
+              count: hunterCount,
+              hunterUid: hunter.uid,
+              hunterName: hunter.displayName
+            });
+          }
+        });
+
+        if (harvestsToAdd.length === 1) {
+          await addHarvest(harvestsToAdd[0]);
+        } else if (harvestsToAdd.length > 1) {
+          await addHarvestsBatch(harvestsToAdd);
+        }
       }
       setShowModal(false);
     } catch (err: any) {
@@ -227,21 +274,33 @@ export function Harvests() {
 
   const currentLimit = limits.find(l => l.species.toLowerCase() === formData.species.toLowerCase());
   
+  // Reference hunter for limit calculation:
+  // In edit mode: the item's hunter
+  // In add mode: first assigned hunter if available, otherwise current user
+  const effectiveHunterUid = editingItem 
+    ? (formData.hunterUid || editingItem.hunterUid)
+    : (assignedHuntersForSelectedDate.length > 0 ? assignedHuntersForSelectedDate[0].uid : (profile?.uid || ''));
+
   const dailyCount = items
-    .filter(h => h.date === formData.date && h.hunterUid === formData.hunterUid && h.species.toLowerCase() === formData.species.toLowerCase() && h.id !== editingItem?.id)
+    .filter(h => h.date === formData.date && h.hunterUid === effectiveHunterUid && h.species.toLowerCase() === formData.species.toLowerCase() && h.id !== editingItem?.id)
     .reduce((acc, h) => acc + h.count, 0);
 
   const seasonalCount = items
-    .filter(h => h.hunterUid === formData.hunterUid && h.species.toLowerCase() === formData.species.toLowerCase() && h.id !== editingItem?.id)
+    .filter(h => h.hunterUid === effectiveHunterUid && h.species.toLowerCase() === formData.species.toLowerCase() && h.id !== editingItem?.id)
     .reduce((acc, h) => acc + h.count, 0);
 
-  const isDailyLimitReached = currentLimit && currentLimit.dailyLimit > 0 && dailyCount >= currentLimit.dailyLimit;
-  const isSeasonalLimitReached = currentLimit && currentLimit.seasonalLimit > 0 && seasonalCount >= currentLimit.seasonalLimit;
-
-  // New total after adding current form count
+  // Calculate projected counts for limit checking
   const validCount = formData.count ? (parseInt(formData.count, 10) || 0) : 0;
-  const projectedDaily = dailyCount + validCount;
-  const projectedSeasonal = seasonalCount + validCount;
+  
+  // For new harvest distribution: calculate how much the first hunter will actually receive
+  const projectedShareForEffectiveHunter = editingItem
+    ? validCount
+    : (assignedHuntersForSelectedDate.length > 0
+        ? Math.floor(validCount / assignedHuntersForSelectedDate.length) + (validCount % assignedHuntersForSelectedDate.length)
+        : validCount);
+
+  const projectedDaily = dailyCount + projectedShareForEffectiveHunter;
+  const projectedSeasonal = seasonalCount + projectedShareForEffectiveHunter;
 
   const isDailyLimitExceeded = currentLimit && currentLimit.dailyLimit > 0 && projectedDaily > currentLimit.dailyLimit;
   const isSeasonalLimitExceeded = currentLimit && currentLimit.seasonalLimit > 0 && projectedSeasonal > currentLimit.seasonalLimit;
@@ -377,12 +436,20 @@ export function Harvests() {
                       </div>
                       <p className="text-xs font-bold leading-tight">
                         {isDailyLimitExceeded 
-                          ? `ATTENZIONE: Hai superato il limite giornaliero (${currentLimit.dailyLimit}) per ${currentLimit.species}.` 
+                          ? `ATTENZIONE: Con questo inserimento si supera il limite giornaliero (${currentLimit.dailyLimit}) per ${currentLimit.species}.` 
                           : isSeasonalLimitExceeded 
-                          ? `ATTENZIONE: Hai superato il limite stagionale (${currentLimit.seasonalLimit}) per ${currentLimit.species}.`
-                          : validCount > 0 
-                          ? `Stai registrando ${validCount} capi. Totale oggi: ${projectedDaily}${currentLimit.dailyLimit > 0 ? ` / ${currentLimit.dailyLimit}` : ''}.`
-                          : `Capi già registrati oggi: ${dailyCount}${currentLimit.dailyLimit > 0 ? ` / ${currentLimit.dailyLimit}` : ''}.`}
+                          ? `ATTENZIONE: Con questo inserimento si supera il limite stagionale (${currentLimit.seasonalLimit}) per ${currentLimit.species}.`
+                          : (
+                            <span>
+                              Capi già abbattuti oggi: <span className="font-black text-slate-800">{dailyCount}</span>
+                              {currentLimit.dailyLimit > 0 && <span> / {currentLimit.dailyLimit}</span>}
+                              {validCount > 0 && (
+                                <span className="text-lake-green ml-1">
+                                  (+{projectedShareForEffectiveHunter} proposti &rarr; tot. {projectedDaily}{currentLimit.dailyLimit > 0 ? `/${currentLimit.dailyLimit}` : ''})
+                                </span>
+                              )}
+                            </span>
+                          )}
                       </p>
                       {currentLimit.notes && (
                         <p className="text-[9px] mt-1 opacity-60 italic">{currentLimit.notes}</p>
@@ -454,34 +521,80 @@ export function Harvests() {
                   )}
                 </div>
 
-                {profile?.role === 'admin' && (
-                  <div className="space-y-2">
-                    <label className="text-[0.65rem] font-black text-slate-400 uppercase tracking-widest">Assegna a Cacciatore</label>
-                    <div className="relative">
-                      <select 
-                        required
-                        value={formData.hunterUid}
-                        onChange={e => {
-                          const user = users.find(u => u.uid === e.target.value);
-                          if (user) {
-                            setFormData({ 
-                              ...formData, 
-                              hunterUid: user.uid, 
-                              hunterName: user.displayName 
-                            });
-                          }
-                        }}
-                        className="w-full bg-off-white border border-slate-200 rounded px-10 py-2.5 text-sm font-bold text-slate-gray outline-none focus:border-lake-green appearance-none"
-                      >
-                        <option value="" disabled>Seleziona Cacciatore</option>
-                        {users.map(u => (
-                          <option key={u.uid} value={u.uid}>{u.displayName}</option>
-                        ))}
-                      </select>
-                      <User size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                {/* Assigned Hunters & Auto Distribution Info */}
+                <div className="p-3.5 rounded-lg border bg-slate-50 border-slate-200">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <Users size={16} className="text-lake-green" />
+                      <span className="text-[10px] font-black uppercase tracking-widest text-slate-600">
+                        Cacciatori Presenti ({assignedHuntersForSelectedDate.length})
+                      </span>
                     </div>
+                    {canUserInsertForSelectedDate ? (
+                      <span className="text-[9px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded">
+                        {profile?.role === 'admin' ? 'Autorizzato (Admin)' : 'Autorizzato (In Turno)'}
+                      </span>
+                    ) : (
+                      <span className="text-[9px] font-bold text-rose-700 bg-rose-100 px-2 py-0.5 rounded">
+                        Non in turno
+                      </span>
+                    )}
                   </div>
-                )}
+
+                  {assignedHuntersForSelectedDate.length > 0 ? (
+                    <div className="space-y-1.5">
+                      <div className="flex flex-wrap gap-1.5">
+                        {assignedHuntersForSelectedDate.map((hunter, idx) => {
+                          const numHunters = assignedHuntersForSelectedDate.length;
+                          const base = Math.floor(validCount / numHunters);
+                          const rem = validCount % numHunters;
+                          const assignedCount = idx === 0 ? (base + rem) : base;
+
+                          return (
+                            <span 
+                              key={hunter.uid}
+                              className={cn(
+                                "text-xs font-semibold px-2.5 py-1 rounded-md border inline-flex items-center gap-1.5",
+                                hunter.uid === profile?.uid 
+                                  ? "bg-lake-green/10 border-lake-green/30 text-lake-green font-bold" 
+                                  : "bg-white border-slate-200 text-slate-700"
+                              )}
+                            >
+                              <span>{hunter.displayName}</span>
+                              {validCount > 0 && !editingItem && (
+                                <span className="bg-accent-gold/20 text-slate-800 text-[10px] px-1.5 py-0.2 rounded font-black">
+                                  +{assignedCount}
+                                </span>
+                              )}
+                            </span>
+                          );
+                        })}
+                      </div>
+
+                      {!editingItem && validCount > 0 && (
+                        <p className="text-[10px] text-slate-500 italic pt-1">
+                          Ripartizione automatica: {assignedHuntersForSelectedDate.length > 1 
+                            ? (validCount % assignedHuntersForSelectedDate.length !== 0 
+                                ? `Numero non divisibile equamente: il resto viene assegnato al primo cacciatore (${assignedHuntersForSelectedDate[0].displayName}).` 
+                                : `Divisi equamente (${Math.floor(validCount / assignedHuntersForSelectedDate.length)} per cacciatore).`)
+                            : `Assegnati a ${assignedHuntersForSelectedDate[0].displayName}.`}
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-slate-500 italic">
+                      Nessun cacciatore assegnato a questa data nel calendario venatorio.
+                      {profile?.role === 'admin' ? ' (In qualità di Admin, i capi registrati verranno intestati al tuo account).' : ''}
+                    </div>
+                  )}
+
+                  {!canUserInsertForSelectedDate && (
+                    <div className="mt-2.5 p-2 bg-rose-50 border border-rose-200 rounded text-xs text-rose-700 font-bold flex items-center gap-2">
+                      <ShieldAlert size={16} className="shrink-0 text-rose-600" />
+                      <span>Solo i cacciatori assegnati a questa data o l'Admin possono registrare abbattimenti.</span>
+                    </div>
+                  )}
+                </div>
 
                 <div className="flex gap-4 pt-2">
                   <button 
@@ -493,7 +606,13 @@ export function Harvests() {
                   </button>
                   <button 
                     type="submit"
-                    className="flex-1 py-3 px-6 rounded bg-accent-gold text-lake-green font-black text-xs uppercase tracking-widest hover:bg-opacity-90 transition-all shadow-lg active:scale-95"
+                    disabled={!canUserInsertForSelectedDate}
+                    className={cn(
+                      "flex-1 py-3 px-6 rounded font-black text-xs uppercase tracking-widest transition-all shadow-lg active:scale-95",
+                      canUserInsertForSelectedDate 
+                        ? "bg-accent-gold text-lake-green hover:bg-opacity-90 cursor-pointer" 
+                        : "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none active:scale-100"
+                    )}
                   >
                     {editingItem ? 'Salva Modifiche' : 'Registra Abbattimento'}
                   </button>

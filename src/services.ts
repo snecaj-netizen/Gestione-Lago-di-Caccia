@@ -848,6 +848,65 @@ export const unassignHuntingDay = async (id: string) => {
   }
 };
 
+/**
+ * Calculates all hunters assigned to a specific date:
+ * 1. Manual day assignments in hunting_days collection
+ * 2. Recurring weekly assigned days for active users (if not manually overwritten)
+ */
+export const getAssignedHuntersForDate = (
+  dateStr: string,
+  allHuntingDays: HuntingDay[],
+  allUsers: UserProfile[]
+): { uid: string; displayName: string; role: 'admin' | 'socio' | 'quotista' }[] => {
+  if (!dateStr) return [];
+  const list: { uid: string; displayName: string; role: 'admin' | 'socio' | 'quotista' }[] = [];
+  
+  // 1. Manual assignments
+  const manuals = allHuntingDays.filter(d => d.date === dateStr);
+  manuals.forEach(m => {
+    const matchedUser = allUsers.find(u => u.uid === m.assignedToUid);
+    list.push({
+      uid: m.assignedToUid,
+      displayName: m.assignedToName || matchedUser?.displayName || 'Cacciatore',
+      role: (matchedUser?.role as any) || (m.type === 'quotista' ? 'quotista' : 'socio')
+    });
+  });
+
+  // 2. Automatic recurring assignments
+  try {
+    // Parse dateStr (yyyy-MM-dd) to day of week (0=Sun, 1=Mon, ..., 6=Sat)
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const parsedDate = new Date(year, month - 1, day);
+    if (!isNaN(parsedDate.getTime())) {
+      const dayOfWeek = parsedDate.getDay();
+      const recurringUsers = allUsers.filter(u => u.isActive && (u.assignedDaysOfWeek || []).includes(dayOfWeek));
+      recurringUsers.forEach(u => {
+        if (!manuals.some(m => m.assignedToUid === u.uid)) {
+          list.push({
+            uid: u.uid,
+            displayName: u.displayName,
+            role: u.role
+          });
+        }
+      });
+    }
+  } catch (e) {
+    console.error("Error calculating recurring assigned hunters for date:", e);
+  }
+
+  // Deduplicate by uid while preserving order
+  const seen = new Set<string>();
+  const uniqueList: { uid: string; displayName: string; role: 'admin' | 'socio' | 'quotista' }[] = [];
+  for (const item of list) {
+    if (!seen.has(item.uid)) {
+      seen.add(item.uid);
+      uniqueList.push(item);
+    }
+  }
+
+  return uniqueList;
+};
+
 // Transactions
 export const subscribeToTransactions = (callback: (txs: Transaction[]) => void) => {
   if (!db) {
@@ -1245,6 +1304,43 @@ const notifyAdminsAndSubscribers = async (title: string, body: string, type: Not
     await Promise.all(promises);
   } catch (error) {
     console.error("Error creating notifications:", error);
+  }
+};
+
+export const addHarvestsBatch = async (harvestsList: Omit<Harvest, 'id'>[]) => {
+  if (!harvestsList || harvestsList.length === 0) return;
+  
+  if (!db) {
+    const createdDocs: any[] = [];
+    for (const h of harvestsList) {
+      const newDoc = addLocalDoc('harvests', h);
+      createdDocs.push(newDoc);
+    }
+    const summary = harvestsList.map(h => `${h.count}x ${h.species} (${h.hunterName})`).join(', ');
+    await notifyAdminsAndSubscribers(
+      "Nuovo Abbattimento Registrato",
+      `Registrati capi per la giornata: ${summary}`,
+      'harvest',
+      `/abbattimenti`,
+      { batchSize: harvestsList.length }
+    );
+    return;
+  }
+
+  try {
+    const promises = harvestsList.map(h => addDoc(collection(db, 'harvests'), cleanData(h)));
+    await Promise.all(promises);
+
+    const summary = harvestsList.map(h => `${h.count}x ${h.species} (${h.hunterName})`).join(', ');
+    await notifyAdminsAndSubscribers(
+      "Nuovo Abbattimento Registrato",
+      `Registrati capi per la giornata: ${summary}`,
+      'harvest',
+      `/abbattimenti`,
+      { batchSize: harvestsList.length }
+    );
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, 'harvests');
   }
 };
 
