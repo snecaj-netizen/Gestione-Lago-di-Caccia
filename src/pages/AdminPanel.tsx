@@ -533,7 +533,15 @@ export function AdminPanel() {
     }
   };
 
-  const itDays = ['Domenica', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato'];
+  const weekDays = [
+    { name: 'Lunedì', short: 'Lun', letter: 'L', idx: 1 },
+    { name: 'Martedì', short: 'Mar', letter: 'M', idx: 2 },
+    { name: 'Mercoledì', short: 'Mer', letter: 'M', idx: 3 },
+    { name: 'Giovedì', short: 'Gio', letter: 'G', idx: 4 },
+    { name: 'Venerdì', short: 'Ven', letter: 'V', idx: 5 },
+    { name: 'Sabato', short: 'Sab', letter: 'S', idx: 6 },
+    { name: 'Domenica', short: 'Dom', letter: 'D', idx: 0 }
+  ];
 
   if (currentUser?.role !== 'admin') {
     return (
@@ -687,19 +695,19 @@ export function AdminPanel() {
                   </td>
                   <td className="px-3 sm:px-6 py-3 whitespace-nowrap hidden md:table-cell">
                     <div className="flex gap-1">
-                      {itDays.map((day, idx) => (
+                      {weekDays.map(day => (
                         <button
-                          key={day}
-                          onClick={() => changeRecurringDay(user, idx)}
+                          key={day.idx}
+                          onClick={() => changeRecurringDay(user, day.idx)}
                           className={cn(
                             "w-5 h-5 rounded-full text-[8px] font-black flex items-center justify-center transition-all",
-                            (user.assignedDaysOfWeek || []).includes(idx)
+                            (user.assignedDaysOfWeek || []).includes(day.idx)
                               ? "bg-lake-green text-white shadow-sm"
                               : "bg-slate-100 text-slate-300 hover:bg-slate-200"
                           )}
-                          title={day}
+                          title={day.name}
                         >
-                          {day[0]}
+                          {day.letter}
                         </button>
                       ))}
                     </div>
@@ -1106,8 +1114,8 @@ export function AdminPanel() {
                       {extractedProspect.map((p, i) => (
                         <tr key={i}>
                           <td className="p-2"><input type="text" value={p.species || ''} onChange={(e) => { const n = [...extractedProspect!]; n[i].species = e.target.value; setExtractedProspect(n); }} className="w-full text-xs font-bold text-slate-700 bg-transparent outline-none border-b border-transparent focus:border-lake-green" /></td>
-                          <td className="p-2"><input type="number" value={p.dailyLimit ?? 0} onChange={(e) => { const n = [...extractedProspect!]; n[i].dailyLimit = parseInt(e.target.value) || 0; setExtractedProspect(n); }} className="w-full text-xs font-mono text-slate-600 bg-transparent outline-none border-b border-transparent focus:border-lake-green" /></td>
-                          <td className="p-2"><input type="number" value={p.seasonalLimit ?? 0} onChange={(e) => { const n = [...extractedProspect!]; n[i].seasonalLimit = parseInt(e.target.value) || 0; setExtractedProspect(n); }} className="w-full text-xs font-mono text-slate-600 bg-transparent outline-none border-b border-transparent focus:border-lake-green" /></td>
+                          <td className="p-2"><input type="number" value={typeof p.dailyLimit === 'number' && !isNaN(p.dailyLimit) ? p.dailyLimit : 0} onChange={(e) => { const n = [...extractedProspect!]; n[i].dailyLimit = parseInt(e.target.value) || 0; setExtractedProspect(n); }} className="w-full text-xs font-mono text-slate-600 bg-transparent outline-none border-b border-transparent focus:border-lake-green" /></td>
+                          <td className="p-2"><input type="number" value={typeof p.seasonalLimit === 'number' && !isNaN(p.seasonalLimit) ? p.seasonalLimit : 0} onChange={(e) => { const n = [...extractedProspect!]; n[i].seasonalLimit = parseInt(e.target.value) || 0; setExtractedProspect(n); }} className="w-full text-xs font-mono text-slate-600 bg-transparent outline-none border-b border-transparent focus:border-lake-green" /></td>
                           <td className="p-2"><input type="text" value={p.huntingPeriod || ''} onChange={(e) => { const n = [...extractedProspect!]; n[i].huntingPeriod = e.target.value; setExtractedProspect(n); }} className="w-full text-xs font-mono text-slate-600 bg-transparent outline-none border-b border-transparent focus:border-lake-green" /></td>
                           <td className="p-2"><input type="text" value={p.notes || ''} onChange={(e) => { const n = [...extractedProspect!]; n[i].notes = e.target.value; setExtractedProspect(n); }} className="w-full text-[10px] text-slate-500 bg-transparent outline-none border-b border-transparent focus:border-lake-green placeholder:opacity-30" placeholder="Aggiungi nota..." /></td>
                         </tr>
@@ -1161,7 +1169,7 @@ export function AdminPanel() {
                       {editingLimitId === limit.id ? (
                          <input 
                           type="number" 
-                          value={limitDraft?.dailyLimit ?? 0} 
+                          value={typeof limitDraft?.dailyLimit === 'number' && !isNaN(limitDraft.dailyLimit) ? limitDraft.dailyLimit : 0} 
                           onChange={e => setLimitDraft(prev => prev ? {...prev, dailyLimit: parseInt(e.target.value) || 0} : null)}
                           className="text-xs font-bold text-lake-green border-b border-slate-100 w-12 outline-none"
                         />
@@ -1174,7 +1182,7 @@ export function AdminPanel() {
                       {editingLimitId === limit.id ? (
                         <input 
                           type="number" 
-                          value={limitDraft?.seasonalLimit ?? 0} 
+                          value={typeof limitDraft?.seasonalLimit === 'number' && !isNaN(limitDraft.seasonalLimit) ? limitDraft.seasonalLimit : 0} 
                           onChange={e => setLimitDraft(prev => prev ? {...prev, seasonalLimit: parseInt(e.target.value) || 0} : null)}
                           className="text-xs font-bold text-accent-gold border-b border-slate-100 w-12 outline-none"
                         />
@@ -1779,7 +1787,7 @@ export function AdminPanel() {
                   </label>
                   <input 
                     type="number"
-                    value={newUser.seasonalQuota}
+                    value={typeof newUser.seasonalQuota === 'number' && !isNaN(newUser.seasonalQuota) ? newUser.seasonalQuota : 0}
                     onChange={(e) => setNewUser({...newUser, seasonalQuota: parseFloat(e.target.value) || 0})}
                     className="w-full bg-off-white border border-slate-200 rounded px-4 py-3 text-sm font-bold text-slate-900 outline-none focus:border-lake-green"
                     placeholder="Es. 3500"
@@ -1790,19 +1798,20 @@ export function AdminPanel() {
                 <div className="space-y-2">
                   <label className="text-[0.65rem] font-black text-slate-400 uppercase tracking-widest">Giornate Venatorie Fisse</label>
                   <div className="grid grid-cols-7 gap-1">
-                    {itDays.map((day, idx) => (
+                    {weekDays.map(day => (
                       <button
-                        key={day}
+                        key={day.idx}
                         type="button"
-                        onClick={() => setNewUser({ ...newUser, assignedDaysOfWeek: toggleDay(newUser.assignedDaysOfWeek, idx) })}
+                        onClick={() => setNewUser({ ...newUser, assignedDaysOfWeek: toggleDay(newUser.assignedDaysOfWeek, day.idx) })}
                         className={cn(
                           "py-3 rounded text-[10px] font-black uppercase transition-all border",
-                          newUser.assignedDaysOfWeek.includes(idx)
+                          newUser.assignedDaysOfWeek.includes(day.idx)
                             ? "bg-lake-green text-white border-lake-green shadow-md scale-105"
                             : "bg-off-white text-slate-400 border-slate-100 hover:border-lake-green/30"
                         )}
+                        title={day.name}
                       >
-                        {day.substring(0, 3)}
+                        {day.short}
                       </button>
                     ))}
                   </div>
@@ -1943,7 +1952,7 @@ export function AdminPanel() {
                 </label>
                 <input 
                   type="number"
-                  value={editingUser.seasonalQuota || 0}
+                  value={typeof editingUser.seasonalQuota === 'number' && !isNaN(editingUser.seasonalQuota) ? editingUser.seasonalQuota : 0}
                   onChange={(e) => setEditingUser({...editingUser, seasonalQuota: parseFloat(e.target.value) || 0})}
                   className="w-full bg-off-white border border-slate-200 rounded px-4 py-3 text-sm font-bold text-slate-900 outline-none focus:border-lake-green"
                   placeholder="Es. 3500"
@@ -1953,19 +1962,20 @@ export function AdminPanel() {
               <div className="space-y-2">
                 <label className="text-[0.65rem] font-black text-slate-400 uppercase tracking-widest">Giornate Venatorie Fisse</label>
                 <div className="grid grid-cols-7 gap-1">
-                  {itDays.map((day, idx) => (
+                  {weekDays.map(day => (
                     <button
-                      key={day}
+                      key={day.idx}
                       type="button"
-                      onClick={() => setEditingUser({ ...editingUser, assignedDaysOfWeek: toggleDay(editingUser.assignedDaysOfWeek || [], idx) })}
+                      onClick={() => setEditingUser({ ...editingUser, assignedDaysOfWeek: toggleDay(editingUser.assignedDaysOfWeek || [], day.idx) })}
                       className={cn(
                         "py-3 rounded text-[10px] font-black uppercase transition-all border",
-                        (editingUser.assignedDaysOfWeek || []).includes(idx)
+                        (editingUser.assignedDaysOfWeek || []).includes(day.idx)
                           ? "bg-lake-green text-white border-lake-green shadow-md scale-105"
                           : "bg-off-white text-slate-400 border-slate-100 hover:border-lake-green/30"
                       )}
+                      title={day.name}
                     >
-                      {day.substring(0, 3)}
+                      {day.short}
                     </button>
                   ))}
                 </div>

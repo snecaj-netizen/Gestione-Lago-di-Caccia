@@ -92,10 +92,16 @@ export function Harvests() {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [limits, setLimits] = useState<HuntingLimit[]>([]);
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    date: string;
+    species: string;
+    count: string;
+    hunterUid: string;
+    hunterName: string;
+  }>({
     date: format(new Date(), 'yyyy-MM-dd'),
     species: '',
-    count: 1,
+    count: '',
     hunterUid: '',
     hunterName: ''
   });
@@ -134,7 +140,7 @@ export function Harvests() {
     setFormData({
       date: format(new Date(), 'yyyy-MM-dd'),
       species: '',
-      count: 1,
+      count: '',
       hunterUid: profile?.uid || '',
       hunterName: profile?.displayName || ''
     });
@@ -146,7 +152,7 @@ export function Harvests() {
     setFormData({
       date: item.date,
       species: item.species,
-      count: item.count,
+      count: item.count ? item.count.toString() : '',
       hunterUid: item.hunterUid,
       hunterName: item.hunterName
     });
@@ -163,10 +169,17 @@ export function Harvests() {
       return;
     }
 
+    const parsedCount = parseInt(formData.count, 10);
+    if (!formData.count || isNaN(parsedCount) || parsedCount <= 0) {
+      alert('Per favore, inserisci un numero valido di capi (minimo 1).');
+      return;
+    }
+
     // Ensure hunter information is set
     // For admins, it might have been selected. For others, it's pre-filled or automatic.
     const submissionData = {
       ...formData,
+      count: parsedCount,
       // Safety: always ensure name matches UID if it's the current user, 
       // or if admin selected a different user, keep those.
       // But if we're not admin, force current user.
@@ -226,8 +239,9 @@ export function Harvests() {
   const isSeasonalLimitReached = currentLimit && currentLimit.seasonalLimit > 0 && seasonalCount >= currentLimit.seasonalLimit;
 
   // New total after adding current form count
-  const projectedDaily = dailyCount + (formData.count || 0);
-  const projectedSeasonal = seasonalCount + (formData.count || 0);
+  const validCount = formData.count ? (parseInt(formData.count, 10) || 0) : 0;
+  const projectedDaily = dailyCount + validCount;
+  const projectedSeasonal = seasonalCount + validCount;
 
   const isDailyLimitExceeded = currentLimit && currentLimit.dailyLimit > 0 && projectedDaily > currentLimit.dailyLimit;
   const isSeasonalLimitExceeded = currentLimit && currentLimit.seasonalLimit > 0 && projectedSeasonal > currentLimit.seasonalLimit;
@@ -332,8 +346,9 @@ export function Harvests() {
                       min="1"
                       required
                       value={formData.count}
-                      onChange={e => setFormData({ ...formData, count: parseInt(e.target.value) })}
+                      onChange={e => setFormData({ ...formData, count: e.target.value })}
                       className="w-full bg-off-white border border-slate-200 rounded px-4 py-2.5 text-sm font-bold text-slate-gray outline-none focus:border-lake-green"
+                      placeholder="Es. 1, 2..."
                     />
                   </div>
                 </div>
@@ -365,7 +380,9 @@ export function Harvests() {
                           ? `ATTENZIONE: Hai superato il limite giornaliero (${currentLimit.dailyLimit}) per ${currentLimit.species}.` 
                           : isSeasonalLimitExceeded 
                           ? `ATTENZIONE: Hai superato il limite stagionale (${currentLimit.seasonalLimit}) per ${currentLimit.species}.`
-                          : `Stai registrando ${formData.count} capi. Totale oggi: ${projectedDaily}${currentLimit.dailyLimit > 0 ? ` / ${currentLimit.dailyLimit}` : ''}.`}
+                          : validCount > 0 
+                          ? `Stai registrando ${validCount} capi. Totale oggi: ${projectedDaily}${currentLimit.dailyLimit > 0 ? ` / ${currentLimit.dailyLimit}` : ''}.`
+                          : `Capi già registrati oggi: ${dailyCount}${currentLimit.dailyLimit > 0 ? ` / ${currentLimit.dailyLimit}` : ''}.`}
                       </p>
                       {currentLimit.notes && (
                         <p className="text-[9px] mt-1 opacity-60 italic">{currentLimit.notes}</p>

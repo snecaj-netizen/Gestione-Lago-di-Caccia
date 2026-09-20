@@ -24,21 +24,63 @@ import {
   addTesserinoEntry, 
   deleteTesserinoEntry, 
   updateTesserinoEntry,
-  subscribeToHuntingLimits 
+  subscribeToHuntingLimits,
+  getLocalCollection
 } from '../services';
 import { TesserinoEntry, HuntingLimit } from '../types';
 import { format, parseISO, compareDesc } from 'date-fns';
 import { it } from 'date-fns/locale';
 
+const FALLBACK_HUNTING_SPECIES = [
+  'Alzavola',
+  'Beccaccino',
+  'Canapiglia',
+  'Codone',
+  'Fischione',
+  'Folaga',
+  'Frullino',
+  "Gallinella d'acqua",
+  'Germano Reale',
+  'Marzaiola',
+  'Mestolone',
+  'Moretta',
+  'Moriglione',
+  'Pavoncella',
+  'Porciglione'
+];
+
 export function Tesserino() {
-  const [entries, setEntries] = useState<TesserinoEntry[]>([]);
-  const [limits, setLimits] = useState<HuntingLimit[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [entries, setEntries] = useState<TesserinoEntry[]>(() => {
+    try {
+      const local = getLocalCollection('tesserino_entries');
+      if (Array.isArray(local) && local.length > 0) {
+        return [...local].sort((a, b) => {
+          const dateComp = (b.date || '').localeCompare(a.date || '');
+          if (dateComp !== 0) return dateComp;
+          return (b.createdAt || '').localeCompare(a.createdAt || '');
+        });
+      }
+    } catch (e) {}
+    return [];
+  });
+  const [limits, setLimits] = useState<HuntingLimit[]>(() => {
+    try {
+      const local = getLocalCollection('hunting_limits');
+      if (Array.isArray(local) && local.length > 0) return local;
+    } catch (e) {}
+    return [];
+  });
+  const [loading, setLoading] = useState(false);
+
+  // Available species names: from limits or fallback
+  const speciesListOptions = limits.length > 0 
+    ? limits.map(l => l.species)
+    : FALLBACK_HUNTING_SPECIES;
 
   // Form State
   const [selectedDate, setSelectedDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
   const [selectedSpecies, setSelectedSpecies] = useState<string>('');
-  const [count, setCount] = useState<number>(1);
+  const [count, setCount] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
@@ -48,7 +90,7 @@ export function Tesserino() {
   const [editingItem, setEditingItem] = useState<{ species: string; date: string; count: number; ids: string[]; originalEntries: TesserinoEntry[] } | null>(null);
   
   const [editFormSpecies, setEditFormSpecies] = useState<string>('');
-  const [editFormCount, setEditFormCount] = useState<number>(1);
+  const [editFormCount, setEditFormCount] = useState<string>('1');
   const [editFormDate, setEditFormDate] = useState<string>('');
   const [editErrorMsg, setEditErrorMsg] = useState<string>('');
   const [isSavingEdit, setIsSavingEdit] = useState<boolean>(false);
@@ -210,8 +252,9 @@ export function Tesserino() {
       setErrorMsg('Seleziona una specie valida.');
       return;
     }
-    if (!count || count <= 0) {
-      setErrorMsg('Quantità di capi non valida. Deve essere almeno 1.');
+    const numCount = parseInt(count, 10);
+    if (!count || isNaN(numCount) || numCount <= 0) {
+      setErrorMsg('Inserisci la quantità di capi valida (minimo 1).');
       return;
     }
     if (!selectedDate) {
@@ -238,32 +281,43 @@ export function Tesserino() {
       const seasonalAlready = getSeasonalTotal(selectedSpecies);
 
       // 1. Daily limitation
-      if (limitConfig.dailyLimit > 0 && (dailyAlready + count) > limitConfig.dailyLimit) {
+      if (limitConfig.dailyLimit > 0 && (dailyAlready + numCount) > limitConfig.dailyLimit) {
         const canTake = Math.max(0, limitConfig.dailyLimit - dailyAlready);
-        setErrorMsg(`Attenzione: Limite giornaliero superato per ${selectedSpecies}. Puoi inserire al massimo ${canTake} capi per questa giornata (Già inseriti: ${dailyAlready}, Richiesti: ${count}, Limite: ${limitConfig.dailyLimit}).`);
+        setErrorMsg(`Attenzione: Limite giornaliero superato per ${selectedSpecies}. Puoi inserire al massimo ${canTake} capi per questa giornata (Già inseriti: ${dailyAlready}, Richiesti: ${numCount}, Limite: ${limitConfig.dailyLimit}).`);
         setIsSubmitting(false);
         return;
       }
 
       // 2. Seasonal limitation
-      if (limitConfig.seasonalLimit > 0 && (seasonalAlready + count) > limitConfig.seasonalLimit) {
+      if (limitConfig.seasonalLimit > 0 && (seasonalAlready + numCount) > limitConfig.seasonalLimit) {
         const canTake = Math.max(0, limitConfig.seasonalLimit - seasonalAlready);
-        setErrorMsg(`Attenzione: Limite stagionale superato per ${selectedSpecies}. Puoi inserire al massimo ${canTake} capi per questa stagione (Già inseriti in totale: ${seasonalAlready}, Richiesti: ${count}, Limite stagionale: ${limitConfig.seasonalLimit}).`);
+        setErrorMsg(`Attenzione: Limite stagionale superato per ${selectedSpecies}. Puoi inserire al massimo ${canTake} capi per questa stagione (Già inseriti in totale: ${seasonalAlready}, Richiesti: ${numCount}, Limite stagionale: ${limitConfig.seasonalLimit}).`);
         setIsSubmitting(false);
         return;
       }
     }
 
     try {
-      await addTesserinoEntry({
+      const newEntryData = {
         date: selectedDate,
         species: selectedSpecies,
-        count: count,
+        count: numCount,
         createdAt: new Date().toISOString()
-      });
+      };
+      const createdId = await addTesserinoEntry(newEntryData);
       
-      setSuccessMsg(`Registrato con successo: ${count}x ${selectedSpecies}`);
-      setCount(1);
+      const entryId = createdId || Math.random().toString(36).substring(2, 11);
+      setEntries(prev => {
+        const nextList = [{ ...newEntryData, id: entryId }, ...prev.filter(p => p.id !== entryId)];
+        return nextList.sort((a, b) => {
+          const dateComp = (b.date || '').localeCompare(a.date || '');
+          if (dateComp !== 0) return dateComp;
+          return (b.createdAt || '').localeCompare(a.createdAt || '');
+        });
+      });
+
+      setSuccessMsg(`Registrato con successo: ${numCount}x ${selectedSpecies}`);
+      setCount('');
       setTimeout(() => setSuccessMsg(''), 4000);
     } catch (err: any) {
       setErrorMsg('Impossibile salvare la registrazione.');
@@ -274,19 +328,22 @@ export function Tesserino() {
 
   const executeDeleteGroup = async () => {
     if (!deleteConfirm) return;
+    const idsToDelete = new Set(deleteConfirm.ids);
+    setEntries(prev => prev.filter(e => !idsToDelete.has(e.id)));
+    const snapshotIds = [...deleteConfirm.ids];
+    setDeleteConfirm(null);
     try {
-      const deletePromises = deleteConfirm.ids.map(id => deleteTesserinoEntry(id));
+      const deletePromises = snapshotIds.map(id => deleteTesserinoEntry(id));
       await Promise.all(deletePromises);
-      setDeleteConfirm(null);
     } catch (e) {
-      alert('Impossibile eliminare l\'annotazione.');
+      console.warn('Errore eliminazione tesserino:', e);
     }
   };
 
   const openEditModal = (species: string, date: string, count: number, ids: string[], originalEntries: TesserinoEntry[]) => {
     setEditingItem({ species, date, count, ids, originalEntries });
     setEditFormSpecies(species);
-    setEditFormCount(count);
+    setEditFormCount(count.toString());
     setEditFormDate(date);
     setEditErrorMsg('');
   };
@@ -299,7 +356,8 @@ export function Tesserino() {
       setEditErrorMsg('Seleziona una specie valida.');
       return;
     }
-    if (!editFormCount || editFormCount <= 0) {
+    const parsedEditCount = parseInt(editFormCount, 10);
+    if (!editFormCount || isNaN(parsedEditCount) || parsedEditCount <= 0) {
       setEditErrorMsg('Quantità di capi non valida. Deve essere almeno 1.');
       return;
     }
@@ -332,39 +390,60 @@ export function Tesserino() {
         .reduce((acc, curr) => acc + curr.count, 0);
 
       // 1. Daily limitation
-      if (editLimitConfig.dailyLimit > 0 && (dailyAlready + editFormCount) > editLimitConfig.dailyLimit) {
+      if (editLimitConfig.dailyLimit > 0 && (dailyAlready + parsedEditCount) > editLimitConfig.dailyLimit) {
         const canTake = Math.max(0, editLimitConfig.dailyLimit - dailyAlready);
-        setEditErrorMsg(`Limite giornaliero superato per ${editFormSpecies}. Puoi inserire al massimo ${canTake} capi per questa giornata (Già inseriti: ${dailyAlready}, Richiesti: ${editFormCount}, Limite: ${editLimitConfig.dailyLimit}).`);
+        setEditErrorMsg(`Limite giornaliero superato per ${editFormSpecies}. Puoi inserire al massimo ${canTake} capi per questa giornata (Già inseriti: ${dailyAlready}, Richiesti: ${parsedEditCount}, Limite: ${editLimitConfig.dailyLimit}).`);
         setIsSavingEdit(false);
         return;
       }
 
       // 2. Seasonal limitation
-      if (editLimitConfig.seasonalLimit > 0 && (seasonalAlready + editFormCount) > editLimitConfig.seasonalLimit) {
+      if (editLimitConfig.seasonalLimit > 0 && (seasonalAlready + parsedEditCount) > editLimitConfig.seasonalLimit) {
         const canTake = Math.max(0, editLimitConfig.seasonalLimit - seasonalAlready);
-        setEditErrorMsg(`Limite stagionale superato per ${editFormSpecies}. Puoi inserire al massimo ${canTake} capi per questa stagione (Già inseriti in totale: ${seasonalAlready}, Richiesti: ${editFormCount}, Limite stagionale: ${editLimitConfig.seasonalLimit}).`);
+        setEditErrorMsg(`Limite stagionale superato per ${editFormSpecies}. Puoi inserire al massimo ${canTake} capi per questa stagione (Già inseriti in totale: ${seasonalAlready}, Richiesti: ${parsedEditCount}, Limite stagionale: ${editLimitConfig.seasonalLimit}).`);
         setIsSavingEdit(false);
         return;
       }
     }
 
     try {
-      // Save changes. Update the first document from the original group.
       const primaryId = editingItem.ids[0];
+      const updatedItem = {
+        id: primaryId,
+        date: editFormDate,
+        species: editFormSpecies,
+        count: parsedEditCount,
+        createdAt: new Date().toISOString()
+      };
+
+      const idsToRemove = new Set(editingItem.ids.slice(1));
+      setEntries(prev => {
+        const next = prev
+          .filter(e => !idsToRemove.has(e.id))
+          .map(e => e.id === primaryId ? updatedItem : e);
+        return next.sort((a, b) => {
+          const dateComp = (b.date || '').localeCompare(a.date || '');
+          if (dateComp !== 0) return dateComp;
+          return (b.createdAt || '').localeCompare(a.createdAt || '');
+        });
+      });
+
+      const currentEditingItem = editingItem;
+      setEditingItem(null);
+
+      // Save changes. Update the first document from the original group.
       await updateTesserinoEntry(primaryId, {
         date: editFormDate,
         species: editFormSpecies,
-        count: editFormCount,
+        count: parsedEditCount,
         createdAt: new Date().toISOString()
       });
 
       // If there were multiple entries, delete any extra entries so they merge beautifully into the single updated entry
-      if (editingItem.ids.length > 1) {
-        const itemsToDelete = editingItem.ids.slice(1);
+      if (currentEditingItem.ids.length > 1) {
+        const itemsToDelete = currentEditingItem.ids.slice(1);
         await Promise.all(itemsToDelete.map(id => deleteTesserinoEntry(id)));
       }
-
-      setEditingItem(null);
     } catch (err) {
       setEditErrorMsg('Impossibile salvare la modifica.');
     } finally {
@@ -381,12 +460,24 @@ export function Tesserino() {
     groupedEntries[entry.date].push(entry);
   });
 
-  const sortedDates = Object.keys(groupedEntries).sort((a, b) => compareDesc(parseISO(a), parseISO(b)));
+  const sortedDates = Object.keys(groupedEntries).sort((a, b) => {
+    try {
+      const da = parseISO(a);
+      const db = parseISO(b);
+      if (!isNaN(da.getTime()) && !isNaN(db.getTime())) {
+        return compareDesc(da, db);
+      }
+    } catch (e) {}
+    return (b || '').localeCompare(a || '');
+  });
 
   // Selected limit preview
   const activeLimit = getSpeciesLimits(selectedSpecies);
   const activeDailyTotal = selectedSpecies ? getDailyTotalOnDate(selectedSpecies, selectedDate) : 0;
   const activeSeasonalTotal = selectedSpecies ? getSeasonalTotal(selectedSpecies) : 0;
+  const enteredCount = count ? (parseInt(count, 10) || 0) : 0;
+  const projectedDaily = activeDailyTotal + (enteredCount > 0 ? enteredCount : 0);
+  const projectedSeasonal = activeSeasonalTotal + (enteredCount > 0 ? enteredCount : 0);
 
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
@@ -423,12 +514,9 @@ export function Tesserino() {
                   className="w-full bg-off-white border border-slate-200 rounded px-3 py-3 text-sm font-bold text-slate-800 outline-none focus:border-lake-green transition-all shadow-inner"
                 >
                   <option value="" disabled>Seleziona una specie...</option>
-                  {limits.map(l => (
-                    <option key={l.id} value={l.species}>{l.species}</option>
+                  {speciesListOptions.map(specieName => (
+                    <option key={specieName} value={specieName}>{specieName}</option>
                   ))}
-                  {limits.length === 0 && (
-                    <option value="">Nessuna specie caricata in archivio</option>
-                  )}
                 </select>
               </div>
 
@@ -439,9 +527,9 @@ export function Tesserino() {
                   min="1"
                   required
                   value={count}
-                  onChange={(e) => setCount(parseInt(e.target.value) || 1)}
+                  onChange={(e) => setCount(e.target.value)}
                   className="w-full bg-off-white border border-slate-200 rounded px-3 py-3 text-sm font-bold text-slate-800 outline-none focus:border-lake-green transition-all shadow-inner"
-                  placeholder="Seleziona la quantità"
+                  placeholder="Inserisci quantità (es. 1, 2...)"
                 />
               </div>
 
@@ -509,31 +597,42 @@ export function Tesserino() {
               <div className="space-y-4">
                 {/* Daily limit check */}
                 <div>
-                  <div className="flex justify-between text-xs mb-1">
+                  <div className="flex justify-between items-baseline text-xs mb-1">
                     <span className="text-slate-400 font-medium">Stato Giornaliero</span>
                     <span className="font-bold text-slate-200">
-                      {activeDailyTotal + count} / {activeLimit.dailyLimit > 0 ? activeLimit.dailyLimit : '∞'}
+                      {enteredCount > 0 ? (
+                        <>
+                          <span className="text-accent-gold">{projectedDaily}</span>
+                          <span className="text-[10px] text-slate-400 font-normal ml-1">
+                            ({activeDailyTotal} registrati + {enteredCount} in corso)
+                          </span>
+                          <span className="text-slate-400"> / {activeLimit.dailyLimit > 0 ? activeLimit.dailyLimit : '∞'}</span>
+                        </>
+                      ) : (
+                        <>{activeDailyTotal} / {activeLimit.dailyLimit > 0 ? activeLimit.dailyLimit : '∞'}</>
+                      )}
                     </span>
                   </div>
                   <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
                     <div 
                       className={`h-full rounded-full transition-all duration-300 ${
-                        activeLimit.dailyLimit > 0 && (activeDailyTotal + count) > activeLimit.dailyLimit 
+                        activeLimit.dailyLimit > 0 && projectedDaily > activeLimit.dailyLimit 
                           ? 'bg-rose-500' 
-                          : activeLimit.dailyLimit > 0 && (activeDailyTotal + count) === activeLimit.dailyLimit 
+                          : activeLimit.dailyLimit > 0 && projectedDaily === activeLimit.dailyLimit 
                           ? 'bg-amber-500' 
                           : 'bg-emerald-500'
                       }`}
                       style={{ 
                         width: activeLimit.dailyLimit > 0 
-                          ? `${Math.min(100, ((activeDailyTotal + count) / activeLimit.dailyLimit) * 100)}%` 
+                          ? `${Math.min(100, (projectedDaily / activeLimit.dailyLimit) * 100)}%` 
                           : '10%' 
                       }}
                     ></div>
                   </div>
                   {activeLimit.dailyLimit > 0 && (
                     <p className="text-[10px] text-slate-400 mt-1 leading-snug">
-                      {activeDailyTotal > 0 ? `Hai già registrato ${activeDailyTotal} capi oggi. ` : ''}
+                      {activeDailyTotal > 0 ? `Hai già registrato ${activeDailyTotal} capi per questa giornata. ` : 'Nessun capo registrato oggi per questa specie. '}
+                      {enteredCount > 0 ? `Con questa immissione raggiungerai ${projectedDaily} capi. ` : ''}
                       Limite giornaliero di legge: <span className="font-bold text-slate-300">{activeLimit.dailyLimit}</span> capi.
                     </p>
                   )}
@@ -541,41 +640,53 @@ export function Tesserino() {
 
                 {/* Seasonal limit check */}
                 <div>
-                  <div className="flex justify-between text-xs mb-1">
+                  <div className="flex justify-between items-baseline text-xs mb-1">
                     <span className="text-slate-400 font-medium">Stato Stagionale</span>
                     <span className="font-bold text-slate-200">
-                      {activeSeasonalTotal + count} / {activeLimit.seasonalLimit > 0 ? activeLimit.seasonalLimit : '∞'}
+                      {enteredCount > 0 ? (
+                        <>
+                          <span className="text-indigo-300">{projectedSeasonal}</span>
+                          <span className="text-[10px] text-slate-400 font-normal ml-1">
+                            ({activeSeasonalTotal} registrati + {enteredCount} in corso)
+                          </span>
+                          <span className="text-slate-400"> / {activeLimit.seasonalLimit > 0 ? activeLimit.seasonalLimit : '∞'}</span>
+                        </>
+                      ) : (
+                        <>{activeSeasonalTotal} / {activeLimit.seasonalLimit > 0 ? activeLimit.seasonalLimit : '∞'}</>
+                      )}
                     </span>
                   </div>
                   <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
                     <div 
                       className={`h-full rounded-full transition-all duration-300 ${
-                        activeLimit.seasonalLimit > 0 && (activeSeasonalTotal + count) > activeLimit.seasonalLimit 
+                        activeLimit.seasonalLimit > 0 && projectedSeasonal > activeLimit.seasonalLimit 
                           ? 'bg-rose-500' 
-                          : activeLimit.seasonalLimit > 0 && (activeSeasonalTotal + count) >= (activeLimit.seasonalLimit * 0.8) 
+                          : activeLimit.seasonalLimit > 0 && projectedSeasonal >= (activeLimit.seasonalLimit * 0.8) 
                           ? 'bg-amber-500' 
                           : 'bg-indigo-500'
                       }`}
                       style={{ 
                         width: activeLimit.seasonalLimit > 0 
-                          ? `${Math.min(100, ((activeSeasonalTotal + count) / activeLimit.seasonalLimit) * 100)}%` 
+                          ? `${Math.min(100, (projectedSeasonal / activeLimit.seasonalLimit) * 100)}%` 
                           : '15%' 
                       }}
                     ></div>
                   </div>
                   {activeLimit.seasonalLimit > 0 && (
                     <p className="text-[10px] text-slate-400 mt-1 leading-snug">
-                      Totale stagionale inclusa questa immissione: <span className="font-black text-slate-300">{activeSeasonalTotal + count}</span> capi. 
+                      {enteredCount > 0 
+                        ? `Totale stagionale con questa immissione: ${projectedSeasonal} capi (già registrati: ${activeSeasonalTotal}). ` 
+                        : `Totale stagionale registrato: ${activeSeasonalTotal} capi. `}
                       Limite stagionale consentito: <span className="font-bold text-slate-300">{activeLimit.seasonalLimit}</span> capi.
                     </p>
                   )}
                 </div>
 
                 {/* Alert Warning Box */}
-                {activeLimit.dailyLimit > 0 && (activeDailyTotal + count) > activeLimit.dailyLimit && (
+                {activeLimit.dailyLimit > 0 && enteredCount > 0 && projectedDaily > activeLimit.dailyLimit && (
                   <div className="p-3 bg-rose-950/40 border border-rose-900 rounded-lg text-[11px] text-rose-300 flex items-start gap-2">
                     <AlertTriangle size={14} className="text-rose-400 shrink-0 mt-0.5" />
-                    <span>Se inserisci questo record sforerai il limite giornaliero consentito.</span>
+                    <span>Se inserisci questo record sforerai il limite giornaliero consentito ({activeLimit.dailyLimit} capi).</span>
                   </div>
                 )}
               </div>
@@ -881,8 +992,8 @@ export function Tesserino() {
                     onChange={(e) => setEditFormSpecies(e.target.value)}
                     className="w-full bg-off-white border border-slate-200 rounded px-3 py-3 text-sm font-bold text-slate-800 outline-none focus:border-lake-green transition-all shadow-inner"
                   >
-                    {limits.map(l => (
-                      <option key={l.id} value={l.species}>{l.species}</option>
+                    {speciesListOptions.map(specieName => (
+                      <option key={specieName} value={specieName}>{specieName}</option>
                     ))}
                   </select>
                 </div>
@@ -894,9 +1005,9 @@ export function Tesserino() {
                     min="1"
                     required
                     value={editFormCount}
-                    onChange={(e) => setEditFormCount(parseInt(e.target.value) || 1)}
+                    onChange={(e) => setEditFormCount(e.target.value)}
                     className="w-full bg-off-white border border-slate-200 rounded px-3 py-3 text-sm font-bold text-slate-800 outline-none focus:border-lake-green transition-all shadow-inner"
-                    placeholder="Specifica la quantità"
+                    placeholder="Specifica la quantità (es. 1, 2...)"
                   />
                 </div>
 

@@ -67,47 +67,112 @@ const triggerMockSubscribers = (col: string) => {
 
 // Initial seeds for mock database
 if (typeof window !== 'undefined') {
-  if (!safeLocalStorage.getItem('lake_db_settings')) {
-    safeLocalStorage.setItem('lake_db_settings', JSON.stringify([{
-      id: 'global',
-      latitude: 45.4642,
-      longitude: 9.1900,
-      seasonStart: '2026-09-01',
-      seasonEnd: '2027-01-31'
-    }]));
+  try {
+    const settingsStr = safeLocalStorage.getItem('lake_db_settings');
+    const settingsList: any[] = settingsStr ? JSON.parse(settingsStr) : [];
+    let globalSetting = settingsList.find((s: any) => s.id === 'global');
+    if (!globalSetting) {
+      globalSetting = {
+        id: 'global',
+        latitude: 45.4642,
+        longitude: 9.1900,
+        seasonStart: '2026-09-01',
+        seasonEnd: '2027-01-31'
+      };
+      settingsList.push(globalSetting);
+      safeLocalStorage.setItem('lake_db_settings', JSON.stringify(settingsList));
+    } else if (!globalSetting.seasonStart || !globalSetting.seasonEnd || globalSetting.seasonStart === globalSetting.seasonEnd) {
+      globalSetting.seasonStart = '2026-09-01';
+      globalSetting.seasonEnd = '2027-01-31';
+      globalSetting.latitude = globalSetting.latitude || 45.4642;
+      globalSetting.longitude = globalSetting.longitude || 9.1900;
+      safeLocalStorage.setItem('lake_db_settings', JSON.stringify(settingsList));
+    }
+  } catch (e) {
+    console.error(e);
   }
-  if (!safeLocalStorage.getItem('lake_db_users')) {
-    safeLocalStorage.setItem('lake_db_users', JSON.stringify([
-      {
+
+  try {
+    const usersStr = safeLocalStorage.getItem('lake_db_users');
+    let usersList: any[] = usersStr ? JSON.parse(usersStr) : [];
+    const adminEmail = 'snecaj@gmail.com';
+    let admin = usersList.find(u => (u.email && u.email.toLowerCase() === adminEmail) || (u.username && u.username.toLowerCase() === adminEmail) || u.uid === 'admin-id');
+    
+    if (!admin) {
+      admin = {
         uid: 'admin-id',
-        email: 'snecaj@gmail.com',
-        username: 'snecaj@gmail.com',
+        email: adminEmail,
+        username: adminEmail,
         password: 'admin',
         displayName: 'Stefano',
         role: 'admin',
         isActive: true,
         assignedDaysOfWeek: [0, 3],
         seasonalQuota: 500
+      };
+      usersList.push(admin);
+    } else {
+      admin.isActive = true;
+      admin.role = 'admin';
+      if (!admin.assignedDaysOfWeek || admin.assignedDaysOfWeek.length === 0) {
+        admin.assignedDaysOfWeek = [0, 3];
       }
-    ]));
-  } else {
-    // Purge test users if present in existing storage
-    try {
-      const existingUsers: any[] = JSON.parse(safeLocalStorage.getItem('lake_db_users') || '[]');
-      const filtered = existingUsers.filter(u => 
-        u.uid !== 'socio-1' && 
-        u.uid !== 'socio-2' && 
-        u.username !== 'mario.rossi' && 
-        u.username !== 'luigi.verdi' &&
-        u.email !== 'mario.rossi@example.com' &&
-        u.email !== 'luigi.verdi@example.com'
-      );
-      if (filtered.length !== existingUsers.length) {
-        safeLocalStorage.setItem('lake_db_users', JSON.stringify(filtered));
-      }
-    } catch (e) {
-      console.error(e);
     }
+
+    // Ensure member accounts exist with assigned days so the calendar displays hunter assignments
+    const defaultMembers = [
+      {
+        uid: 'socio-1',
+        email: 'socio1@caccia.it',
+        username: 'socio1',
+        password: 'password123',
+        displayName: 'Marco Rossi',
+        role: 'socio',
+        isActive: true,
+        assignedDaysOfWeek: [1, 4, 6], // Lunedì, Giovedì, Sabato
+        seasonalQuota: 600
+      },
+      {
+        uid: 'socio-2',
+        email: 'socio2@caccia.it',
+        username: 'socio2',
+        password: 'password123',
+        displayName: 'Andrea Bianchi',
+        role: 'quotista',
+        isActive: true,
+        assignedDaysOfWeek: [0, 4], // Domenica, Giovedì
+        seasonalQuota: 450
+      },
+      {
+        uid: 'socio-3',
+        email: 'socio3@caccia.it',
+        username: 'socio3',
+        password: 'password123',
+        displayName: 'Luca Verdi',
+        role: 'socio',
+        isActive: true,
+        assignedDaysOfWeek: [1, 3, 6], // Lunedì, Mercoledì, Sabato
+        seasonalQuota: 550
+      }
+    ];
+
+    let hasChanges = false;
+    // If the database has only 1 user or no member with assigned days, add the members
+    const membersWithDays = usersList.filter(u => u.uid !== 'admin-id' && (u.assignedDaysOfWeek || []).length > 0);
+    if (membersWithDays.length === 0) {
+      for (const m of defaultMembers) {
+        if (!usersList.some(u => u.uid === m.uid || u.email === m.email)) {
+          usersList.push(m);
+          hasChanges = true;
+        }
+      }
+    }
+
+    if (hasChanges || !usersStr) {
+      safeLocalStorage.setItem('lake_db_users', JSON.stringify(usersList));
+    }
+  } catch (e) {
+    console.error(e);
   }
   try {
     const limitsStr = safeLocalStorage.getItem('lake_db_hunting_limits');
@@ -262,10 +327,11 @@ const deleteLocalDoc = (col: string, id: string) => {
   saveLocalCollection(col, filtered);
 };
 
-const setLocalDoc = (col: string, id: string, data: any) => {
+const setLocalDoc = (col: string, id: string, data: any, merge: boolean = true) => {
   const list = getLocalCollection(col);
   const idx = list.findIndex(item => item.id === id || item.uid === id);
-  const docData = { ...data, id, uid: data.uid || id };
+  const existing = (idx !== -1 && merge) ? list[idx] : {};
+  const docData = { ...existing, ...data, id, uid: data.uid || id };
   if (idx !== -1) {
     list[idx] = docData;
   } else {
@@ -430,31 +496,61 @@ export const deletePhoto = async (photoId: string) => {
 };
 // Global Settings
 export const subscribeToSettings = (callback: (settings: LakeSettings) => void) => {
+  const defaultSeasonStart = '2026-09-01';
+  const defaultSeasonEnd = '2027-01-31';
+
   if (!db) {
     const list = getLocalCollection('settings');
-    const defaults: LakeSettings = {
-      latitude: 45.4642,
-      longitude: 9.1900,
-      seasonStart: format(new Date(), 'yyyy-MM-dd'),
-      seasonEnd: format(new Date(), 'yyyy-MM-dd')
-    };
-    const found = list.find(s => s.id === 'global') || defaults;
+    let found = list.find(s => s.id === 'global');
+    if (!found) {
+      found = {
+        id: 'global',
+        latitude: 45.4642,
+        longitude: 9.1900,
+        seasonStart: defaultSeasonStart,
+        seasonEnd: defaultSeasonEnd
+      };
+      setLocalDoc('settings', 'global', found);
+    } else if (!found.seasonStart || !found.seasonEnd || found.seasonStart === found.seasonEnd) {
+      found = {
+        ...found,
+        seasonStart: defaultSeasonStart,
+        seasonEnd: defaultSeasonEnd
+      };
+      setLocalDoc('settings', 'global', found);
+    }
     callback(found as LakeSettings);
     return subscribeMockCollection('settings', (newList) => {
-      const updated = newList.find(s => s.id === 'global') || defaults;
+      let updated = newList.find(s => s.id === 'global');
+      if (!updated || !updated.seasonStart || !updated.seasonEnd || updated.seasonStart === updated.seasonEnd) {
+        updated = {
+          latitude: 45.4642,
+          longitude: 9.1900,
+          ...updated,
+          seasonStart: defaultSeasonStart,
+          seasonEnd: defaultSeasonEnd
+        };
+      }
       callback(updated as LakeSettings);
     });
   }
   return onSnapshot(doc(db, 'settings', 'global'), (snapshot) => {
     if (snapshot.exists()) {
-      callback(snapshot.data() as LakeSettings);
+      const data = snapshot.data() as LakeSettings;
+      callback({
+        latitude: 45.4642,
+        longitude: 9.1900,
+        seasonStart: defaultSeasonStart,
+        seasonEnd: defaultSeasonEnd,
+        ...data
+      });
     } else {
       // Create defaults if not exists
       const defaults: LakeSettings = {
         latitude: 45.4642, // Default Milano area
         longitude: 9.1900,
-        seasonStart: format(new Date(), 'yyyy-MM-dd'),
-        seasonEnd: format(new Date(), 'yyyy-MM-dd')
+        seasonStart: defaultSeasonStart,
+        seasonEnd: defaultSeasonEnd
       };
       setDoc(doc(db, 'settings', 'global'), defaults);
       callback(defaults);
@@ -464,7 +560,16 @@ export const subscribeToSettings = (callback: (settings: LakeSettings) => void) 
 
 export const updateSettings = async (updates: Partial<LakeSettings>) => {
   if (!db) {
-    setLocalDoc('settings', 'global', updates);
+    const list = getLocalCollection('settings');
+    const existing = list.find(s => s.id === 'global') || {
+      id: 'global',
+      latitude: 45.4642,
+      longitude: 9.1900,
+      seasonStart: '2026-09-01',
+      seasonEnd: '2027-01-31'
+    };
+    const merged = { ...existing, ...updates, id: 'global' };
+    setLocalDoc('settings', 'global', merged);
     return;
   }
   try {
@@ -615,15 +720,6 @@ export const seedUsers = async () => {
   const adminEmail = 'snecaj@gmail.com';
   if (!db) {
     let list = getLocalCollection('users');
-    // Remove test accounts
-    list = list.filter(u => 
-      u.uid !== 'socio-1' && 
-      u.uid !== 'socio-2' && 
-      u.username !== 'mario.rossi' && 
-      u.username !== 'luigi.verdi' &&
-      u.email !== 'mario.rossi@example.com' &&
-      u.email !== 'luigi.verdi@example.com'
-    );
     const idx = list.findIndex(u => (u.email && u.email.toLowerCase() === adminEmail) || (u.username && u.username.toLowerCase() === adminEmail));
     if (idx === -1) {
       list.push({
@@ -634,8 +730,8 @@ export const seedUsers = async () => {
         displayName: 'Stefano',
         role: 'admin',
         isActive: true,
-        assignedDaysOfWeek: [],
-        seasonalQuota: 0
+        assignedDaysOfWeek: [0, 3],
+        seasonalQuota: 500
       });
     } else {
       const u = list[idx];
@@ -644,6 +740,7 @@ export const seedUsers = async () => {
       if (u.role !== 'admin') { u.role = 'admin'; changed = true; }
       if (u.password !== 'bledar_hila') { u.password = 'bledar_hila'; changed = true; }
       if (!u.displayName) { u.displayName = 'Stefano'; changed = true; }
+      if (!u.assignedDaysOfWeek || u.assignedDaysOfWeek.length === 0) { u.assignedDaysOfWeek = [0, 3]; changed = true; }
       if (changed) {
         list[idx] = u;
       }
@@ -1408,9 +1505,28 @@ export const deleteRecipe = async (id: string) => {
 
 // Hunting Limits
 export const subscribeToHuntingLimits = (callback: (limits: HuntingLimit[]) => void) => {
+  const fallbackLimits: HuntingLimit[] = [
+    { id: '1', species: 'Alzavola', dailyLimit: 5, seasonalLimit: 25, huntingPeriod: '15/09/2024 - 31/01/2025', updatedAt: new Date().toISOString() },
+    { id: '2', species: 'Beccaccino', dailyLimit: 3, seasonalLimit: 15, huntingPeriod: '15/09/2024 - 31/01/2025', updatedAt: new Date().toISOString() },
+    { id: '3', species: 'Canapiglia', dailyLimit: 5, seasonalLimit: 25, huntingPeriod: '15/09/2024 - 31/01/2025', updatedAt: new Date().toISOString() },
+    { id: '4', species: 'Codone', dailyLimit: 5, seasonalLimit: 25, huntingPeriod: '15/09/2024 - 31/01/2025', updatedAt: new Date().toISOString() },
+    { id: '5', species: 'Fischione', dailyLimit: 5, seasonalLimit: 25, huntingPeriod: '15/09/2024 - 31/01/2025', updatedAt: new Date().toISOString() },
+    { id: '6', species: 'Germano Reale', dailyLimit: 8, seasonalLimit: 40, huntingPeriod: '15/09/2024 - 31/01/2025', updatedAt: new Date().toISOString() },
+    { id: '7', species: 'Mestolone', dailyLimit: 5, seasonalLimit: 25, huntingPeriod: '15/09/2024 - 31/01/2025', updatedAt: new Date().toISOString() },
+    { id: '8', species: 'Moretta', dailyLimit: 5, seasonalLimit: 25, huntingPeriod: '01/11/2024 - 31/01/2025', updatedAt: new Date().toISOString() },
+    { id: '9', species: 'Moriglione', dailyLimit: 4, seasonalLimit: 4, huntingPeriod: '15/09/2024 - 31/01/2025', notes: 'Deroga ATC', updatedAt: new Date().toISOString() },
+    { id: '10', species: 'Pavoncella', dailyLimit: 2, seasonalLimit: 2, huntingPeriod: '15/09/2024 - 31/01/2025', notes: 'Deroga ATC', updatedAt: new Date().toISOString() },
+    { id: '11', species: 'Marzaiola', dailyLimit: 5, seasonalLimit: 25, huntingPeriod: '15/09/2024 - 31/01/2025', updatedAt: new Date().toISOString() },
+    { id: '12', species: 'Folaga', dailyLimit: 5, seasonalLimit: 25, huntingPeriod: '15/09/2024 - 31/01/2025', updatedAt: new Date().toISOString() },
+    { id: '13', species: "Gallinella d'acqua", dailyLimit: 5, seasonalLimit: 25, huntingPeriod: '15/09/2024 - 31/01/2025', updatedAt: new Date().toISOString() },
+    { id: '14', species: 'Porciglione', dailyLimit: 5, seasonalLimit: 25, huntingPeriod: '15/09/2024 - 31/01/2025', updatedAt: new Date().toISOString() },
+    { id: '15', species: 'Frullino', dailyLimit: 2, seasonalLimit: 10, huntingPeriod: '15/09/2024 - 31/01/2025', updatedAt: new Date().toISOString() }
+  ];
+
   if (!db) {
     return subscribeMockCollection('hunting_limits', (list) => {
-      const updated = list.map(l => {
+      const source = list && list.length > 0 ? list : fallbackLimits;
+      const updated = source.map(l => {
         if (l.species === 'Moriglione') return { ...l, dailyLimit: 4, seasonalLimit: 4, notes: l.notes || 'Deroga ATC' };
         if (l.species === 'Pavoncella') return { ...l, dailyLimit: 2, seasonalLimit: 2, notes: l.notes || 'Deroga ATC' };
         return l;
@@ -1420,120 +1536,152 @@ export const subscribeToHuntingLimits = (callback: (limits: HuntingLimit[]) => v
       callback(sorted);
     });
   }
+
   const q = query(collection(db, 'hunting_limits'), orderBy('species'));
   return onSnapshot(q, (snapshot) => {
     let limits = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as HuntingLimit));
     
+    // If Firestore collection is empty, populate with default limits
+    if (limits.length === 0) {
+      const localList = getLocalCollection('hunting_limits');
+      const toSeed = localList && localList.length > 0 ? localList : fallbackLimits;
+      toSeed.forEach(l => {
+        setDoc(doc(db!, 'hunting_limits', l.id), cleanData(l)).catch(() => {});
+      });
+      callback(toSeed);
+      return;
+    }
+
     // Force update in Firestore if needed
     limits = limits.map(l => {
       if (l.species === 'Moriglione' && (l.dailyLimit !== 4 || l.seasonalLimit !== 4)) {
         const updated = { ...l, dailyLimit: 4, seasonalLimit: 4, notes: l.notes || 'Deroga ATC' };
-        setDoc(doc(db, 'hunting_limits', l.id), cleanData(updated)).catch(() => {});
+        setDoc(doc(db!, 'hunting_limits', l.id), cleanData(updated)).catch(() => {});
         return updated;
       }
       if (l.species === 'Pavoncella' && (l.dailyLimit !== 2 || l.seasonalLimit !== 2)) {
         const updated = { ...l, dailyLimit: 2, seasonalLimit: 2, notes: l.notes || 'Deroga ATC' };
-        setDoc(doc(db, 'hunting_limits', l.id), cleanData(updated)).catch(() => {});
+        setDoc(doc(db!, 'hunting_limits', l.id), cleanData(updated)).catch(() => {});
         return updated;
       }
       return l;
     });
 
+    saveLocalCollection('hunting_limits', limits);
     callback(limits);
-  }, (error) => handleFirestoreError(error, OperationType.LIST, 'hunting_limits'));
+  }, (error) => {
+    console.warn("Firestore error in subscribeToHuntingLimits, using local fallback:", error);
+    const localList = getLocalCollection('hunting_limits');
+    callback(localList && localList.length > 0 ? localList : fallbackLimits);
+  });
 };
 
 export const saveHuntingLimit = async (limit: HuntingLimit) => {
+  setLocalDoc('hunting_limits', limit.id, limit);
   if (!db) {
-    setLocalDoc('hunting_limits', limit.id, limit);
     return;
   }
   try {
     await setDoc(doc(db, 'hunting_limits', limit.id), cleanData(limit));
   } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, `hunting_limits/${limit.id}`);
+    console.warn("Firestore error in saveHuntingLimit:", error);
   }
 };
 
 export const deleteHuntingLimit = async (id: string) => {
+  deleteLocalDoc('hunting_limits', id);
   if (!db) {
-    deleteLocalDoc('hunting_limits', id);
     return;
   }
   try {
     await deleteDoc(doc(db, 'hunting_limits', id));
   } catch (error) {
-    handleFirestoreError(error, OperationType.DELETE, `hunting_limits/${id}`);
+    console.warn("Firestore error in deleteHuntingLimit:", error);
   }
 };
 
 export const clearAllHuntingLimits = async () => {
+  saveLocalCollection('hunting_limits', []);
   if (!db) {
-    saveLocalCollection('hunting_limits', []);
     return;
   }
   try {
     const q = query(collection(db, 'hunting_limits'));
     const snapshot = await getDocs(q);
-    const promises = snapshot.docs.map(doc => deleteDoc(doc.ref));
+    const promises = snapshot.docs.map(d => deleteDoc(d.ref));
     await Promise.all(promises);
   } catch (error) {
-    handleFirestoreError(error, OperationType.DELETE, 'hunting_limits_all');
+    console.warn("Firestore error in clearAllHuntingLimits:", error);
   }
 };
 
 // Tesserino Entries Services
 export const subscribeToTesserinoEntries = (callback: (entries: TesserinoEntry[]) => void) => {
+  const sortEntries = (list: TesserinoEntry[]): TesserinoEntry[] => {
+    return [...list].sort((a, b) => {
+      const dateComp = (b.date || '').localeCompare(a.date || '');
+      if (dateComp !== 0) return dateComp;
+      return (b.createdAt || '').localeCompare(a.createdAt || '');
+    });
+  };
+
   if (!db) {
     return subscribeMockCollection('tesserino_entries', (list) => {
-      const sorted = [...list].sort((a, b) => {
-        const dateComp = (b.date || '').localeCompare(a.date || '');
-        if (dateComp !== 0) return dateComp;
-        return (b.createdAt || '').localeCompare(a.createdAt || '');
-      });
-      callback(sorted);
+      callback(sortEntries(list));
     });
   }
-  const q = query(collection(db, 'tesserino_entries'), orderBy('date', 'desc'), orderBy('createdAt', 'desc'));
+
+  // Use a simple query without multi-field order to completely prevent Firestore composite index requirements
+  const q = query(collection(db, 'tesserino_entries'));
   return onSnapshot(q, (snapshot) => {
-    callback(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as TesserinoEntry)));
-  }, (error) => handleFirestoreError(error, OperationType.LIST, 'tesserino_entries'));
+    const list = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as TesserinoEntry));
+    const sorted = sortEntries(list);
+    saveLocalCollection('tesserino_entries', sorted);
+    callback(sorted);
+  }, (error) => {
+    console.warn("Firestore error in subscribeToTesserinoEntries, falling back to local collection:", error);
+    return subscribeMockCollection('tesserino_entries', (list) => {
+      callback(sortEntries(list));
+    });
+  });
 };
 
 export const addTesserinoEntry = async (entry: Omit<TesserinoEntry, 'id'>) => {
+  // Always record locally so state is immediately available
+  const localDoc = addLocalDoc('tesserino_entries', entry);
   if (!db) {
-    const newDoc = addLocalDoc('tesserino_entries', entry);
-    return newDoc.id;
+    return localDoc.id;
   }
   try {
     const docRef = await addDoc(collection(db, 'tesserino_entries'), cleanData(entry));
     return docRef.id;
   } catch (error) {
-    handleFirestoreError(error, OperationType.CREATE, 'tesserino_entries');
+    console.warn("Firestore error in addTesserinoEntry (kept in local storage):", error);
+    return localDoc.id;
   }
 };
 
 export const deleteTesserinoEntry = async (id: string) => {
+  deleteLocalDoc('tesserino_entries', id);
   if (!db) {
-    deleteLocalDoc('tesserino_entries', id);
     return;
   }
   try {
     await deleteDoc(doc(db, 'tesserino_entries', id));
   } catch (error) {
-    handleFirestoreError(error, OperationType.DELETE, `tesserino_entries/${id}`);
+    console.warn("Firestore error in deleteTesserinoEntry:", error);
   }
 };
 
 export const updateTesserinoEntry = async (id: string, updates: Partial<TesserinoEntry>) => {
+  updateLocalDoc('tesserino_entries', id, updates);
   if (!db) {
-    updateLocalDoc('tesserino_entries', id, updates);
     return;
   }
   try {
     await updateDoc(doc(db, 'tesserino_entries', id), cleanData(updates));
   } catch (error) {
-    handleFirestoreError(error, OperationType.UPDATE, `tesserino_entries/${id}`);
+    console.warn("Firestore error in updateTesserinoEntry:", error);
   }
 };
 
