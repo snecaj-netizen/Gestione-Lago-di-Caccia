@@ -12,7 +12,7 @@ import {
 } from '../services';
 import { Harvest, UserProfile, HuntingLimit, HuntingDay } from '../types';
 import { useAuth } from '../contexts/AuthContext';
-import { Plus, Target, Trash2, Search, Filter, X, Edit2, User, ChevronDown, ShieldAlert, Users, Info } from 'lucide-react';
+import { Plus, Target, Trash2, Search, Filter, X, Edit2, User, ChevronDown, ChevronRight, ShieldAlert, Users, Info, Calendar } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -95,6 +95,15 @@ export function Harvests() {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [limits, setLimits] = useState<HuntingLimit[]>([]);
   const [huntingDays, setHuntingDays] = useState<HuntingDay[]>([]);
+  const [expandedSpecies, setExpandedSpecies] = useState<Record<string, boolean>>({});
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const toggleSpeciesExpand = (key: string) => {
+    setExpandedSpecies(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }));
+  };
 
   const [formData, setFormData] = useState<{
     date: string;
@@ -133,13 +142,20 @@ export function Harvests() {
   }, []);
 
   useEffect(() => {
-    if (highlightId && !loading) {
-      const element = document.getElementById(`harvest-${highlightId}`);
-      if (element) {
-        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (highlightId && !loading && items.length > 0) {
+      const targetItem = items.find(i => i.id === highlightId);
+      if (targetItem) {
+        const key = `${targetItem.date}_${targetItem.species}`;
+        setExpandedSpecies(prev => ({ ...prev, [key]: true }));
       }
+      setTimeout(() => {
+        const element = document.getElementById(`harvest-${highlightId}`);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 100);
     }
-  }, [highlightId, loading]);
+  }, [highlightId, loading, items]);
 
   // Calculate assigned hunters for the selected date
   const assignedHuntersForSelectedDate = getAssignedHuntersForDate(formData.date, huntingDays, users);
@@ -221,8 +237,8 @@ export function Harvests() {
         const harvestsToAdd: Omit<Harvest, 'id'>[] = [];
 
         targetHunters.forEach((hunter, index) => {
-          // If remainder > 0 or count < numHunters, assign the extra/remainder to the first hunter
-          const hunterCount = index === 0 ? (baseShare + remainder) : baseShare;
+          // Distribute remainder 1 by 1 to hunters from index 0 up to remainder - 1
+          const hunterCount = baseShare + (index < remainder ? 1 : 0);
           if (hunterCount > 0) {
             harvestsToAdd.push({
               date: formData.date,
@@ -261,11 +277,76 @@ export function Harvests() {
 
   const filteredItems = items.filter(item => {
     if (!profile) return false;
-    if (profile.role === 'admin' || profile.role === 'socio') return true;
-    return item.hunterUid === profile.uid;
+    const matchesAuth = (profile.role === 'admin' || profile.role === 'socio') ? true : item.hunterUid === profile.uid;
+    if (!matchesAuth) return false;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      const matchSpecies = item.species.toLowerCase().includes(q);
+      const matchHunter = item.hunterName.toLowerCase().includes(q);
+      const matchDate = item.date.includes(q);
+      return matchSpecies || matchHunter || matchDate;
+    }
+    return true;
   });
 
   const totalBirds = filteredItems.reduce((acc, h) => acc + h.count, 0);
+
+  // Group items by date, then by species
+  interface SpeciesGroup {
+    species: string;
+    totalCount: number;
+    items: Harvest[];
+  }
+
+  interface DateGroup {
+    date: string;
+    totalCount: number;
+    speciesGroups: SpeciesGroup[];
+  }
+
+  const dateGroups: DateGroup[] = React.useMemo(() => {
+    // Group all items by date
+    const dateMap = new Map<string, Harvest[]>();
+    filteredItems.forEach(item => {
+      const current = dateMap.get(item.date) || [];
+      current.push(item);
+      dateMap.set(item.date, current);
+    });
+
+    // Sort dates descending (newest first)
+    const sortedDates = Array.from(dateMap.keys()).sort((a, b) => b.localeCompare(a));
+
+    return sortedDates.map(dateStr => {
+      const dateItems = dateMap.get(dateStr) || [];
+      const totalDateCount = dateItems.reduce((sum, i) => sum + i.count, 0);
+
+      // Group by species within this date
+      const speciesMap = new Map<string, Harvest[]>();
+      dateItems.forEach(item => {
+        const list = speciesMap.get(item.species) || [];
+        list.push(item);
+        speciesMap.set(item.species, list);
+      });
+
+      // Sort species alphabetically or by count desc
+      const sortedSpeciesNames = Array.from(speciesMap.keys()).sort((a, b) => a.localeCompare(b));
+      const speciesGroups: SpeciesGroup[] = sortedSpeciesNames.map(speciesName => {
+        const speciesItems = speciesMap.get(speciesName) || [];
+        const speciesTotal = speciesItems.reduce((s, i) => s + i.count, 0);
+        return {
+          species: speciesName,
+          totalCount: speciesTotal,
+          items: speciesItems
+        };
+      });
+
+      return {
+        date: dateStr,
+        totalCount: totalDateCount,
+        speciesGroups
+      };
+    });
+  }, [filteredItems]);
 
   const canManage = (item: Harvest) => {
     if (!profile) return false;
@@ -292,11 +373,13 @@ export function Harvests() {
   // Calculate projected counts for limit checking
   const validCount = formData.count ? (parseInt(formData.count, 10) || 0) : 0;
   
-  // For new harvest distribution: calculate how much the first hunter will actually receive
+  // For new harvest distribution: calculate how much the effective hunter will actually receive
+  const effectiveHunterIndex = assignedHuntersForSelectedDate.findIndex(h => h.uid === effectiveHunterUid);
+  const numAssigned = assignedHuntersForSelectedDate.length;
   const projectedShareForEffectiveHunter = editingItem
     ? validCount
-    : (assignedHuntersForSelectedDate.length > 0
-        ? Math.floor(validCount / assignedHuntersForSelectedDate.length) + (validCount % assignedHuntersForSelectedDate.length)
+    : (numAssigned > 0
+        ? Math.floor(validCount / numAssigned) + ((effectiveHunterIndex >= 0 && effectiveHunterIndex < (validCount % numAssigned)) ? 1 : 0)
         : validCount);
 
   const projectedDaily = dailyCount + projectedShareForEffectiveHunter;
@@ -548,7 +631,7 @@ export function Harvests() {
                           const numHunters = assignedHuntersForSelectedDate.length;
                           const base = Math.floor(validCount / numHunters);
                           const rem = validCount % numHunters;
-                          const assignedCount = idx === 0 ? (base + rem) : base;
+                          const assignedCount = base + (idx < rem ? 1 : 0);
 
                           return (
                             <span 
@@ -562,7 +645,10 @@ export function Harvests() {
                             >
                               <span>{hunter.displayName}</span>
                               {validCount > 0 && !editingItem && (
-                                <span className="bg-accent-gold/20 text-slate-800 text-[10px] px-1.5 py-0.2 rounded font-black">
+                                <span className={cn(
+                                  "text-[10px] px-1.5 py-0.2 rounded font-black",
+                                  assignedCount > 0 ? "bg-accent-gold/25 text-slate-900" : "bg-slate-100 text-slate-400"
+                                )}>
                                   +{assignedCount}
                                 </span>
                               )}
@@ -575,7 +661,7 @@ export function Harvests() {
                         <p className="text-[10px] text-slate-500 italic pt-1">
                           Ripartizione automatica: {assignedHuntersForSelectedDate.length > 1 
                             ? (validCount % assignedHuntersForSelectedDate.length !== 0 
-                                ? `Numero non divisibile equamente: il resto viene assegnato al primo cacciatore (${assignedHuntersForSelectedDate[0].displayName}).` 
+                                ? `Suddivisione con resto: ${Math.floor(validCount / assignedHuntersForSelectedDate.length) + 1} capi ai primi ${validCount % assignedHuntersForSelectedDate.length} cacciatori, ${Math.floor(validCount / assignedHuntersForSelectedDate.length)} ai restanti.` 
                                 : `Divisi equamente (${Math.floor(validCount / assignedHuntersForSelectedDate.length)} per cacciatore).`)
                             : `Assegnati a ${assignedHuntersForSelectedDate[0].displayName}.`}
                         </p>
@@ -660,88 +746,210 @@ export function Harvests() {
         )}
       </AnimatePresence>
 
-      {/* Harvest Table */}
-      <section className="card-polish !p-0 overflow-hidden shadow-sm">
-        <div className="overflow-x-auto scrollbar-hide">
-          <table className="w-full text-left min-w-[320px]">
-            <thead className="bg-off-white border-b border-slate-100 uppercase tracking-widest text-[0.6rem] sm:text-[0.65rem] font-black text-slate-400">
-              <tr>
-                <th className="pl-3 sm:pl-6 pr-1 sm:pr-2 py-3 font-bold text-left w-14 sm:w-16">Azioni</th>
-                <th className="px-2 sm:px-4 py-3 font-bold">Data</th>
-                <th className="px-2 sm:px-4 py-3 font-bold">Specie</th>
-                <th className="px-2 sm:px-4 py-3 font-bold hidden md:table-cell">Cacciatore</th>
-                <th className="pl-2 pr-3 sm:pr-6 py-3 font-bold text-right">Q.tà</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {loading ? (
-                <tr>
-                  <td colSpan={5} className="px-3 sm:px-6 py-10 text-center text-slate-300 italic font-medium">Caricamento registro...</td>
-                </tr>
-              ) : filteredItems.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-3 sm:px-6 py-10 text-center text-slate-300 italic font-medium">Nessun record trovato</td>
-                </tr>
-              ) : filteredItems.map((item) => (
-                <tr 
-                  key={item.id} 
-                  id={`harvest-${item.id}`}
-                  className={cn(
-                    "hover:bg-slate-50 transition-colors group",
-                    item.id === highlightId ? "bg-lake-green/10" : ""
-                  )}
-                >
-                  <td className="pl-3 sm:pl-6 pr-1 sm:pr-2 py-3 text-left whitespace-nowrap">
-                    <div className="flex items-center gap-1.5 sm:gap-2">
-                      {canManage(item) ? (
-                        <>
-                          <button 
-                            onClick={() => handleOpenEdit(item)}
-                            className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-lake-green transition-colors"
-                            title="Modifica cattura"
-                            aria-label="Modifica"
-                          >
-                            <Edit2 size={15} />
-                          </button>
-                          <button 
-                            onClick={() => {
-                              setItemToDelete(item);
-                              setShowDeleteConfirm(true);
-                            }}
-                            className="p-1.5 rounded hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors"
-                            title="Elimina cattura"
-                            aria-label="Elimina"
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        </>
-                      ) : (
-                        <span className="w-8 inline-block" />
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-2 sm:px-4 py-3 text-xs sm:text-sm font-medium text-slate-600 whitespace-nowrap">
-                    {safeFormatDate(item.date, 'dd MMM', { locale: it })}
-                  </td>
-                  <td className="px-2 sm:px-4 py-3 whitespace-nowrap">
-                    <div className="flex items-center gap-2">
-                      <Target size={12} className="text-lake-green opacity-40 shrink-0 hidden sm:block" />
-                      <span className="text-xs sm:text-sm font-semibold text-lake-green">
-                        {item.species}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-2 sm:px-4 py-3 text-[10px] sm:text-xs text-slate-400 font-medium italic whitespace-nowrap hidden md:table-cell">
-                    {item.hunterName}
-                  </td>
-                  <td className="pl-2 pr-3 sm:pr-6 py-3 text-right font-black text-sm sm:text-lg text-slate-900 tracking-tighter">
-                    {item.count}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {/* Search & Filter Bar */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        <div className="relative flex-1 max-w-md">
+          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Filtra per specie, cacciatore o data (es. Germano, 2026-09)..."
+            className="w-full pl-10 pr-9 py-2 bg-white border border-slate-200 rounded-lg text-xs sm:text-sm font-semibold text-slate-gray placeholder:text-slate-400 focus:outline-none focus:border-lake-green shadow-sm"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+            >
+              <X size={14} />
+            </button>
+          )}
         </div>
+        <div className="text-xs font-bold text-slate-400 self-end sm:self-center">
+          {dateGroups.length} {dateGroups.length === 1 ? 'giornata registrata' : 'giornate registrate'}
+        </div>
+      </div>
+
+      {/* Grouped Harvest List: Date -> Species -> Hunters */}
+      <section className="space-y-4">
+        {loading ? (
+          <div className="card-polish text-center py-12 text-slate-400 font-medium italic">
+            Caricamento registro catture...
+          </div>
+        ) : dateGroups.length === 0 ? (
+          <div className="card-polish text-center py-12 text-slate-400 font-medium italic">
+            Nessun abbattimento trovato
+          </div>
+        ) : (
+          dateGroups.map((dateGroup) => (
+            <div 
+              key={dateGroup.date}
+              className="bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden"
+            >
+              {/* Date Header */}
+              <div className="bg-slate-50/90 px-4 sm:px-6 py-3 border-b border-slate-200/70 flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="bg-lake-green/10 text-lake-green p-1.5 rounded-md">
+                    <Calendar size={16} />
+                  </div>
+                  <div>
+                    <h3 className="text-sm sm:text-base font-bold text-slate-900 capitalize">
+                      {safeFormatDate(dateGroup.date, 'EEEE d MMMM yyyy', { locale: it })}
+                    </h3>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                      {dateGroup.speciesGroups.length} {dateGroup.speciesGroups.length === 1 ? 'specie prelevata' : 'specie prelevate'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    Totale Giornata:
+                  </span>
+                  <span className="px-2.5 py-0.5 rounded-full bg-lake-green text-white font-black text-xs sm:text-sm">
+                    {dateGroup.totalCount} {dateGroup.totalCount === 1 ? 'capo' : 'capi'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Species list within Date */}
+              <div className="divide-y divide-slate-100">
+                {dateGroup.speciesGroups.map((speciesGroup) => {
+                  const groupKey = `${dateGroup.date}_${speciesGroup.species}`;
+                  const isExpanded = Boolean(expandedSpecies[groupKey]);
+
+                  return (
+                    <div key={groupKey} className="transition-colors">
+                      {/* Species Row (Clickable accordion header) */}
+                      <button
+                        type="button"
+                        onClick={() => toggleSpeciesExpand(groupKey)}
+                        className={cn(
+                          "w-full px-4 sm:px-6 py-3.5 flex items-center justify-between text-left transition-colors hover:bg-slate-50/80",
+                          isExpanded ? "bg-lake-green/[0.03]" : ""
+                        )}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={cn(
+                            "w-6 h-6 rounded-full flex items-center justify-center transition-transform",
+                            isExpanded ? "bg-lake-green text-white rotate-90" : "bg-slate-100 text-slate-500"
+                          )}>
+                            <ChevronRight size={14} />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <Target size={14} className="text-lake-green opacity-70" />
+                              <span className="text-sm sm:text-base font-bold text-lake-green">
+                                {speciesGroup.species}
+                              </span>
+                            </div>
+                            <span className="text-[11px] font-semibold text-slate-400 ml-5.5">
+                              {speciesGroup.items.length} {speciesGroup.items.length === 1 ? 'cacciatore coinvolto' : 'cacciatori coinvolti'} • Clicca per visualizzare
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                          <div className="text-right">
+                            <span className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
+                              {speciesGroup.totalCount}
+                            </span>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">
+                              {speciesGroup.totalCount === 1 ? 'capo' : 'capi'}
+                            </span>
+                          </div>
+                        </div>
+                      </button>
+
+                      {/* Hunters Breakdown (Accordion Body) */}
+                      <AnimatePresence>
+                        {isExpanded && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                            className="overflow-hidden bg-slate-50/50 border-t border-slate-100 px-4 sm:px-6 py-3"
+                          >
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-left">
+                                <thead>
+                                  <tr className="text-[10px] font-black uppercase tracking-wider text-slate-400 border-b border-slate-200/60 pb-1">
+                                    <th className="py-1.5 pl-2">Cacciatore</th>
+                                    <th className="py-1.5 px-3 text-center">Specie</th>
+                                    <th className="py-1.5 pr-2 text-right">Catture Assegnate</th>
+                                    <th className="py-1.5 pr-2 text-right w-20">Azioni</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                  {speciesGroup.items.map((item) => (
+                                    <tr 
+                                      key={item.id}
+                                      id={`harvest-${item.id}`}
+                                      className={cn(
+                                        "hover:bg-white/80 transition-colors",
+                                        item.id === highlightId ? "bg-lake-green/10" : ""
+                                      )}
+                                    >
+                                      <td className="py-2.5 pl-2 font-bold text-xs sm:text-sm text-slate-800 flex items-center gap-2">
+                                        <div className="w-6 h-6 rounded-full bg-slate-200/80 text-slate-600 flex items-center justify-center text-[10px] font-bold shrink-0">
+                                          {item.hunterName.charAt(0).toUpperCase()}
+                                        </div>
+                                        <span>{item.hunterName}</span>
+                                        {profile?.uid === item.hunterUid && (
+                                          <span className="text-[9px] font-extrabold uppercase tracking-wider text-lake-green bg-lake-green/10 px-1.5 py-0.5 rounded">
+                                            Tu
+                                          </span>
+                                        )}
+                                      </td>
+                                      <td className="py-2.5 px-3 text-center text-xs font-semibold text-slate-500">
+                                        {item.species}
+                                      </td>
+                                      <td className="py-2.5 pr-2 text-right font-black text-sm sm:text-base text-slate-900">
+                                        {item.count} <span className="text-[10px] font-bold text-slate-400">{item.count === 1 ? 'capo' : 'capi'}</span>
+                                      </td>
+                                      <td className="py-2.5 pr-2 text-right whitespace-nowrap">
+                                        {canManage(item) ? (
+                                          <div className="flex items-center justify-end gap-1">
+                                            <button 
+                                              onClick={() => handleOpenEdit(item)}
+                                              className="p-1 rounded hover:bg-slate-200/60 text-slate-400 hover:text-lake-green transition-colors"
+                                              title="Modifica quota"
+                                              aria-label="Modifica"
+                                            >
+                                              <Edit2 size={13} />
+                                            </button>
+                                            <button 
+                                              onClick={() => {
+                                                setItemToDelete(item);
+                                                setShowDeleteConfirm(true);
+                                              }}
+                                              className="p-1 rounded hover:bg-rose-100 text-slate-400 hover:text-rose-600 transition-colors"
+                                              title="Elimina"
+                                              aria-label="Elimina"
+                                            >
+                                              <Trash2 size={13} />
+                                            </button>
+                                          </div>
+                                        ) : (
+                                          <span className="text-[10px] text-slate-300 italic">—</span>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))
+        )}
       </section>
     </div>
   );
