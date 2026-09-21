@@ -58,6 +58,17 @@ const SPECIES_LIST = [
   'Altro'
 ].sort();
 
+export const ANATIDAE_SPECIES = new Set([
+  'Alzavola',
+  'Canapiglia',
+  'Codone',
+  'Fischione',
+  'Germano',
+  'Marzaiola',
+  'Mestolone',
+  'Moriglione'
+]);
+
 export function Harvests() {
   const { profile } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -290,6 +301,10 @@ export function Harvests() {
   });
 
   const totalBirds = filteredItems.reduce((acc, h) => acc + h.count, 0);
+  const anatidaeBirds = filteredItems
+    .filter(h => ANATIDAE_SPECIES.has(h.species))
+    .reduce((acc, h) => acc + h.count, 0);
+  const otherBirds = totalBirds - anatidaeBirds;
 
   // Group items by date, then by species
   interface SpeciesGroup {
@@ -399,11 +414,31 @@ export function Harvests() {
 
       {/* Summary Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="card-polish">
-          <span className="text-[0.65rem] font-bold text-slate-gray uppercase tracking-[0.2em] mb-4 block">Prelievo Totale</span>
-          <div className="flex items-end gap-2">
-            <p className="text-4xl font-black text-slate-900 tracking-tighter">{totalBirds}</p>
-            <span className="text-xs font-bold text-slate-400 uppercase pb-1.5">Esemplari</span>
+        <div className="card-polish flex flex-col justify-between">
+          <div>
+            <span className="text-[0.65rem] font-bold text-slate-gray uppercase tracking-[0.2em] mb-2 block">Prelievo Totale</span>
+            <div className="flex items-end gap-2">
+              <p className="text-4xl font-black text-slate-900 tracking-tighter">{totalBirds}</p>
+              <span className="text-xs font-bold text-slate-400 uppercase pb-1.5">Esemplari</span>
+            </div>
+          </div>
+
+          <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-1.5 bg-lake-green/10 px-2.5 py-1 rounded-md">
+              <span className="text-sm leading-none" role="img" aria-label="Anatidi">🦆</span>
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-lake-green block">Anatidi</span>
+                <span className="text-sm font-black text-slate-900 leading-tight">{anatidaeBirds}</span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5 bg-slate-100 px-2.5 py-1 rounded-md">
+              <Target size={14} className="text-slate-500 shrink-0" />
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Altre Specie</span>
+                <span className="text-sm font-black text-slate-900 leading-tight">{otherBirds}</span>
+              </div>
+            </div>
           </div>
         </div>
         <div className="card-polish">
