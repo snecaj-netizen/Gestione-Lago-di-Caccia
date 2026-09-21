@@ -18,6 +18,7 @@ import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
 const safeFormatDate = (dateStr: any, formatStr: string, options?: any) => {
   try {
@@ -363,6 +364,40 @@ export function Harvests() {
     });
   }, [filteredItems]);
 
+  const averagePerDay = dateGroups.length > 0 ? (totalBirds / dateGroups.length).toFixed(1) : '0.0';
+
+  const dominantSpecies = filteredItems.length > 0 
+    ? Array.from(filteredItems.reduce((acc, item) => {
+        acc.set(item.species, (acc.get(item.species) || 0) + item.count);
+        return acc;
+      }, new Map<string, number>()).entries())
+      .sort((a, b) => b[1] - a[1])[0][0]
+    : 'Nessuna';
+
+  const anatidaeChartData = React.useMemo(() => {
+    const map = new Map<string, number>();
+    filteredItems.forEach(item => {
+      if (ANATIDAE_SPECIES.has(item.species)) {
+        map.set(item.species, (map.get(item.species) || 0) + item.count);
+      }
+    });
+    return Array.from(map.entries())
+      .map(([species, count]) => ({ species, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [filteredItems]);
+
+  const otherChartData = React.useMemo(() => {
+    const map = new Map<string, number>();
+    filteredItems.forEach(item => {
+      if (!ANATIDAE_SPECIES.has(item.species)) {
+        map.set(item.species, (map.get(item.species) || 0) + item.count);
+      }
+    });
+    return Array.from(map.entries())
+      .map(([species, count]) => ({ species, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [filteredItems]);
+
   const canManage = (item: Harvest) => {
     if (!profile) return false;
     return profile.role === 'admin' || item.hunterUid === profile.uid;
@@ -412,52 +447,128 @@ export function Harvests() {
         </div>
       </header>
 
-      {/* Summary Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="card-polish flex flex-col justify-between">
-          <div>
-            <span className="text-[0.65rem] font-bold text-slate-gray uppercase tracking-[0.2em] mb-2 block">Prelievo Totale</span>
-            <div className="flex items-end gap-2">
-              <p className="text-4xl font-black text-slate-900 tracking-tighter">{totalBirds}</p>
-              <span className="text-xs font-bold text-slate-400 uppercase pb-1.5">Esemplari</span>
-            </div>
-          </div>
-
-          <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2 text-xs">
-            <div className="flex items-center gap-1.5 bg-lake-green/10 px-2.5 py-1 rounded-md">
-              <span className="text-sm leading-none" role="img" aria-label="Anatidi">🦆</span>
-              <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-lake-green block">Anatidi</span>
-                <span className="text-sm font-black text-slate-900 leading-tight">{anatidaeBirds}</span>
+      {/* Summary Stats & Charts */}
+      <div className="space-y-6">
+        {/* Top KPI Cards (2 columns) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="card-polish flex flex-col justify-between">
+            <div>
+              <span className="text-[0.65rem] font-bold text-slate-gray uppercase tracking-[0.2em] mb-2 block">Prelievo Totale</span>
+              <div className="flex items-end gap-2">
+                <p className="text-4xl font-black text-slate-900 tracking-tighter">{totalBirds}</p>
+                <span className="text-xs font-bold text-slate-400 uppercase pb-1.5">Esemplari</span>
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5 bg-slate-100 px-2.5 py-1 rounded-md">
-              <Target size={14} className="text-slate-500 shrink-0" />
+            <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-1.5 bg-lake-green/10 px-2.5 py-1 rounded-md">
+                <span className="text-sm leading-none" role="img" aria-label="Anatidi">🦆</span>
+                <div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-lake-green block">Anatidi</span>
+                  <span className="text-sm font-black text-slate-900 leading-tight">{anatidaeBirds}</span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5 bg-slate-100 px-2.5 py-1 rounded-md">
+                <Target size={14} className="text-slate-500 shrink-0" />
+                <div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Altre Specie</span>
+                  <span className="text-sm font-black text-slate-900 leading-tight">{otherBirds}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="card-polish flex flex-col justify-between">
+            <div>
+              <span className="text-[0.65rem] font-bold text-lake-green uppercase tracking-[0.2em] mb-2 block">Specie Prevalente & Media Giornaliera</span>
+              <p className="text-xl font-bold text-lake-green">
+                {dominantSpecies}
+              </p>
+            </div>
+
+            <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-4 text-xs">
               <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Altre Specie</span>
-                <span className="text-sm font-black text-slate-900 leading-tight">{otherBirds}</span>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Media / Giornata</span>
+                <span className="text-lg font-black text-slate-900 leading-tight">
+                  {averagePerDay} <span className="text-xs font-normal text-slate-400">capi/giorno</span>
+                </span>
+              </div>
+              <div className="text-right">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Giornate Venatorie</span>
+                <span className="text-lg font-black text-slate-900 leading-tight">
+                  {dateGroups.length} <span className="text-xs font-normal text-slate-400">giornate</span>
+                </span>
               </div>
             </div>
           </div>
         </div>
-        <div className="card-polish">
-          <span className="text-[0.65rem] font-bold text-lake-green uppercase tracking-[0.2em] mb-4 block">Specie Prevalente</span>
-          <p className="text-lg font-bold text-lake-green">
-            {filteredItems.length > 0 
-              ? Array.from(filteredItems.reduce((acc, item) => {
-                  acc.set(item.species, (acc.get(item.species) || 0) + item.count);
-                  return acc;
-                }, new Map<string, number>()).entries())
-                .sort((a, b) => b[1] - a[1])[0][0]
-              : 'Nessuna'}
-          </p>
-        </div>
-        <div className="card-polish">
-          <span className="text-[0.65rem] font-bold text-accent-gold uppercase tracking-[0.2em] mb-4 block">Media/Giornata</span>
-          <p className="text-2xl font-black text-slate-900">
-            {filteredItems.length > 0 ? (totalBirds / filteredItems.length).toFixed(1) : '0.0'}
-          </p>
+
+        {/* Charts Section: Anatids vs Other Species */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Anatidi Chart */}
+          <div className="card-polish">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <span className="text-lg" role="img" aria-label="Anatidi">🦆</span>
+                <h3 className="text-sm font-black uppercase tracking-wider text-slate-800">Prelievo Anatidi per Specie</h3>
+              </div>
+              <span className="text-xs font-bold text-lake-green bg-lake-green/10 px-2.5 py-1 rounded-full">
+                Tot: {anatidaeBirds} capi
+              </span>
+            </div>
+            <div className="h-64 w-full">
+              {anatidaeChartData.length === 0 ? (
+                <div className="h-full flex items-center justify-center text-slate-400 text-xs italic">
+                  Nessun anatide registrato
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={anatidaeChartData} margin={{ top: 10, right: 10, left: -20, bottom: 25 }}>
+                    <XAxis dataKey="species" tick={{ fontSize: 11 }} angle={-25} textAnchor="end" interval={0} />
+                    <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '12px' }}
+                      formatter={(value: any) => [`${value} capi`, 'Prelievo']}
+                    />
+                    <Bar dataKey="count" fill="#2d5a3f" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </div>
+
+          {/* Other Species Chart */}
+          <div className="card-polish">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Target size={18} className="text-slate-600" />
+                <h3 className="text-sm font-black uppercase tracking-wider text-slate-800">Prelievo Altre Specie</h3>
+              </div>
+              <span className="text-xs font-bold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-full">
+                Tot: {otherBirds} capi
+              </span>
+            </div>
+            <div className="h-64 w-full">
+              {otherChartData.length === 0 ? (
+                <div className="h-full flex items-center justify-center text-slate-400 text-xs italic">
+                  Nessuna altra specie registrata
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={otherChartData} margin={{ top: 10, right: 10, left: -20, bottom: 25 }}>
+                    <XAxis dataKey="species" tick={{ fontSize: 11 }} angle={-25} textAnchor="end" interval={0} />
+                    <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '12px' }}
+                      formatter={(value: any) => [`${value} capi`, 'Prelievo']}
+                    />
+                    <Bar dataKey="count" fill="#64748b" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
