@@ -170,11 +170,15 @@ export function Accounting() {
     });
     const totalExp = totalExpense > 0 ? totalExpense : 1;
     return Array.from(map.entries())
-      .map(([category, amount]) => ({
-        category,
-        amount,
-        percentage: ((amount / totalExp) * 100).toFixed(1)
-      }))
+      .map(([category, amount]) => {
+        const percentage = ((amount / totalExp) * 100).toFixed(1);
+        return {
+          category,
+          amount,
+          percentage,
+          labelDisplay: `€${amount.toLocaleString()} (${percentage}%)`
+        };
+      })
       .sort((a, b) => b.amount - a.amount);
   }, [items, totalExpense]);
 
@@ -789,7 +793,7 @@ export function Accounting() {
               </div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={expenseChartData} margin={{ top: 25, right: 10, left: -10, bottom: 30 }}>
+                <BarChart data={expenseChartData} margin={{ top: 35, right: 10, left: -10, bottom: 30 }}>
                   <XAxis dataKey="category" tick={{ fontSize: 11 }} angle={-25} textAnchor="end" interval={0} />
                   <YAxis tick={{ fontSize: 11 }} allowDecimals={false} tickFormatter={(val) => `€${val}`} />
                   <Tooltip 
@@ -798,10 +802,9 @@ export function Accounting() {
                   />
                   <Bar dataKey="amount" fill="#e11d48" radius={[4, 4, 0, 0]}>
                     <LabelList 
-                      dataKey="percentage" 
+                      dataKey="labelDisplay" 
                       position="top" 
-                      formatter={(val: any) => `${val}%`} 
-                      style={{ fontSize: '11px', fill: '#be123c', fontWeight: 'bold' }} 
+                      style={{ fontSize: '10px', fill: '#be123c', fontWeight: 'bold' }} 
                     />
                   </Bar>
                 </BarChart>
