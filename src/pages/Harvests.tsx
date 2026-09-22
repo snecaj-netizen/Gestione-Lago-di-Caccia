@@ -18,7 +18,7 @@ import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LabelList } from 'recharts';
 
 const safeFormatDate = (dateStr: any, formatStr: string, options?: any) => {
   try {
@@ -515,91 +515,81 @@ export function Harvests() {
         {/* Charts Section: Anatids vs Other Species */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Anatidi Chart */}
-          <div className="card-polish flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <span className="text-lg" role="img" aria-label="Anatidi">🦆</span>
-                  <h3 className="text-sm font-black uppercase tracking-wider text-slate-800">Prelievo Anatidi per Specie</h3>
-                </div>
-                <span className="text-xs font-bold text-lake-green bg-lake-green/10 px-2.5 py-1 rounded-full">
-                  Tot: {anatidaeBirds} capi
-                </span>
+          <div className="card-polish">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <span className="text-lg" role="img" aria-label="Anatidi">🦆</span>
+                <h3 className="text-sm font-black uppercase tracking-wider text-slate-800">Prelievo Anatidi per Specie</h3>
               </div>
-              <div className="h-64 w-full">
-                {anatidaeChartData.length === 0 ? (
-                  <div className="h-full flex items-center justify-center text-slate-400 text-xs italic">
-                    Nessun anatide registrato
-                  </div>
-                ) : (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={anatidaeChartData} margin={{ top: 10, right: 10, left: -20, bottom: 25 }}>
-                      <XAxis dataKey="species" tick={{ fontSize: 11 }} angle={-25} textAnchor="end" interval={0} />
-                      <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-                      <Tooltip 
-                        contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '12px' }}
-                        formatter={(value: any, name: any, item: any) => [`${value} capi (${item.payload.percentage}%)`, 'Prelievo']}
-                      />
-                      <Bar dataKey="count" fill="#2d5a3f" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                )}
-              </div>
+              <span className="text-xs font-bold text-lake-green bg-lake-green/10 px-2.5 py-1 rounded-full">
+                Tot: {anatidaeBirds} capi
+              </span>
             </div>
-
-            {anatidaeChartData.length > 0 && (
-              <div className="mt-4 pt-3 border-t border-slate-100 flex flex-wrap gap-1.5">
-                {anatidaeChartData.map((d) => (
-                  <span key={d.species} className="text-[11px] font-bold bg-slate-50 border border-slate-200/80 px-2 py-1 rounded text-slate-700">
-                    {d.species}: <span className="text-lake-green font-black">{d.count}</span> <span className="text-slate-400 font-medium">({d.percentage}%)</span>
-                  </span>
-                ))}
-              </div>
-            )}
+            <div className="h-68 w-full">
+              {anatidaeChartData.length === 0 ? (
+                <div className="h-full flex items-center justify-center text-slate-400 text-xs italic">
+                  Nessun anatide registrato
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={anatidaeChartData} margin={{ top: 22, right: 10, left: -20, bottom: 25 }}>
+                    <XAxis dataKey="species" tick={{ fontSize: 11 }} angle={-25} textAnchor="end" interval={0} />
+                    <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '12px' }}
+                      formatter={(value: any, name: any, item: any) => [`${value} capi (${item.payload.percentage}%)`, 'Prelievo']}
+                    />
+                    <Bar dataKey="count" fill="#2d5a3f" radius={[4, 4, 0, 0]}>
+                      <LabelList 
+                        dataKey="percentage" 
+                        position="top" 
+                        formatter={(val: any) => `${val}%`} 
+                        style={{ fontSize: '10px', fill: '#2d5a3f', fontWeight: 'bold' }} 
+                      />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
           </div>
 
           {/* Other Species Chart */}
-          <div className="card-polish flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <Target size={18} className="text-slate-600" />
-                  <h3 className="text-sm font-black uppercase tracking-wider text-slate-800">Prelievo Altre Specie</h3>
-                </div>
-                <span className="text-xs font-bold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-full">
-                  Tot: {otherBirds} capi
-                </span>
+          <div className="card-polish">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Target size={18} className="text-slate-600" />
+                <h3 className="text-sm font-black uppercase tracking-wider text-slate-800">Prelievo Altre Specie</h3>
               </div>
-              <div className="h-64 w-full">
-                {otherChartData.length === 0 ? (
-                  <div className="h-full flex items-center justify-center text-slate-400 text-xs italic">
-                    Nessuna altra specie registrata
-                  </div>
-                ) : (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={otherChartData} margin={{ top: 10, right: 10, left: -20, bottom: 25 }}>
-                      <XAxis dataKey="species" tick={{ fontSize: 11 }} angle={-25} textAnchor="end" interval={0} />
-                      <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-                      <Tooltip 
-                        contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '12px' }}
-                        formatter={(value: any, name: any, item: any) => [`${value} capi (${item.payload.percentage}%)`, 'Prelievo']}
-                      />
-                      <Bar dataKey="count" fill="#64748b" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                )}
-              </div>
+              <span className="text-xs font-bold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-full">
+                Tot: {otherBirds} capi
+              </span>
             </div>
-
-            {otherChartData.length > 0 && (
-              <div className="mt-4 pt-3 border-t border-slate-100 flex flex-wrap gap-1.5">
-                {otherChartData.map((d) => (
-                  <span key={d.species} className="text-[11px] font-bold bg-slate-50 border border-slate-200/80 px-2 py-1 rounded text-slate-700">
-                    {d.species}: <span className="text-slate-900 font-black">{d.count}</span> <span className="text-slate-400 font-medium">({d.percentage}%)</span>
-                  </span>
-                ))}
-              </div>
-            )}
+            <div className="h-68 w-full">
+              {otherChartData.length === 0 ? (
+                <div className="h-full flex items-center justify-center text-slate-400 text-xs italic">
+                  Nessuna altra specie registrata
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={otherChartData} margin={{ top: 22, right: 10, left: -20, bottom: 25 }}>
+                    <XAxis dataKey="species" tick={{ fontSize: 11 }} angle={-25} textAnchor="end" interval={0} />
+                    <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '12px' }}
+                      formatter={(value: any, name: any, item: any) => [`${value} capi (${item.payload.percentage}%)`, 'Prelievo']}
+                    />
+                    <Bar dataKey="count" fill="#64748b" radius={[4, 4, 0, 0]}>
+                      <LabelList 
+                        dataKey="percentage" 
+                        position="top" 
+                        formatter={(val: any) => `${val}%`} 
+                        style={{ fontSize: '10px', fill: '#475569', fontWeight: 'bold' }} 
+                      />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
           </div>
         </div>
       </div>

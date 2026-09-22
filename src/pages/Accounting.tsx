@@ -21,6 +21,7 @@ import { format, parseISO, getDay, isWithinInterval } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LabelList } from 'recharts';
 
 const safeFormatDate = (dateStr: any, formatStr: string, options?: any) => {
   try {
@@ -160,6 +161,22 @@ export function Accounting() {
   const totalIncome = items.filter(i => i.type === 'entrata').reduce((acc, i) => acc + i.amount, 0);
   const totalExpense = items.filter(i => i.type === 'uscita').reduce((acc, i) => acc + i.amount, 0);
   const balance = totalIncome - totalExpense;
+
+  const expenseChartData = React.useMemo(() => {
+    const map = new Map<string, number>();
+    items.filter(t => t.type === 'uscita').forEach(t => {
+      const cat = (t.category || 'Altro').trim();
+      map.set(cat, (map.get(cat) || 0) + t.amount);
+    });
+    const totalExp = totalExpense > 0 ? totalExpense : 1;
+    return Array.from(map.entries())
+      .map(([category, amount]) => ({
+        category,
+        amount,
+        percentage: ((amount / totalExp) * 100).toFixed(1)
+      }))
+      .sort((a, b) => b.amount - a.amount);
+  }, [items, totalExpense]);
 
   // Budget Calculations
   const budgetIncome = budgetItems.filter(b => b.type === 'entrata').reduce((acc, b) => acc + b.amount, 0);
@@ -695,72 +712,101 @@ export function Accounting() {
         </section>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-        <div className="card-polish flex flex-col gap-3 relative overflow-hidden group">
-          <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none group-hover:scale-110 transition-transform">
-            <Wallet size={64} />
+      {/* KPI Cards & Expense Breakdown Chart */}
+      <div className="space-y-6">
+        {/* Top 3 KPI Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="card-polish flex flex-col gap-3 relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none group-hover:scale-110 transition-transform">
+              <Wallet size={64} />
+            </div>
+            <span className="text-[0.65rem] font-bold text-slate-gray uppercase tracking-widest leading-none">Saldo Attuale</span>
+            <p className={cn(
+              "text-3xl font-bold tracking-tighter z-10",
+              balance >= 0 ? "text-slate-900" : "text-rose-700"
+            )}>€{balance.toLocaleString()}</p>
+            <div className="flex items-center gap-1.5 mt-1">
+              <span className={cn(
+                "text-[9px] font-black uppercase tracking-tighter px-1.5 py-0.5 rounded",
+                balance >= budgetBalance ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"
+              )}>
+                {balance >= budgetBalance ? 'Sopra' : 'Sotto'} Preventivo
+              </span>
+              <span className="text-[9px] font-bold text-slate-400">Progresso: €{budgetBalance > 0 ? Math.round((balance / budgetBalance) * 100) : '--'}%</span>
+            </div>
           </div>
-          <span className="text-[0.65rem] font-bold text-slate-gray uppercase tracking-widest leading-none">Saldo Attuale</span>
-          <p className={cn(
-            "text-3xl font-bold tracking-tighter z-10",
-            balance >= 0 ? "text-slate-900" : "text-rose-700"
-          )}>€{balance.toLocaleString()}</p>
-          <div className="flex items-center gap-1.5 mt-1">
-            <span className={cn(
-              "text-[9px] font-black uppercase tracking-tighter px-1.5 py-0.5 rounded",
-              balance >= budgetBalance ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"
-            )}>
-              {balance >= budgetBalance ? 'Sopra' : 'Sotto'} Preventivo
+
+          <div className="card-polish flex flex-col gap-3 relative group">
+            <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none group-hover:scale-110 transition-transform">
+              <TrendingUp size={64} />
+            </div>
+            <span className="text-[0.65rem] font-bold text-emerald-600 uppercase tracking-widest leading-none">Entrate Actual</span>
+            <div className="flex items-baseline gap-2">
+              <p className="text-3xl font-bold text-emerald-700 tracking-tighter">€{totalIncome.toLocaleString()}</p>
+              <span className="text-[10px] font-black text-slate-300">/ €{budgetIncome.toLocaleString()} prev.</span>
+            </div>
+            <div className="h-1 bg-slate-100 rounded-full mt-1">
+               <div 
+                 className="h-full bg-emerald-500 rounded-full transition-all duration-1000" 
+                 style={{ width: `${budgetIncome > 0 ? Math.min((totalIncome / budgetIncome) * 100, 100) : 0}%` }} 
+               />
+            </div>
+          </div>
+
+          <div className="card-polish flex flex-col gap-3 relative group">
+            <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none group-hover:scale-110 transition-transform">
+              <TrendingDown size={64} />
+            </div>
+            <span className="text-[0.65rem] font-bold text-rose-600 uppercase tracking-widest leading-none">Uscite Actual</span>
+            <div className="flex items-baseline gap-2">
+              <p className="text-3xl font-bold text-rose-700 tracking-tighter">€{totalExpense.toLocaleString()}</p>
+              <span className="text-[10px] font-black text-slate-300">/ €{budgetExpense.toLocaleString()} prev.</span>
+            </div>
+            <div className="h-1 bg-slate-100 rounded-full mt-1">
+               <div 
+                 className="h-full bg-rose-500 rounded-full transition-all duration-1000" 
+                 style={{ width: `${budgetExpense > 0 ? Math.min((totalExpense / budgetExpense) * 100, 100) : 0}%` }} 
+               />
+            </div>
+          </div>
+        </div>
+
+        {/* Expense Category Breakdown Chart Card */}
+        <div className="card-polish">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <TrendingDown size={18} className="text-rose-600" />
+              <h3 className="text-sm font-black uppercase tracking-wider text-slate-800">Aggregato Voci di Spesa (Uscite Actual)</h3>
+            </div>
+            <span className="text-xs font-bold text-rose-700 bg-rose-50 px-2.5 py-1 rounded-full border border-rose-100">
+              Totale Uscite: €{totalExpense.toLocaleString()}
             </span>
-            <span className="text-[9px] font-bold text-slate-400">Progresso: €{budgetBalance > 0 ? Math.round((balance / budgetBalance) * 100) : '--'}%</span>
           </div>
-        </div>
-
-        <div className="card-polish flex flex-col gap-3 relative group">
-          <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none group-hover:scale-110 transition-transform">
-            <TrendingUp size={64} />
-          </div>
-          <span className="text-[0.65rem] font-bold text-emerald-600 uppercase tracking-widest leading-none">Entrate Actual</span>
-          <div className="flex items-baseline gap-2">
-            <p className="text-3xl font-bold text-emerald-700 tracking-tighter">€{totalIncome.toLocaleString()}</p>
-            <span className="text-[10px] font-black text-slate-300">/ €{budgetIncome.toLocaleString()} prev.</span>
-          </div>
-          <div className="h-1 bg-slate-100 rounded-full mt-1">
-             <div 
-               className="h-full bg-emerald-500 rounded-full transition-all duration-1000" 
-               style={{ width: `${budgetIncome > 0 ? Math.min((totalIncome / budgetIncome) * 100, 100) : 0}%` }} 
-             />
-          </div>
-        </div>
-
-        <div className="card-polish flex flex-col gap-3 relative group">
-          <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none group-hover:scale-110 transition-transform">
-            <TrendingDown size={64} />
-          </div>
-          <span className="text-[0.65rem] font-bold text-rose-600 uppercase tracking-widest leading-none">Uscite Actual</span>
-          <div className="flex items-baseline gap-2">
-            <p className="text-3xl font-bold text-rose-700 tracking-tighter">€{totalExpense.toLocaleString()}</p>
-            <span className="text-[10px] font-black text-slate-300">/ €{budgetExpense.toLocaleString()} prev.</span>
-          </div>
-          <div className="h-1 bg-slate-100 rounded-full mt-1">
-             <div 
-               className="h-full bg-rose-500 rounded-full transition-all duration-1000" 
-               style={{ width: `${budgetExpense > 0 ? Math.min((totalExpense / budgetExpense) * 100, 100) : 0}%` }} 
-             />
-          </div>
-        </div>
-
-        <div className="card-polish flex flex-col gap-3 relative group bg-lake-green text-white">
-          <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
-            <Target size={64} className="text-white" />
-          </div>
-          <span className="text-[0.65rem] font-bold text-white/60 uppercase tracking-widest leading-none">Performance Cassa</span>
-          <p className="text-3xl font-bold tracking-tighter">
-            {budgetBalance !== 0 ? ((balance / budgetBalance) * 100).toFixed(1) : '0'} %
-          </p>
-          <div className="flex items-center gap-1.5 mt-1 text-[9px] font-bold">
-            <BarChart3 size={10} className="text-accent-gold" />
-            <span className="uppercase tracking-widest text-white/50">Rispetto a fine stagione atteso</span>
+          <div className="h-72 w-full">
+            {expenseChartData.length === 0 ? (
+              <div className="h-full flex items-center justify-center text-slate-400 text-xs italic">
+                Nessuna uscita registrata
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={expenseChartData} margin={{ top: 25, right: 10, left: -10, bottom: 30 }}>
+                  <XAxis dataKey="category" tick={{ fontSize: 11 }} angle={-25} textAnchor="end" interval={0} />
+                  <YAxis tick={{ fontSize: 11 }} allowDecimals={false} tickFormatter={(val) => `€${val}`} />
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '12px' }}
+                    formatter={(value: any, name: any, item: any) => [`€${Number(value).toLocaleString()} (${item.payload.percentage}%)`, 'Importo']}
+                  />
+                  <Bar dataKey="amount" fill="#e11d48" radius={[4, 4, 0, 0]}>
+                    <LabelList 
+                      dataKey="percentage" 
+                      position="top" 
+                      formatter={(val: any) => `${val}%`} 
+                      style={{ fontSize: '11px', fill: '#be123c', fontWeight: 'bold' }} 
+                    />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            )}
           </div>
         </div>
       </div>
