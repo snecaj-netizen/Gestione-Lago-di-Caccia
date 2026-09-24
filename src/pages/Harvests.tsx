@@ -109,6 +109,7 @@ export function Harvests() {
   const [huntingDays, setHuntingDays] = useState<HuntingDay[]>([]);
   const [expandedSpecies, setExpandedSpecies] = useState<Record<string, boolean>>({});
   const [searchQuery, setSearchQuery] = useState('');
+  const [dailyTrendView, setDailyTrendView] = useState<'anatidi' | 'altre'>('anatidi');
 
   const toggleSpeciesExpand = (key: string) => {
     setExpandedSpecies(prev => ({
@@ -406,6 +407,31 @@ export function Harvests() {
       .sort((a, b) => b.count - a.count);
   }, [filteredItems, otherBirds]);
 
+  const dailyTrendData = React.useMemo(() => {
+    const map = new Map<string, { date: string; anatidi: number; altreSpecie: number; total: number }>();
+    
+    filteredItems.forEach(item => {
+      const d = item.date;
+      if (!map.has(d)) {
+        map.set(d, { date: d, anatidi: 0, altreSpecie: 0, total: 0 });
+      }
+      const entry = map.get(d)!;
+      if (ANATIDAE_SPECIES.has(item.species)) {
+        entry.anatidi += item.count;
+      } else {
+        entry.altreSpecie += item.count;
+      }
+      entry.total += item.count;
+    });
+
+    return Array.from(map.values())
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map(item => ({
+        ...item,
+        formattedDate: safeFormatDate(item.date, 'dd MMM', { locale: it })
+      }));
+  }, [filteredItems]);
+
   const canManage = (item: Harvest) => {
     if (!profile) return false;
     return profile.role === 'admin' || item.hunterUid === profile.uid;
@@ -488,26 +514,52 @@ export function Harvests() {
           </div>
 
           <div className="card-polish flex flex-col justify-between">
-            <div>
-              <span className="text-[0.65rem] font-bold text-lake-green uppercase tracking-[0.2em] mb-2 block">Specie Prevalente & Media Giornaliera</span>
-              <p className="text-xl font-bold text-lake-green">
-                {dominantSpecies}
-              </p>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[0.65rem] font-bold text-lake-green uppercase tracking-[0.2em] block">Abbattimenti per Giornata</span>
+              <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded text-[10px] font-bold">
+                <button
+                  onClick={() => setDailyTrendView('anatidi')}
+                  className={cn(
+                    "px-2 py-0.5 rounded transition-all",
+                    dailyTrendView === 'anatidi' ? "bg-lake-green text-white shadow-sm" : "text-slate-600 hover:text-slate-900"
+                  )}
+                >
+                  🦆 Anatidi
+                </button>
+                <button
+                  onClick={() => setDailyTrendView('altre')}
+                  className={cn(
+                    "px-2 py-0.5 rounded transition-all",
+                    dailyTrendView === 'altre' ? "bg-slate-700 text-white shadow-sm" : "text-slate-600 hover:text-slate-900"
+                  )}
+                >
+                  🎯 Altre
+                </button>
+              </div>
             </div>
-
-            <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-4 text-xs">
-              <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Media / Giornata</span>
-                <span className="text-lg font-black text-slate-900 leading-tight">
-                  {averagePerDay} <span className="text-xs font-normal text-slate-400">capi/giorno</span>
-                </span>
-              </div>
-              <div className="text-right">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Giornate Venatorie</span>
-                <span className="text-lg font-black text-slate-900 leading-tight">
-                  {dateGroups.length} <span className="text-xs font-normal text-slate-400">giornate</span>
-                </span>
-              </div>
+            <div className="h-44 w-full">
+              {dailyTrendData.length === 0 ? (
+                <div className="h-full flex items-center justify-center text-slate-400 text-xs italic">
+                  Nessun dato giornaliero
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={dailyTrendData} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
+                    <XAxis dataKey="formattedDate" tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '11px' }}
+                      formatter={(value: any) => [`${value} capi`, dailyTrendView === 'anatidi' ? '🦆 Anatidi' : '🎯 Altre Specie']}
+                      labelFormatter={(label) => `Data: ${label}`}
+                    />
+                    {dailyTrendView === 'anatidi' ? (
+                      <Bar dataKey="anatidi" name="anatidi" fill="#2d5a3f" radius={[4, 4, 0, 0]} />
+                    ) : (
+                      <Bar dataKey="altreSpecie" name="altreSpecie" fill="#64748b" radius={[4, 4, 0, 0]} />
+                    )}
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
             </div>
           </div>
         </div>
