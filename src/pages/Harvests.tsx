@@ -110,6 +110,7 @@ export function Harvests() {
   const [expandedSpecies, setExpandedSpecies] = useState<Record<string, boolean>>({});
   const [searchQuery, setSearchQuery] = useState('');
   const [dailyTrendView, setDailyTrendView] = useState<'anatidi' | 'altre'>('anatidi');
+  const [includeEmptyDays, setIncludeEmptyDays] = useState(false);
 
   const toggleSpeciesExpand = (key: string) => {
     setExpandedSpecies(prev => ({
@@ -410,6 +411,7 @@ export function Harvests() {
   const dailyTrendData = React.useMemo(() => {
     const map = new Map<string, { date: string; anatidi: number; altreSpecie: number; total: number }>();
     
+    // Always include days with harvests from filteredItems
     filteredItems.forEach(item => {
       const d = item.date;
       if (!map.has(d)) {
@@ -424,13 +426,22 @@ export function Harvests() {
       entry.total += item.count;
     });
 
+    // If includeEmptyDays is true, add hunting days that are not already in the map
+    if (includeEmptyDays) {
+      huntingDays.forEach(hd => {
+        if (!map.has(hd.date)) {
+          map.set(hd.date, { date: hd.date, anatidi: 0, altreSpecie: 0, total: 0 });
+        }
+      });
+    }
+
     return Array.from(map.values())
       .sort((a, b) => a.date.localeCompare(b.date))
       .map(item => ({
         ...item,
         formattedDate: safeFormatDate(item.date, 'dd MMM', { locale: it })
       }));
-  }, [filteredItems]);
+  }, [filteredItems, includeEmptyDays, huntingDays]);
 
   const canManage = (item: Harvest) => {
     if (!profile) return false;
@@ -514,27 +525,45 @@ export function Harvests() {
           </div>
 
           <div className="card-polish flex flex-col justify-between">
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
               <span className="text-[0.65rem] font-bold text-lake-green uppercase tracking-[0.2em] block">Abbattimenti per Giornata</span>
-              <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded text-[10px] font-bold">
+              <div className="flex items-center gap-2">
+                {/* Empty Days Toggle */}
                 <button
-                  onClick={() => setDailyTrendView('anatidi')}
+                  onClick={() => setIncludeEmptyDays(!includeEmptyDays)}
+                  title={includeEmptyDays ? "Escludi giornate senza carniere" : "Includi giornate senza carniere"}
                   className={cn(
-                    "px-2 py-0.5 rounded transition-all",
-                    dailyTrendView === 'anatidi' ? "bg-lake-green text-white shadow-sm" : "text-slate-600 hover:text-slate-900"
+                    "flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold transition-all border",
+                    includeEmptyDays 
+                      ? "bg-amber-50 border-amber-200 text-amber-700" 
+                      : "bg-white border-slate-200 text-slate-500"
                   )}
                 >
-                  🦆 Anatidi
+                  <Calendar size={12} className={includeEmptyDays ? "text-amber-500" : "text-slate-400"} />
+                  <span>{includeEmptyDays ? "Tutti i Giorni" : "Solo Carnieri"}</span>
                 </button>
-                <button
-                  onClick={() => setDailyTrendView('altre')}
-                  className={cn(
-                    "px-2 py-0.5 rounded transition-all",
-                    dailyTrendView === 'altre' ? "bg-slate-700 text-white shadow-sm" : "text-slate-600 hover:text-slate-900"
-                  )}
-                >
-                  🎯 Altre
-                </button>
+
+                {/* View Switcher */}
+                <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded text-[10px] font-bold">
+                  <button
+                    onClick={() => setDailyTrendView('anatidi')}
+                    className={cn(
+                      "px-2 py-0.5 rounded transition-all",
+                      dailyTrendView === 'anatidi' ? "bg-lake-green text-white shadow-sm" : "text-slate-600 hover:text-slate-900"
+                    )}
+                  >
+                    🦆 Anatidi
+                  </button>
+                  <button
+                    onClick={() => setDailyTrendView('altre')}
+                    className={cn(
+                      "px-2 py-0.5 rounded transition-all",
+                      dailyTrendView === 'altre' ? "bg-slate-700 text-white shadow-sm" : "text-slate-600 hover:text-slate-900"
+                    )}
+                  >
+                    🎯 Altre
+                  </button>
+                </div>
               </div>
             </div>
             <div className="h-44 w-full">
