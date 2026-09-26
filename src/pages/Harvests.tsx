@@ -12,7 +12,7 @@ import {
 } from '../services';
 import { Harvest, UserProfile, HuntingLimit, HuntingDay } from '../types';
 import { useAuth } from '../contexts/AuthContext';
-import { Plus, Target, Trash2, Search, Filter, X, Edit2, User, ChevronDown, ChevronRight, ShieldAlert, Users, Info, Calendar } from 'lucide-react';
+import { Plus, Target, Trash2, Search, Filter, X, Edit2, User, ChevronDown, ChevronRight, ShieldAlert, Users, Info, Calendar, Maximize } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -111,6 +111,7 @@ export function Harvests() {
   const [searchQuery, setSearchQuery] = useState('');
   const [dailyTrendView, setDailyTrendView] = useState<'anatidi' | 'altre'>('anatidi');
   const [includeEmptyDays, setIncludeEmptyDays] = useState(false);
+  const [showDailyChartModal, setShowDailyChartModal] = useState(false);
 
   const toggleSpeciesExpand = (key: string) => {
     setExpandedSpecies(prev => ({
@@ -443,6 +444,39 @@ export function Harvests() {
       }));
   }, [filteredItems, includeEmptyDays, huntingDays]);
 
+  const fullScreenTrendData = React.useMemo(() => {
+    const today = format(new Date(), 'yyyy-MM-dd');
+    const map = new Map<string, { date: string; anatidi: number; altreSpecie: number; total: number }>();
+    
+    // 1. Get all hunting days that are concluded (past or today)
+    const concludedHuntingDays = huntingDays.filter(hd => hd.date <= today);
+    
+    // 2. Initialize map with these days
+    concludedHuntingDays.forEach(hd => {
+      map.set(hd.date, { date: hd.date, anatidi: 0, altreSpecie: 0, total: 0 });
+    });
+
+    // 3. Add harvests from filteredItems (only for the days in the map)
+    filteredItems.forEach(item => {
+      const entry = map.get(item.date);
+      if (entry) {
+        if (ANATIDAE_SPECIES.has(item.species)) {
+          entry.anatidi += item.count;
+        } else {
+          entry.altreSpecie += item.count;
+        }
+        entry.total += item.count;
+      }
+    });
+
+    return Array.from(map.values())
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map(item => ({
+        ...item,
+        formattedDate: safeFormatDate(item.date, 'dd MMM', { locale: it })
+      }));
+  }, [filteredItems, huntingDays]);
+
   const canManage = (item: Harvest) => {
     if (!profile) return false;
     return profile.role === 'admin' || item.hunterUid === profile.uid;
@@ -528,19 +562,14 @@ export function Harvests() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
               <span className="text-[0.65rem] font-bold text-lake-green uppercase tracking-[0.2em] block">Abbattimenti per Giornata</span>
               <div className="flex items-center gap-2">
-                {/* Empty Days Toggle */}
+                {/* Full Screen Chart Button */}
                 <button
-                  onClick={() => setIncludeEmptyDays(!includeEmptyDays)}
-                  title={includeEmptyDays ? "Escludi giornate senza carniere" : "Includi giornate senza carniere"}
-                  className={cn(
-                    "flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold transition-all border",
-                    includeEmptyDays 
-                      ? "bg-amber-50 border-amber-200 text-amber-700" 
-                      : "bg-white border-slate-200 text-slate-500"
-                  )}
+                  onClick={() => setShowDailyChartModal(true)}
+                  title="Visualizza grafico a schermo intero con tutte le giornate"
+                  className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold transition-all border bg-white border-slate-200 text-slate-500 hover:border-lake-green hover:text-lake-green"
                 >
-                  <Calendar size={12} className={includeEmptyDays ? "text-amber-500" : "text-slate-400"} />
-                  <span>{includeEmptyDays ? "Tutti i Giorni" : "Solo Carnieri"}</span>
+                  <Maximize size={12} className="text-slate-400" />
+                  <span>Dettaglio Stagione</span>
                 </button>
 
                 {/* View Switcher */}
@@ -1200,6 +1229,161 @@ export function Harvests() {
           ))
         )}
       </section>
+
+      {/* Full Screen Daily Trend Modal */}
+      <AnimatePresence>
+        {showDailyChartModal && (
+          <div 
+            className="fixed inset-0 w-full h-full z-50 overflow-hidden flex items-center justify-center bg-slate-900/95 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full h-full md:w-[95vw] md:h-[90vh] bg-white md:rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+            >
+              {/* Modal Header */}
+              <div className="p-4 md:p-6 border-b border-slate-100 flex items-center justify-between bg-white sticky top-0 z-10">
+                <div className="flex flex-col">
+                  <h3 className="text-xl font-serif text-lake-green">Andamento Stagionale</h3>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    Tutti i giorni di caccia conclusi
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-4">
+                  {/* View Switcher in Modal */}
+                  <div className="hidden sm:flex items-center gap-1 bg-slate-100 p-0.5 rounded text-[10px] font-bold">
+                    <button
+                      onClick={() => setDailyTrendView('anatidi')}
+                      className={cn(
+                        "px-3 py-1 rounded transition-all",
+                        dailyTrendView === 'anatidi' ? "bg-lake-green text-white shadow-sm" : "text-slate-600 hover:text-slate-900"
+                      )}
+                    >
+                      🦆 Anatidi
+                    </button>
+                    <button
+                      onClick={() => setDailyTrendView('altre')}
+                      className={cn(
+                        "px-3 py-1 rounded transition-all",
+                        dailyTrendView === 'altre' ? "bg-slate-700 text-white shadow-sm" : "text-slate-600 hover:text-slate-900"
+                      )}
+                    >
+                      🎯 Altre
+                    </button>
+                  </div>
+
+                  <button 
+                    onClick={() => setShowDailyChartModal(false)}
+                    className="p-2 text-slate-400 hover:text-lake-green transition-colors bg-slate-50 rounded-full"
+                  >
+                    <X size={24} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Mobile View Switcher */}
+              <div className="sm:hidden p-4 border-b border-slate-50 flex justify-center">
+                <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded text-xs font-bold w-full">
+                  <button
+                    onClick={() => setDailyTrendView('anatidi')}
+                    className={cn(
+                      "flex-1 py-2 rounded transition-all",
+                      dailyTrendView === 'anatidi' ? "bg-lake-green text-white shadow-sm" : "text-slate-600"
+                    )}
+                  >
+                    🦆 Anatidi
+                  </button>
+                  <button
+                    onClick={() => setDailyTrendView('altre')}
+                    className={cn(
+                      "flex-1 py-2 rounded transition-all",
+                      dailyTrendView === 'altre' ? "bg-slate-700 text-white shadow-sm" : "text-slate-600"
+                    )}
+                  >
+                    🎯 Altre
+                  </button>
+                </div>
+              </div>
+
+              {/* Modal Body / Chart */}
+              <div className="flex-1 p-4 md:p-8 overflow-hidden min-h-0">
+                {fullScreenTrendData.length === 0 ? (
+                  <div className="h-full flex items-center justify-center text-slate-400 italic">
+                    Nessun dato disponibile per il periodo concluso
+                  </div>
+                ) : (
+                  <div className="h-full w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={fullScreenTrendData} margin={{ top: 20, right: 20, left: 0, bottom: 60 }}>
+                        <XAxis 
+                          dataKey="formattedDate" 
+                          tick={{ fontSize: 12, fill: '#64748b', fontWeight: 'bold' }} 
+                          angle={-45} 
+                          textAnchor="end"
+                          interval={0}
+                        />
+                        <YAxis 
+                          tick={{ fontSize: 12, fill: '#64748b' }} 
+                          allowDecimals={false}
+                          label={{ value: 'Capi Abbattuti', angle: -90, position: 'insideLeft', offset: 10, style: { textAnchor: 'middle', fontSize: 12, fill: '#94a3b8', fontWeight: 'bold' } }}
+                        />
+                        <Tooltip 
+                          cursor={{ fill: 'rgba(45, 90, 63, 0.05)' }}
+                          contentStyle={{ 
+                            backgroundColor: '#fff', 
+                            borderRadius: '12px', 
+                            border: 'none', 
+                            boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+                            fontSize: '13px' 
+                          }}
+                          formatter={(value: any) => [`${value} esemplari`, dailyTrendView === 'anatidi' ? '🦆 Anatidi' : '🎯 Altre Specie']}
+                          labelFormatter={(label) => `Data: ${label}`}
+                        />
+                        {dailyTrendView === 'anatidi' ? (
+                          <Bar dataKey="anatidi" name="anatidi" fill="#2d5a3f" radius={[6, 6, 0, 0]} barSize={32}>
+                            <LabelList 
+                              dataKey="anatidi" 
+                              position="top" 
+                              formatter={(val: number) => val > 0 ? val : ''}
+                              style={{ fontSize: '10px', fill: '#2d5a3f', fontWeight: 'bold' }} 
+                            />
+                          </Bar>
+                        ) : (
+                          <Bar dataKey="altreSpecie" name="altreSpecie" fill="#64748b" radius={[6, 6, 0, 0]} barSize={32}>
+                            <LabelList 
+                              dataKey="altreSpecie" 
+                              position="top" 
+                              formatter={(val: number) => val > 0 ? val : ''}
+                              style={{ fontSize: '10px', fill: '#475569', fontWeight: 'bold' }} 
+                            />
+                          </Bar>
+                        )}
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-slate-400">
+                <div className="flex gap-4">
+                  <span className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-full bg-lake-green"></div>
+                    Anatidi
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-full bg-slate-500"></div>
+                    Altre Specie
+                  </span>
+                </div>
+                <span>Stagione Venatoria 2024/25</span>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
