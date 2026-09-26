@@ -8,9 +8,10 @@ import {
   subscribeToUsers,
   subscribeToHuntingLimits,
   subscribeToHuntingDays,
+  subscribeToSettings,
   getAssignedHuntersForDate
 } from '../services';
-import { Harvest, UserProfile, HuntingLimit, HuntingDay } from '../types';
+import { Harvest, UserProfile, HuntingLimit, HuntingDay, LakeSettings } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { Plus, Target, Trash2, Search, Filter, X, Edit2, User, ChevronDown, ChevronRight, ShieldAlert, Users, Info, Calendar, Maximize } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -107,6 +108,7 @@ export function Harvests() {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [limits, setLimits] = useState<HuntingLimit[]>([]);
   const [huntingDays, setHuntingDays] = useState<HuntingDay[]>([]);
+  const [settings, setSettings] = useState<LakeSettings | null>(null);
   const [expandedSpecies, setExpandedSpecies] = useState<Record<string, boolean>>({});
   const [searchQuery, setSearchQuery] = useState('');
   const [dailyTrendView, setDailyTrendView] = useState<'anatidi' | 'altre'>('anatidi');
@@ -147,12 +149,14 @@ export function Harvests() {
 
     const unsubLimits = subscribeToHuntingLimits(setLimits);
     const unsubHuntingDays = subscribeToHuntingDays(setHuntingDays);
-
+    const unsubSettings = subscribeToSettings(setSettings);
+    
     return () => {
       unsubHarvests();
       unsubUsers();
       unsubLimits();
       unsubHuntingDays();
+      unsubSettings();
     };
   }, []);
 
@@ -409,6 +413,8 @@ export function Harvests() {
       .sort((a, b) => b.count - a.count);
   }, [filteredItems, otherBirds]);
 
+  const today = format(new Date(), 'yyyy-MM-dd');
+
   const dailyTrendData = React.useMemo(() => {
     const map = new Map<string, { date: string; anatidi: number; altreSpecie: number; total: number }>();
     
@@ -445,21 +451,49 @@ export function Harvests() {
   }, [filteredItems, includeEmptyDays, huntingDays]);
 
   const fullScreenTrendData = React.useMemo(() => {
-    const today = format(new Date(), 'yyyy-MM-dd');
+    const seasonStart = settings?.seasonStart || '2026-09-01';
     const map = new Map<string, { date: string; anatidi: number; altreSpecie: number; total: number }>();
     
-    // 1. Get all hunting days that are concluded (past or today)
-    const concludedHuntingDays = huntingDays.filter(hd => hd.date <= today);
-    
-    // 2. Initialize map with these days
-    concludedHuntingDays.forEach(hd => {
-      map.set(hd.date, { date: hd.date, anatidi: 0, altreSpecie: 0, total: 0 });
-    });
+    // 1. Determine the actual start date for the chart
+    // It should be the first day that has either a harvest or an assignment
+    const activityDates = [
+      ...filteredItems.map(i => i.date),
+      ...huntingDays.map(d => d.date)
+    ].filter(d => d >= seasonStart).sort();
 
-    // 3. Add harvests from filteredItems (only for the days in the map)
+    // If we have any activity, start from the first one. Otherwise fallback to seasonStart.
+    const startDateStr = activityDates.length > 0 ? activityDates[0] : seasonStart;
+
+    // 2. Identify all hunting days from the start date to today
+    try {
+      const start = new Date(startDateStr);
+      const end = new Date(today);
+      const current = new Date(start);
+      
+      while (current <= end) {
+        const dateStr = format(current, 'yyyy-MM-dd');
+        
+        // Check if this date has any assigned hunters (manual or recurring)
+        const assigned = getAssignedHuntersForDate(dateStr, huntingDays, users);
+        
+        if (assigned.length > 0) {
+          map.set(dateStr, { date: dateStr, anatidi: 0, altreSpecie: 0, total: 0 });
+        }
+        
+        current.setDate(current.getDate() + 1);
+      }
+    } catch (e) {
+      console.error("Error generating hunting days range:", e);
+    }
+
+    // 3. Add harvests from filteredItems 
+    // This ensures that even if a day wasn't "officially" a hunting day but has data, it shows up
     filteredItems.forEach(item => {
-      const entry = map.get(item.date);
-      if (entry) {
+      if (item.date <= today && item.date >= startDateStr) {
+        if (!map.has(item.date)) {
+          map.set(item.date, { date: item.date, anatidi: 0, altreSpecie: 0, total: 0 });
+        }
+        const entry = map.get(item.date)!;
         if (ANATIDAE_SPECIES.has(item.species)) {
           entry.anatidi += item.count;
         } else {
@@ -475,7 +509,7 @@ export function Harvests() {
         ...item,
         formattedDate: safeFormatDate(item.date, 'dd MMM', { locale: it })
       }));
-  }, [filteredItems, huntingDays]);
+  }, [filteredItems, huntingDays, users, settings, today]);
 
   const canManage = (item: Harvest) => {
     if (!profile) return false;
