@@ -66,10 +66,29 @@ export const ANATIDAE_SPECIES = new Set([
   'Codone',
   'Fischione',
   'Germano',
+  'Germano Reale',
   'Marzaiola',
   'Mestolone',
+  'Moretta',
   'Moriglione'
 ]);
+
+export const isAnatide = (species: string): boolean => {
+  if (!species) return false;
+  if (ANATIDAE_SPECIES.has(species)) return true;
+  const s = species.toLowerCase().trim();
+  return (
+    s.includes('germano') ||
+    s.includes('alzavola') ||
+    s.includes('canapiglia') ||
+    s.includes('codone') ||
+    s.includes('fischione') ||
+    s.includes('marzaiola') ||
+    s.includes('mestolone') ||
+    s.includes('moretta') ||
+    s.includes('moriglione')
+  );
+};
 
 export function Harvests() {
   const { profile } = useAuth();
@@ -310,7 +329,7 @@ export function Harvests() {
 
   const totalBirds = filteredItems.reduce((acc, h) => acc + h.count, 0);
   const anatidaeBirds = filteredItems
-    .filter(h => ANATIDAE_SPECIES.has(h.species))
+    .filter(h => isAnatide(h.species))
     .reduce((acc, h) => acc + h.count, 0);
   const otherBirds = totalBirds - anatidaeBirds;
 
@@ -384,7 +403,7 @@ export function Harvests() {
   const anatidaeChartData = React.useMemo(() => {
     const map = new Map<string, number>();
     filteredItems.forEach(item => {
-      if (ANATIDAE_SPECIES.has(item.species)) {
+      if (isAnatide(item.species)) {
         map.set(item.species, (map.get(item.species) || 0) + item.count);
       }
     });
@@ -400,7 +419,7 @@ export function Harvests() {
   const otherChartData = React.useMemo(() => {
     const map = new Map<string, number>();
     filteredItems.forEach(item => {
-      if (!ANATIDAE_SPECIES.has(item.species)) {
+      if (!isAnatide(item.species)) {
         map.set(item.species, (map.get(item.species) || 0) + item.count);
       }
     });
@@ -425,7 +444,7 @@ export function Harvests() {
         map.set(d, { date: d, anatidi: 0, altreSpecie: 0, total: 0 });
       }
       const entry = map.get(d)!;
-      if (ANATIDAE_SPECIES.has(item.species)) {
+      if (isAnatide(item.species)) {
         entry.anatidi += item.count;
       } else {
         entry.altreSpecie += item.count;
@@ -494,7 +513,7 @@ export function Harvests() {
           map.set(item.date, { date: item.date, anatidi: 0, altreSpecie: 0, total: 0 });
         }
         const entry = map.get(item.date)!;
-        if (ANATIDAE_SPECIES.has(item.species)) {
+        if (isAnatide(item.species)) {
           entry.anatidi += item.count;
         } else {
           entry.altreSpecie += item.count;
