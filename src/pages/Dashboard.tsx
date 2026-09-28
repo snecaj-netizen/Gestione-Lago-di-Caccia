@@ -32,7 +32,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LabelList } from 'recharts';
 import { format, subDays, isAfter } from 'date-fns';
 import { it } from 'date-fns/locale';
-import { cn } from '../lib/utils';
+import { cn, formatUserName } from '../lib/utils';
 import { isAnatide } from './Harvests';
 
 const safeFormatDate = (dateStr: any, formatStr: string, options?: any) => {
@@ -394,7 +394,7 @@ export function Dashboard() {
               <div key={socio.uid} className="bg-off-white border border-slate-100 rounded-lg p-4 flex flex-col gap-3 group hover:border-lake-green transition-all shadow-sm">
                 <div className="flex justify-between items-start">
                   <div>
-                    <h4 className="text-sm font-bold text-slate-900">{socio.displayName}</h4>
+                    <h4 className="text-sm font-bold text-slate-900">{formatUserName(socio.displayName)}</h4>
                     <span className="text-[9px] font-black text-lake-green/50 uppercase tracking-widest">{socio.role}</span>
                   </div>
                   <div className={cn(
@@ -450,7 +450,7 @@ export function Dashboard() {
               <div className="flex flex-col items-center group">
                 <div className="mb-2 text-center">
                   <p className="text-[10px] font-black uppercase text-white/50 tracking-tighter leading-none mb-1">2° Posto</p>
-                  <p className="text-xs font-bold truncate max-w-[80px]">{topHunters[1].name.split(' ')[0]}</p>
+                  <p className="text-xs font-bold truncate max-w-[80px]">{formatUserName(topHunters[1].name)}</p>
                 </div>
                 <div className="w-16 sm:w-20 bg-white/10 backdrop-blur-sm border-t-2 border-slate-300 h-20 rounded-t-lg flex flex-col items-center justify-center gap-1 group-hover:bg-white/20 transition-all">
                   <Medal size={20} className="text-slate-300" />
@@ -465,7 +465,7 @@ export function Dashboard() {
                 <div className="mb-2 text-center scale-110">
                   <Trophy size={24} className="text-accent-gold mx-auto mb-1 animate-bounce" />
                   <p className="text-[10px] font-black uppercase text-white/70 tracking-tighter leading-none mb-1 uppercase tracking-widest">Campione</p>
-                  <p className="text-sm font-black truncate max-w-[100px]">{topHunters[0].name.split(' ')[0]}</p>
+                  <p className="text-sm font-black truncate max-w-[100px]">{formatUserName(topHunters[0].name)}</p>
                 </div>
                 <div className="w-20 sm:w-24 bg-white/20 backdrop-blur-sm border-t-4 border-accent-gold h-32 rounded-t-xl flex flex-col items-center justify-center gap-1 group-hover:bg-white/30 transition-all shadow-2xl relative">
                   <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-8 h-1 bg-accent-gold/50 blur-sm rounded-full" />
@@ -480,7 +480,7 @@ export function Dashboard() {
               <div className="flex flex-col items-center group">
                 <div className="mb-2 text-center">
                   <p className="text-[10px] font-black uppercase text-white/50 tracking-tighter leading-none mb-1">3° Posto</p>
-                  <p className="text-xs font-bold truncate max-w-[80px]">{topHunters[2].name.split(' ')[0]}</p>
+                  <p className="text-xs font-bold truncate max-w-[80px]">{formatUserName(topHunters[2].name)}</p>
                 </div>
                 <div className="w-14 sm:w-16 bg-white/10 backdrop-blur-sm border-t-2 border-amber-700/50 h-16 rounded-t-lg flex flex-col items-center justify-center gap-1 group-hover:bg-white/20 transition-all">
                   <Award size={18} className="text-amber-600" />
@@ -673,7 +673,7 @@ export function Dashboard() {
                             </div>
                             <div>
                               <h4 className="text-sm font-bold text-slate-900 flex items-center gap-1.5 flex-wrap">
-                                {hunter.displayName}
+                                {formatUserName(hunter.displayName)}
                                 <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-purple-50 text-purple-700 border border-purple-100">
                                   Quotista
                                 </span>

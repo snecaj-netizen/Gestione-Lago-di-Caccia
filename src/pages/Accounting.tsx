@@ -16,7 +16,7 @@ import {
 import { Transaction, HuntingDay, UserProfile, LakeSettings, BudgetItem } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { Plus, Wallet, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, X, User as UserIcon, Calendar as CalendarIcon, Settings, ChevronRight, CheckCircle2, BarChart3, Target, PieChart, Trash2, Edit2, Save } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { cn, formatUserName } from '../lib/utils';
 import { format, parseISO, getDay, isWithinInterval } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { useSearchParams } from 'react-router-dom';
@@ -654,7 +654,7 @@ export function Accounting() {
                 <div className="flex justify-between items-start">
                   <div>
                     <h4 className="text-sm font-bold text-slate-900 flex items-center gap-1">
-                      {hunter.displayName}
+                      {formatUserName(hunter.displayName)}
                       {hunter.seasonalQuota ? (
                         <span className="text-[7px] bg-amber-100 text-amber-700 font-black px-1 rounded uppercase tracking-tighter">Fissa</span>
                       ) : null}
@@ -1052,7 +1052,7 @@ export function Accounting() {
                                   )}
                                 >
                                   <div className="flex flex-col">
-                                    <span className="text-[10px] font-bold text-slate-700">{p.displayName}</span>
+                                    <span className="text-[10px] font-bold text-slate-700">{formatUserName(p.displayName)}</span>
                                     {alreadyPaid > 0 && <span className="text-[8px] text-emerald-600 font-bold uppercase">Versato: €{alreadyPaid.toLocaleString()}</span>}
                                   </div>
                                   <div className="text-right">
@@ -1085,7 +1085,7 @@ export function Accounting() {
                       >
                         <option value="">Seleziona Socio...</option>
                         {users.filter(u => u.isActive && (u.role === 'socio' || u.role === 'admin')).map(user => (
-                          <option key={user.uid} value={user.uid}>{user.displayName}</option>
+                          <option key={user.uid} value={user.uid}>{formatUserName(user.displayName)}</option>
                         ))}
                       </select>
                     </div>
@@ -1106,7 +1106,7 @@ export function Accounting() {
                       >
                         <option value="">Seleziona Socio...</option>
                         {users.filter(u => u.isActive && (u.role === 'socio' || u.role === 'admin')).map(user => (
-                          <option key={user.uid} value={user.uid}>{user.displayName}</option>
+                          <option key={user.uid} value={user.uid}>{formatUserName(user.displayName)}</option>
                         ))}
                       </select>
                     </div>
@@ -1177,13 +1177,13 @@ export function Accounting() {
                           </span>
                           {item.payerName && (
                             <div className="flex items-center gap-1 text-[9px] text-slate-400 font-bold uppercase tracking-tighter">
-                              <UserIcon size={10} /> {item.payerName}
+                              <UserIcon size={10} /> {formatUserName(item.payerName)}
                               {item.huntingDayId && <span className="text-accent-gold">• {safeFormatDate(item.huntingDayId, 'dd/MM')}</span>}
                             </div>
                           )}
                           {item.memberName && (
                             <div className="flex items-center gap-1 text-[9px] text-lake-green font-bold uppercase tracking-tighter mt-0.5">
-                              <Wallet size={10} className="opacity-70" /> {item.type === 'entrata' ? 'In cassa a' : 'Pagato da'}: {item.memberName}
+                              <Wallet size={10} className="opacity-70" /> {item.type === 'entrata' ? 'In cassa a' : 'Pagato da'}: {formatUserName(item.memberName)}
                             </div>
                           )}
                         </div>

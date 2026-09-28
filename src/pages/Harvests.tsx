@@ -14,7 +14,7 @@ import {
 import { Harvest, UserProfile, HuntingLimit, HuntingDay, LakeSettings } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { Plus, Target, Trash2, Search, Filter, X, Edit2, User, ChevronDown, ChevronRight, ShieldAlert, Users, Info, Calendar, Maximize } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { cn, formatUserName } from '../lib/utils';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { useSearchParams } from 'react-router-dom';
@@ -974,7 +974,7 @@ export function Harvests() {
                                   : "bg-white border-slate-200 text-slate-700"
                               )}
                             >
-                              <span>{hunter.displayName}</span>
+                              <span>{formatUserName(hunter.displayName)}</span>
                               {validCount > 0 && !editingItem && (
                                 <span className={cn(
                                   "text-[10px] px-1.5 py-0.2 rounded font-black",
@@ -994,7 +994,7 @@ export function Harvests() {
                             ? (validCount % assignedHuntersForSelectedDate.length !== 0 
                                 ? `Suddivisione con resto: ${Math.floor(validCount / assignedHuntersForSelectedDate.length) + 1} capi ai primi ${validCount % assignedHuntersForSelectedDate.length} cacciatori, ${Math.floor(validCount / assignedHuntersForSelectedDate.length)} ai restanti.` 
                                 : `Divisi equamente (${Math.floor(validCount / assignedHuntersForSelectedDate.length)} per cacciatore).`)
-                            : `Assegnati a ${assignedHuntersForSelectedDate[0].displayName}.`}
+                            : `Assegnati a ${formatUserName(assignedHuntersForSelectedDate[0].displayName)}.`}
                         </p>
                       )}
                     </div>
@@ -1226,7 +1226,7 @@ export function Harvests() {
                                         <div className="w-6 h-6 rounded-full bg-slate-200/80 text-slate-600 flex items-center justify-center text-[10px] font-bold shrink-0">
                                           {item.hunterName.charAt(0).toUpperCase()}
                                         </div>
-                                        <span>{item.hunterName}</span>
+                                        <span>{formatUserName(item.hunterName)}</span>
                                         {profile?.uid === item.hunterUid && (
                                           <span className="text-[9px] font-extrabold uppercase tracking-wider text-lake-green bg-lake-green/10 px-1.5 py-0.5 rounded">
                                             Tu

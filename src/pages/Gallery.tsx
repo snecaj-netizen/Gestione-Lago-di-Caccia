@@ -20,7 +20,7 @@ import {
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { useSearchParams } from 'react-router-dom';
-import { cn } from '../lib/utils';
+import { cn, formatUserName } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 
 const MAX_IMAGE_SIZE = 800; // max width/height in px
@@ -390,7 +390,7 @@ export function Gallery() {
                   <div className="flex items-center justify-between gap-1.5 text-[9px] font-black uppercase text-slate-400 tracking-widest mb-2">
                     <div className="flex items-center gap-1.5">
                       <UserIcon size={10} className="text-lake-green" />
-                      {photo.userName}
+                      {formatUserName(photo.userName)}
                     </div>
                     
                     {/* Management Buttons - BACK WHERE THEY WERE */}
@@ -528,7 +528,7 @@ export function Gallery() {
                   <div className="flex items-center justify-center gap-6 pt-1">
                     <div className="flex items-center gap-2 text-white/40 text-[9px] font-black uppercase tracking-[0.25em]">
                       <UserIcon size={10} className="text-accent-gold/60" />
-                      {selectedPhoto.userName}
+                      {formatUserName(selectedPhoto.userName)}
                     </div>
                     <div className="flex items-center gap-2 text-white/40 text-[9px] font-black uppercase tracking-[0.25em]">
                       <CalendarIcon size={10} className="text-accent-gold/60" />

@@ -28,7 +28,7 @@ import {
   Camera,
   ImagePlus
 } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { cn, formatUserName } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { aiSearchRecipes, generateRecipeWithAI } from '../services/geminiService';
 
@@ -468,7 +468,7 @@ export function Recipes() {
                   </div>
                   <div className="flex flex-col">
                     <span className="text-[9px] font-black text-slate-300 uppercase tracking-[0.1em]">Caricata da</span>
-                    <span className="text-[11px] font-bold text-slate-500">{recipe.authorName}</span>
+                    <span className="text-[11px] font-bold text-slate-500">{formatUserName(recipe.authorName)}</span>
                   </div>
                 </div>
 
@@ -603,7 +603,7 @@ export function Recipes() {
                       </div>
                       <div>
                         <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest leading-none mb-1">Dalla cucina di</p>
-                        <p className="text-sm font-bold text-slate-700">{selectedRecipe.authorName}</p>
+                        <p className="text-sm font-bold text-slate-700">{formatUserName(selectedRecipe.authorName)}</p>
                       </div>
                     </div>
                     <h2 className="text-4xl lg:text-5xl font-serif font-black text-slate-gray leading-tight mb-6">

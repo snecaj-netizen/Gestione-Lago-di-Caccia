@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { UserProfile } from '../types';
+import { formatUserName } from '../lib/utils';
 import { Cake, Sparkles, Calendar, PartyPopper, X } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useAuth } from '../contexts/AuthContext';
@@ -70,7 +71,7 @@ export function BirthdayBanner({ users }: BirthdayBannerProps) {
 
   // Format list of names nicely
   const formatNames = (profiles: UserProfile[]) => {
-    const names = profiles.map(p => p.displayName || p.username || 'un socio');
+    const names = profiles.map(p => formatUserName(p.displayName) || p.username || 'un socio');
     if (names.length === 1) return names[0];
     if (names.length === 2) return `${names[0]} e ${names[1]}`;
     return `${names.slice(0, -1).join(', ')} e ${names[names.length - 1]}`;

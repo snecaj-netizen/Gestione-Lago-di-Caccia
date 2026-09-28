@@ -30,7 +30,7 @@ import {
 } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, User as UserIcon, Calendar as CalendarIcon, Info, Plus, X, Clock, Trash2, Filter, ArrowRight, ArrowLeftRight, ChevronDown, ShieldAlert, Target, Bird, Search, FileText } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { cn, formatUserName } from '../lib/utils';
 import { Link } from 'react-router-dom';
 import { useWeather } from '../hooks/useWeather';
 import { BirthdayBanner } from '../components/BirthdayBanner';
@@ -300,7 +300,7 @@ function TodayInfo({ day, assignments, isSilenced, title }: { day: Date, assignm
           {assignments.length > 0 ? (
             assignments.map(a => (
               <span key={a.id} className="bg-white/10 px-3 py-1 rounded border border-white/20 text-[10px] sm:text-xs font-black text-accent-gold uppercase tracking-widest whitespace-nowrap">
-                {a.assignedToName.split(' ')[0]}
+                {formatUserName(a.assignedToName)}
               </span>
             ))
           ) : (
@@ -481,8 +481,6 @@ export function HuntingCalendar() {
       }
     }
   }, [settings, hasInitializedDate]);
-
-  const getFirstName = (fullName: string) => fullName.split(' ')[0];
 
   const monthStart = startOfMonth(currentDate);
   const monthEnd = endOfMonth(monthStart);
@@ -1036,7 +1034,7 @@ export function HuntingCalendar() {
                             title={`${a.assignedToName} (${a.type})`}
                           >
                             <span className={cn("w-1 h-1 rounded-full shrink-0", a.type === 'socio' ? "bg-blue-500" : "bg-purple-500")} />
-                            <span className="truncate">{getFirstName(a.assignedToName)}</span>
+                            <span className="truncate">{formatUserName(a.assignedToName)}</span>
                           </div>
                         ))}
                         {assignments.length > 2 && (
@@ -1117,7 +1115,7 @@ export function HuntingCalendar() {
                                 a.type === 'socio' ? "bg-blue-500" : "bg-purple-500"
                               )} />
                               <span className="text-sm font-black text-slate-800 uppercase tracking-tight">
-                                {getFirstName(a.assignedToName)}
+                                {formatUserName(a.assignedToName)}
                               </span>
                             </div>
                             <div className="flex items-center gap-2">
@@ -1204,7 +1202,7 @@ export function HuntingCalendar() {
                               "w-2 h-2 rounded-full",
                               a.type === 'socio' ? "bg-blue-500" : "bg-purple-500"
                             )} />
-                            <span className="text-sm font-bold text-slate-800">{getFirstName(a.assignedToName)}</span>
+                            <span className="text-sm font-bold text-slate-800">{formatUserName(a.assignedToName)}</span>
                           </div>
                           <div className="flex items-center gap-2">
                             {a.id.includes('recurring') ? (
@@ -1306,7 +1304,7 @@ export function HuntingCalendar() {
                               {user.displayName[0]}
                             </div>
                             <div>
-                              <p className="font-bold text-slate-800 text-xs">{getFirstName(user.displayName)}</p>
+                              <p className="font-bold text-slate-800 text-xs">{formatUserName(user.displayName)}</p>
                               <p className="text-[9px] text-slate-400 uppercase font-bold tracking-widest leading-tight">{user.role}</p>
                             </div>
                           </div>
