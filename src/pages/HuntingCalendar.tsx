@@ -35,12 +35,41 @@ import { Link } from 'react-router-dom';
 import { useWeather } from '../hooks/useWeather';
 import { BirthdayBanner } from '../components/BirthdayBanner';
 
+const normalizeDateStr = (d: any): string => {
+  if (!d) return '';
+  if (typeof d === 'string') {
+    if (d.includes('/') || d.includes('.')) {
+      const parts = d.split(/[\/\.]/);
+      if (parts.length === 3) {
+        let year = parts[2].trim();
+        if (year.length === 2) year = '20' + year;
+        const month = parts[1].trim().padStart(2, '0');
+        const day = parts[0].trim().padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      }
+    }
+    if (/^\d{4}-\d{2}-\d{2}/.test(d)) {
+      return d.substring(0, 10);
+    }
+  }
+  try {
+    const parsed = new Date(d);
+    if (!isNaN(parsed.getTime())) {
+      return format(parsed, 'yyyy-MM-dd');
+    }
+  } catch (e) {}
+  return String(d);
+};
+
 const safeFormatDate = (dateStr: any, formatStr: string, options?: any) => {
   try {
     if (!dateStr) return '---';
     let parsed: Date;
     if (dateStr && typeof dateStr.toDate === 'function') {
       parsed = dateStr.toDate();
+    } else if (typeof dateStr === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      const [y, m, d] = dateStr.split('-').map(Number);
+      parsed = new Date(y, m - 1, d);
     } else {
       parsed = new Date(dateStr);
     }
@@ -321,7 +350,7 @@ export function HuntingCalendar() {
   const [settings, setSettings] = useState<LakeSettings | null>(null);
   const [huntingTimes, setHuntingTimes] = useState<HuntingTime[]>([]);
   const [huntingLimits, setHuntingLimits] = useState<HuntingLimit[]>([]);
-  const [showAllTimes, setShowAllTimes] = useState(false);
+  const [showAllTimes, setShowAllTimes] = useState(true);
   const [showAllLimits, setShowAllLimits] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [hideSilence, setHideSilence] = useState(true);
@@ -329,6 +358,8 @@ export function HuntingCalendar() {
   const [isAssigning, setIsAssigning] = useState(false);
   const [showSwapModal, setShowSwapModal] = useState(false);
   const [swapTargetDate, setSwapTargetDate] = useState<string>('');
+  const [hunterToRemove, setHunterToRemove] = useState<any | null>(null);
+  const [isRemoving, setIsRemoving] = useState(false);
 
   const handleDownload = async (e: React.MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault();
@@ -606,8 +637,26 @@ export function HuntingCalendar() {
     await handleAddHunter(user);
   };
 
-  const onUnassign = async (a: any) => {
-    await handleRemoveHunter(a.assignedToUid, a.assignedToName, a.type, Boolean(a.isRecurring));
+  const onUnassign = (a: any) => {
+    setHunterToRemove(a);
+  };
+
+  const confirmRemoveHunter = async () => {
+    if (!hunterToRemove) return;
+    setIsRemoving(true);
+    try {
+      await handleRemoveHunter(
+        hunterToRemove.assignedToUid,
+        hunterToRemove.assignedToName,
+        hunterToRemove.type,
+        Boolean(hunterToRemove.isRecurring)
+      );
+      setHunterToRemove(null);
+    } catch (error) {
+      console.error("Error removing hunter:", error);
+    } finally {
+      setIsRemoving(false);
+    }
   };
 
   const onSwap = async () => {
@@ -769,104 +818,130 @@ export function HuntingCalendar() {
             <DuckHuntAI latitude={settings?.latitude} longitude={settings?.longitude} />
           )}
           
-          {huntingTimes.length > 0 && (
-            <div className="card-polish overflow-hidden !p-0 border-t-4 border-lake-green">
-              <motion.div 
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                className="p-4 bg-off-white border-b border-slate-100 flex items-center justify-between"
-              >
-                <div className="flex items-center gap-2">
-                  <Clock size={16} className="text-lake-green" />
-                  <h3 className="text-xs font-black text-slate-gray uppercase tracking-widest">Tabella Orari e Periodi di Caccia</h3>
-                </div>
-              </motion.div>
-              <div className="">
-                <table className="w-full text-left border-collapse table-fixed">
-                  <thead className="bg-white border-b border-slate-100">
-                    <tr className="text-[0.55rem] font-black text-slate-400 uppercase tracking-widest">
-                      <th className="px-2 py-3 w-[28%] text-center">Dal</th>
-                      <th className="px-2 py-3 w-[26%] text-center">Al</th>
-                      <th className="px-2 py-3 w-[23%] text-center">Alba</th>
-                      <th className="px-2 py-3 w-[23%] text-center">Tramonto</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(showAllTimes ? huntingTimes : huntingTimes.slice(0, 2)).map((time, idx) => {
-                      const isCurrent = idx === 0;
-                      return (
-                        <tr 
-                          key={time.id} 
-                          className={cn(
-                            "transition-all duration-300",
-                            isCurrent 
-                              ? "bg-emerald-50/60 ring-2 ring-inset ring-lake-green relative z-10 shadow-sm" 
-                              : "hover:bg-slate-50/50 border-b border-slate-50 last:border-0"
-                          )}
-                        >
-                          <td className="px-1 py-3 whitespace-nowrap text-center align-bottom">
-                            <div className="flex flex-col items-center">
-                              {isCurrent && <span className="text-[7px] font-black text-lake-green uppercase tracking-tighter mb-0.5">In corso</span>}
-                              <span className={cn(
-                                "font-black leading-none",
-                                isCurrent ? "text-xs text-lake-green" : "text-[10px] text-slate-700"
-                              )}>
-                                {safeFormatDate(time.startDate, 'dd/MM/yy', { locale: it })}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="px-1 py-3 whitespace-nowrap align-bottom text-center">
-                            <div className="pb-[1px]">
-                              <span className={cn(
-                                "font-bold leading-none",
-                                isCurrent ? "text-xs text-slate-900" : "text-[10px] text-slate-600"
-                              )}>
-                                {safeFormatDate(time.endDate, 'dd/MM/yy', { locale: it })}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="px-1 py-3 whitespace-nowrap align-bottom text-center">
-                            <div className="pb-0.5">
+          {huntingTimes.length > 0 && (() => {
+            const todayStr = format(new Date(), 'yyyy-MM-dd');
+            const sortedTimes = [...huntingTimes].sort((a, b) => {
+              const sa = normalizeDateStr(a.startDate);
+              const sb = normalizeDateStr(b.startDate);
+              return sa.localeCompare(sb);
+            });
+            const activePeriodIndex = sortedTimes.findIndex(t => {
+              const s = normalizeDateStr(t.startDate);
+              const e = normalizeDateStr(t.endDate);
+              return Boolean(s && e && todayStr >= s && todayStr <= e);
+            });
+            const activePeriod = activePeriodIndex !== -1 ? sortedTimes[activePeriodIndex] : null;
+            const timesToRender = showAllTimes ? sortedTimes : (activePeriod ? [activePeriod] : sortedTimes.slice(0, 3));
+
+            return (
+              <div className="card-polish overflow-hidden !p-0 border-t-4 border-lake-green shadow-sm">
+                <motion.div 
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  className="p-4 bg-off-white border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+                >
+                  <div className="flex items-center gap-2">
+                    <Clock size={16} className="text-lake-green shrink-0" />
+                    <h3 className="text-xs font-black text-slate-gray uppercase tracking-widest">Tabella Orari e Periodi di Caccia</h3>
+                  </div>
+                  {activePeriod && (
+                    <div className="flex items-center gap-1.5 self-start sm:self-auto">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                      <span className="text-[9px] font-black uppercase text-lake-green bg-emerald-100/60 border border-emerald-300/60 px-2 py-0.5 rounded-full tracking-wider">
+                        Periodo Attivo: {safeFormatDate(activePeriod.startDate, 'dd/MM/yy')} - {safeFormatDate(activePeriod.endDate, 'dd/MM/yy')}
+                      </span>
+                    </div>
+                  )}
+                </motion.div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse table-fixed min-w-[320px]">
+                    <thead className="bg-white border-b border-slate-100">
+                      <tr className="text-[0.55rem] font-black text-slate-400 uppercase tracking-widest">
+                        <th className="px-2 py-3 w-[28%] text-center">Dal</th>
+                        <th className="px-2 py-3 w-[26%] text-center">Al</th>
+                        <th className="px-2 py-3 w-[23%] text-center">Alba</th>
+                        <th className="px-2 py-3 w-[23%] text-center">Tramonto</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {timesToRender.map((time) => {
+                        const s = normalizeDateStr(time.startDate);
+                        const e = normalizeDateStr(time.endDate);
+                        const isCurrent = Boolean(s && e && todayStr >= s && todayStr <= e);
+                        return (
+                          <tr 
+                            key={time.id} 
+                            className={cn(
+                              "transition-all duration-300",
+                              isCurrent 
+                                ? "bg-emerald-50/90 ring-2 ring-inset ring-lake-green relative z-10 shadow-sm font-semibold" 
+                                : "hover:bg-slate-50/50 border-b border-slate-50 last:border-0"
+                            )}
+                          >
+                            <td className="px-1 py-3 whitespace-nowrap text-center align-middle">
+                              <div className="flex flex-col items-center justify-center">
+                                {isCurrent && (
+                                  <span className="inline-flex items-center gap-1 text-[7px] font-black text-white bg-lake-green px-1.5 py-0.5 rounded-sm uppercase tracking-wider mb-1 shadow-xs animate-pulse">
+                                    IN CORSO
+                                  </span>
+                                )}
+                                <span className={cn(
+                                  "leading-none",
+                                  isCurrent ? "text-xs font-black text-lake-green" : "text-[10px] font-bold text-slate-700"
+                                )}>
+                                  {safeFormatDate(time.startDate, 'dd/MM/yy', { locale: it })}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-1 py-3 whitespace-nowrap align-middle text-center">
+                              <div className="flex flex-col items-center justify-center">
+                                <span className={cn(
+                                  "leading-none",
+                                  isCurrent ? "text-xs font-black text-slate-900" : "text-[10px] font-bold text-slate-600"
+                                )}>
+                                  {safeFormatDate(time.endDate, 'dd/MM/yy', { locale: it })}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-1 py-3 whitespace-nowrap align-middle text-center">
                               <span className={cn(
                                 "font-black text-white px-2 py-1 rounded shadow-sm inline-block min-w-[42px]",
-                                isCurrent ? "bg-lake-green text-[11px]" : "bg-lake-green/50 text-[9px]"
+                                isCurrent ? "bg-lake-green text-[11px] ring-2 ring-lake-green/30" : "bg-lake-green/50 text-[9px]"
                               )}>
                                 {time.startTime}
                               </span>
-                            </div>
-                          </td>
-                          <td className="px-1 py-3 whitespace-nowrap align-bottom text-center">
-                            <div className="pb-0.5">
+                            </td>
+                            <td className="px-1 py-3 whitespace-nowrap align-middle text-center">
                               <span className={cn(
                                 "font-black text-white px-2 py-1 rounded shadow-sm inline-block min-w-[42px]",
-                                isCurrent ? "bg-rose-600 text-[11px]" : "bg-rose-600/50 text-[9px]"
+                                isCurrent ? "bg-rose-600 text-[11px] ring-2 ring-rose-300" : "bg-rose-600/50 text-[9px]"
                               )}>
                                 {time.endTime}
                               </span>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                
+                {sortedTimes.length > 3 && (
+                  <button
+                    onClick={() => setShowAllTimes(!showAllTimes)}
+                    className="w-full py-3 bg-white hover:bg-slate-50 border-t border-slate-100 flex items-center justify-center gap-2 transition-colors group cursor-pointer"
+                  >
+                    <span className="text-[10px] font-black text-slate-400 group-hover:text-lake-green uppercase tracking-[0.2em]">
+                      {showAllTimes ? 'Mostra solo periodo attivo' : `Mostra tutti i ${sortedTimes.length} periodi`}
+                    </span>
+                    <div className={cn("transition-transform duration-300", showAllTimes ? "rotate-180" : "")}>
+                      <ChevronDown size={14} className="text-slate-300 group-hover:text-lake-green" />
+                    </div>
+                  </button>
+                )}
               </div>
-              
-              {huntingTimes.length > 2 && (
-                <button
-                  onClick={() => setShowAllTimes(!showAllTimes)}
-                  className="w-full py-3 bg-white hover:bg-slate-50 border-t border-slate-100 flex items-center justify-center gap-2 transition-colors group"
-                >
-                  <span className="text-[10px] font-black text-slate-400 group-hover:text-lake-green uppercase tracking-[0.2em]">
-                    {showAllTimes ? 'Mostra meno periodi' : `Mostra altri ${huntingTimes.length - 2} periodi`}
-                  </span>
-                  <div className={cn("transition-transform duration-300", showAllTimes ? "rotate-180" : "")}>
-                    <ChevronDown size={14} className="text-slate-300 group-hover:text-lake-green" />
-                  </div>
-                </button>
-              )}
-            </div>
-          )}
+            );
+          })()}
 
           {huntingLimits.length > 0 || searchTerm ? (
             <div className="card-polish overflow-hidden !p-0 border-t-4 border-earth-brown animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -1185,10 +1260,11 @@ export function HuntingCalendar() {
                             {(profile?.role === 'admin' || profile?.role === 'socio') && (
                               <button 
                                 onClick={() => onUnassign(a)}
-                                className="text-rose-400 hover:text-rose-600 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                className="text-rose-500 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 p-1.5 rounded-lg transition-all flex items-center justify-center shadow-xs active:scale-95 cursor-pointer shrink-0"
                                 title="Rimuovi dalla giornata"
+                                aria-label="Rimuovi cacciatore dalla giornata"
                               >
-                                <Trash2 size={14} />
+                                <Trash2 size={15} />
                               </button>
                             )}
                           </div>
@@ -1270,10 +1346,11 @@ export function HuntingCalendar() {
                             {(profile?.role === 'admin' || profile?.role === 'socio') && (
                               <button 
                                 onClick={() => onUnassign(a)}
-                                className="text-rose-400 hover:text-rose-600 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                                title="Rimuovi"
+                                className="text-rose-500 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 p-1.5 rounded-lg transition-all flex items-center justify-center shadow-xs active:scale-95 cursor-pointer shrink-0"
+                                title="Rimuovi dalla giornata"
+                                aria-label="Rimuovi cacciatore"
                               >
-                                <Trash2 size={12} />
+                                <Trash2 size={13} />
                               </button>
                             )}
                             <span className="text-[8px] font-black uppercase text-slate-400 tracking-widest">
@@ -1380,6 +1457,89 @@ export function HuntingCalendar() {
             >
               Chiudi
             </button>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+
+    {/* Hunter Removal Confirmation Dialog */}
+    <AnimatePresence>
+      {hunterToRemove && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs"
+        >
+          <motion.div
+            initial={{ scale: 0.92, opacity: 0, y: 15 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 0.92, opacity: 0, y: 15 }}
+            className="bg-white rounded-2xl p-6 sm:p-7 max-w-md w-full shadow-2xl border border-slate-100 space-y-4 relative"
+          >
+            <button
+              onClick={() => setHunterToRemove(null)}
+              disabled={isRemoving}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+            >
+              <X size={20} />
+            </button>
+
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-rose-50 text-rose-600 rounded-xl">
+                <Trash2 size={24} />
+              </div>
+              <div>
+                <h4 className="text-lg font-black text-slate-800 leading-tight">Conferma Rimozione</h4>
+                <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Cacciatori del Giorno</p>
+              </div>
+            </div>
+
+            <div className="text-sm text-slate-600 leading-relaxed space-y-2">
+              <p>
+                Sei sicuro di voler rimuovere <strong className="text-slate-900 font-black">{formatUserName(hunterToRemove.assignedToName)}</strong> dalla giornata di{' '}
+                <strong className="text-slate-900 font-bold capitalize">
+                  {selectedDay ? format(selectedDay, 'EEEE dd MMMM yyyy', { locale: it }) : ''}
+                </strong>?
+              </p>
+              {hunterToRemove.isRecurring && (
+                <div className="p-3 bg-amber-50/80 rounded-xl border border-amber-200 text-xs text-amber-900 leading-relaxed font-medium">
+                  <span className="font-black uppercase tracking-wider block text-[9px] text-amber-800 mb-1">
+                    Nota Quota Fissa:
+                  </span>
+                  Questa azione registrerà l'assenza del cacciatore per questa specifica giornata nel conteggio presenze, senza modificare le sue altre giornate fisse della stagione.
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setHunterToRemove(null)}
+                disabled={isRemoving}
+                className="px-4 py-2 text-xs font-bold text-slate-500 hover:text-slate-800 transition-colors uppercase tracking-wider cursor-pointer"
+              >
+                Annulla
+              </button>
+              <button
+                type="button"
+                onClick={confirmRemoveHunter}
+                disabled={isRemoving}
+                className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white text-xs font-black uppercase tracking-wider rounded-xl shadow-md shadow-rose-600/20 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {isRemoving ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Rimozione...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={14} />
+                    Sì, Rimuovi
+                  </>
+                )}
+              </button>
+            </div>
           </motion.div>
         </motion.div>
       )}

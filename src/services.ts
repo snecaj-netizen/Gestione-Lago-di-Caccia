@@ -65,6 +65,18 @@ const triggerMockSubscribers = (col: string) => {
   }
 };
 
+export const fallbackHuntingTimes: HuntingTime[] = [
+  { id: 't1', startDate: '2026-09-20', endDate: '2026-09-30', startTime: '06:00', endTime: '18:45' },
+  { id: 't2', startDate: '2026-10-01', endDate: '2026-10-15', startTime: '06:15', endTime: '18:15' },
+  { id: 't3', startDate: '2026-10-16', endDate: '2026-10-31', startTime: '06:30', endTime: '17:45' },
+  { id: 't4', startDate: '2026-11-01', endDate: '2026-11-15', startTime: '06:45', endTime: '17:15' },
+  { id: 't5', startDate: '2026-11-16', endDate: '2026-11-30', startTime: '07:00', endTime: '17:00' },
+  { id: 't6', startDate: '2026-12-01', endDate: '2026-12-15', startTime: '07:15', endTime: '16:45' },
+  { id: 't7', startDate: '2026-12-16', endDate: '2026-12-31', startTime: '07:30', endTime: '16:45' },
+  { id: 't8', startDate: '2027-01-01', endDate: '2027-01-15', startTime: '07:30', endTime: '17:00' },
+  { id: 't9', startDate: '2027-01-16', endDate: '2027-01-31', startTime: '07:15', endTime: '17:15' }
+];
+
 // Initial seeds for mock database
 if (typeof window !== 'undefined') {
   try {
@@ -212,19 +224,14 @@ if (typeof window !== 'undefined') {
   } catch (e) {
     console.error(e);
   }
-  if (!safeLocalStorage.getItem('lake_db_hunting_times')) {
-    safeLocalStorage.setItem('lake_db_hunting_times', JSON.stringify([
-      { id: 't1', startDate: '2026-09-01', endDate: '2026-09-15', startTime: '05:45', endTime: '19:15' },
-      { id: 't2', startDate: '2026-09-16', endDate: '2026-09-30', startTime: '06:00', endTime: '18:45' },
-      { id: 't3', startDate: '2026-10-01', endDate: '2026-10-15', startTime: '06:15', endTime: '18:15' },
-      { id: 't4', startDate: '2026-10-16', endDate: '2026-10-31', startTime: '06:30', endTime: '17:45' },
-      { id: 't5', startDate: '2026-11-01', endDate: '2026-11-15', startTime: '06:45', endTime: '17:15' },
-      { id: 't6', startDate: '2026-11-16', endDate: '2026-11-30', startTime: '07:00', endTime: '17:00' },
-      { id: 't7', startDate: '2026-12-01', endDate: '2026-12-15', startTime: '07:15', endTime: '16:45' },
-      { id: 't8', startDate: '2026-12-16', endDate: '2026-12-31', startTime: '07:30', endTime: '16:45' },
-      { id: 't9', startDate: '2027-01-01', endDate: '2027-01-15', startTime: '07:30', endTime: '17:00' },
-      { id: 't10', startDate: '2027-01-16', endDate: '2027-01-31', startTime: '07:15', endTime: '17:15' }
-    ]));
+
+  try {
+    const existing = safeLocalStorage.getItem('lake_db_hunting_times');
+    if (!existing || JSON.parse(existing).length === 0 || JSON.parse(existing)[0]?.startDate === '2026-09-01') {
+      safeLocalStorage.setItem('lake_db_hunting_times', JSON.stringify(fallbackHuntingTimes));
+    }
+  } catch (e) {
+    safeLocalStorage.setItem('lake_db_hunting_times', JSON.stringify(fallbackHuntingTimes));
   }
   if (!safeLocalStorage.getItem('lake_db_recipes')) {
     safeLocalStorage.setItem('lake_db_recipes', JSON.stringify([
@@ -357,16 +364,36 @@ export const cleanData = (data: any) => {
 };
 
 export const subscribeToHuntingTimes = (callback: (times: HuntingTime[]) => void) => {
+  const sortTimes = (list: HuntingTime[]): HuntingTime[] => {
+    return [...list].sort((a, b) => (a.startDate || '').localeCompare(b.startDate || ''));
+  };
+
   if (!db) {
     return subscribeMockCollection('hunting_times', (list) => {
-      const sorted = [...list].sort((a, b) => (a.startDate || '').localeCompare(b.startDate || ''));
-      callback(sorted);
+      const source = list && list.length > 0 ? list : fallbackHuntingTimes;
+      callback(sortTimes(source));
     });
   }
+
   const q = query(collection(db, 'hunting_times'), orderBy('startDate'));
   return onSnapshot(q, (snapshot) => {
-    callback(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as HuntingTime)));
-  }, (error) => handleFirestoreError(error, OperationType.LIST, 'hunting_times'));
+    const list = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as HuntingTime));
+    if (list.length === 0) {
+      const localList = getLocalCollection('hunting_times');
+      const toSeed = localList && localList.length > 0 ? localList : fallbackHuntingTimes;
+      toSeed.forEach(t => {
+        setDoc(doc(db!, 'hunting_times', t.id), cleanData(t)).catch(() => {});
+      });
+      callback(sortTimes(toSeed));
+      return;
+    }
+    saveLocalCollection('hunting_times', list);
+    callback(sortTimes(list));
+  }, (error) => {
+    console.warn("Firestore error in subscribeToHuntingTimes, falling back to local:", error);
+    const localList = getLocalCollection('hunting_times');
+    callback(sortTimes(localList && localList.length > 0 ? localList : fallbackHuntingTimes));
+  });
 };
 
 export const addHuntingTime = async (time: Omit<HuntingTime, 'id'>) => {
@@ -496,7 +523,7 @@ export const deletePhoto = async (photoId: string) => {
 };
 // Global Settings
 export const subscribeToSettings = (callback: (settings: LakeSettings) => void) => {
-  const defaultSeasonStart = '2026-09-01';
+  const defaultSeasonStart = '2026-09-20';
   const defaultSeasonEnd = '2027-01-31';
 
   if (!db) {
@@ -537,12 +564,14 @@ export const subscribeToSettings = (callback: (settings: LakeSettings) => void) 
   return onSnapshot(doc(db, 'settings', 'global'), (snapshot) => {
     if (snapshot.exists()) {
       const data = snapshot.data() as LakeSettings;
+      const sStart = data.seasonStart && data.seasonStart !== data.seasonEnd ? data.seasonStart : defaultSeasonStart;
+      const sEnd = data.seasonEnd && data.seasonStart !== data.seasonEnd ? data.seasonEnd : defaultSeasonEnd;
       callback({
         latitude: 45.4642,
         longitude: 9.1900,
-        seasonStart: defaultSeasonStart,
-        seasonEnd: defaultSeasonEnd,
-        ...data
+        ...data,
+        seasonStart: sStart,
+        seasonEnd: sEnd
       });
     } else {
       // Create defaults if not exists
