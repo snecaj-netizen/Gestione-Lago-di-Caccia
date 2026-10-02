@@ -885,15 +885,16 @@ export const unassignHuntingDay = async (id: string) => {
 export const getAssignedHuntersForDate = (
   dateStr: string,
   allHuntingDays: HuntingDay[],
-  allUsers: UserProfile[]
+  allUsers: UserProfile[],
+  lakeSettings?: LakeSettings | null
 ): { uid: string; displayName: string; role: 'admin' | 'socio' | 'quotista' }[] => {
   if (!dateStr) return [];
   
   // Check season bounds
   const settingsList = getLocalCollection('settings');
   const globalSetting = settingsList.find((s: any) => s.id === 'global');
-  const start = globalSetting?.seasonStart || '2026-09-01';
-  const end = globalSetting?.seasonEnd || '2027-01-31';
+  const start = lakeSettings?.seasonStart || globalSetting?.seasonStart || '2026-09-01';
+  const end = lakeSettings?.seasonEnd || globalSetting?.seasonEnd || '2027-01-31';
   if (dateStr < start || dateStr > end) {
     return [];
   }

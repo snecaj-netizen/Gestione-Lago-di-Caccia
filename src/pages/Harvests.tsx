@@ -205,7 +205,7 @@ export function Harvests() {
   }, [highlightId, loading, items]);
 
   // Calculate assigned hunters for the selected date
-  const assignedHuntersForSelectedDate = getAssignedHuntersForDate(formData.date, huntingDays, users);
+  const assignedHuntersForSelectedDate = getAssignedHuntersForDate(formData.date, huntingDays, users, settings);
   
   // Permission check: Admin can insert for any day; Non-admin can only insert if assigned to that day
   const isUserAssignedToSelectedDate = Boolean(profile && assignedHuntersForSelectedDate.some(h => h.uid === profile.uid));
@@ -240,7 +240,7 @@ export function Harvests() {
     if (!profile) return;
     
     // Check permission for the selected date
-    const assignedHunters = getAssignedHuntersForDate(formData.date, huntingDays, users);
+    const assignedHunters = getAssignedHuntersForDate(formData.date, huntingDays, users, settings);
     const isAssigned = assignedHunters.some(h => h.uid === profile.uid);
 
     if (profile.role !== 'admin' && !isAssigned) {
@@ -322,9 +322,57 @@ export function Harvests() {
     }
   };
 
+  // Set of dates where the current user was hunting / assigned to hunt
+  // Allows quotisti to see all harvests made on their hunting days
+  const userHuntingDateSet = React.useMemo(() => {
+    if (!profile) return new Set<string>();
+    if (profile.role === 'admin' || profile.role === 'socio') {
+      return null; // Admin and socio have access to all harvests
+    }
+
+    const huntingDates = new Set<string>();
+
+    // 1. All dates where this quotista registered an abbattimento themselves
+    items.forEach(h => {
+      if (h.hunterUid === profile.uid) {
+        huntingDates.add(h.date);
+      }
+    });
+
+    // 2. All dates where this quotista has a manual non-excluded assignment in hunting_days
+    huntingDays.forEach(hd => {
+      if (hd.assignedToUid === profile.uid && !hd.excluded) {
+        huntingDates.add(hd.date);
+      }
+    });
+
+    // 3. All dates present in harvests or hunting days where this quotista was assigned (manual or recurring)
+    const candidateDates = new Set<string>();
+    items.forEach(h => candidateDates.add(h.date));
+    huntingDays.forEach(hd => candidateDates.add(hd.date));
+
+    candidateDates.forEach(dateStr => {
+      if (!huntingDates.has(dateStr)) {
+        const assigned = getAssignedHuntersForDate(dateStr, huntingDays, users, settings);
+        if (assigned.some(h => h.uid === profile.uid)) {
+          huntingDates.add(dateStr);
+        }
+      }
+    });
+
+    return huntingDates;
+  }, [profile, items, huntingDays, users, settings]);
+
   const filteredItems = items.filter(item => {
     if (!profile) return false;
-    const matchesAuth = (profile.role === 'admin' || profile.role === 'socio') ? true : item.hunterUid === profile.uid;
+    // Authorization check:
+    // - Admin and socio see all harvests
+    // - Quotista sees all harvests made on their hunting days (as well as their own harvests)
+    const isQuotistaHuntingDay = userHuntingDateSet ? userHuntingDateSet.has(item.date) : false;
+    const matchesAuth = (profile.role === 'admin' || profile.role === 'socio')
+      ? true
+      : (item.hunterUid === profile.uid || isQuotistaHuntingDay);
+
     if (!matchesAuth) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -502,9 +550,13 @@ export function Harvests() {
         const dateStr = format(current, 'yyyy-MM-dd');
         
         // Check if this date has any assigned hunters (manual or recurring)
-        const assigned = getAssignedHuntersForDate(dateStr, huntingDays, users);
+        const assigned = getAssignedHuntersForDate(dateStr, huntingDays, users, settings);
         
-        if (assigned.length > 0) {
+        const isRelevantDay = (profile?.role === 'admin' || profile?.role === 'socio')
+          ? assigned.length > 0
+          : (userHuntingDateSet ? userHuntingDateSet.has(dateStr) : false);
+
+        if (isRelevantDay) {
           map.set(dateStr, { date: dateStr, anatidi: 0, altreSpecie: 0, total: 0 });
         }
         
@@ -537,7 +589,7 @@ export function Harvests() {
         ...item,
         formattedDate: safeFormatDate(item.date, 'dd MMM', { locale: it })
       }));
-  }, [filteredItems, huntingDays, users, settings, today]);
+  }, [filteredItems, huntingDays, users, settings, today, profile, userHuntingDateSet]);
 
   const canManage = (item: Harvest) => {
     if (!profile) return false;
@@ -583,8 +635,19 @@ export function Harvests() {
     <div className="space-y-8 pb-24 sm:pb-12">
       <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-serif text-lake-green">Catture & Abbattimenti</h1>
-          <p className="text-slate-gray font-medium">Registro dettagliato del prelievo venatorio</p>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h1 className="text-3xl font-serif text-lake-green">Catture & Abbattimenti</h1>
+            {profile?.role === 'quotista' && (
+              <span className="text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-900 border border-amber-300 px-2.5 py-0.5 rounded-full shadow-xs">
+                Tue Giornate di Caccia
+              </span>
+            )}
+          </div>
+          <p className="text-slate-gray font-medium">
+            {profile?.role === 'quotista'
+              ? 'Registro del prelievo venatorio nelle tue giornate di caccia'
+              : 'Registro dettagliato del prelievo venatorio'}
+          </p>
         </div>
       </header>
 
@@ -1119,7 +1182,9 @@ export function Harvests() {
           </div>
         ) : dateGroups.length === 0 ? (
           <div className="card-polish text-center py-12 text-slate-400 font-medium italic">
-            Nessun abbattimento trovato
+            {profile?.role === 'quotista' 
+              ? "Nessun abbattimento registrato nelle tue giornate di caccia" 
+              : "Nessun abbattimento trovato"}
           </div>
         ) : (
           dateGroups.map((dateGroup) => {
