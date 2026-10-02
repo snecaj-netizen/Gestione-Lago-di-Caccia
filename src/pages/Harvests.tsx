@@ -129,6 +129,7 @@ export function Harvests() {
   const [huntingDays, setHuntingDays] = useState<HuntingDay[]>([]);
   const [settings, setSettings] = useState<LakeSettings | null>(null);
   const [expandedSpecies, setExpandedSpecies] = useState<Record<string, boolean>>({});
+  const [expandedDates, setExpandedDates] = useState<Record<string, boolean>>({});
   const [searchQuery, setSearchQuery] = useState('');
   const [dailyTrendView, setDailyTrendView] = useState<'anatidi' | 'altre'>('anatidi');
   const [includeEmptyDays, setIncludeEmptyDays] = useState(false);
@@ -138,6 +139,13 @@ export function Harvests() {
     setExpandedSpecies(prev => ({
       ...prev,
       [key]: !prev[key]
+    }));
+  };
+
+  const toggleDateExpand = (date: string) => {
+    setExpandedDates(prev => ({
+      ...prev,
+      [date]: !prev[date]
     }));
   };
 
@@ -184,6 +192,7 @@ export function Harvests() {
       const targetItem = items.find(i => i.id === highlightId);
       if (targetItem) {
         const key = `${targetItem.date}_${targetItem.species}`;
+        setExpandedDates(prev => ({ ...prev, [targetItem.date]: true }));
         setExpandedSpecies(prev => ({ ...prev, [key]: true }));
       }
       setTimeout(() => {
@@ -1113,173 +1122,203 @@ export function Harvests() {
             Nessun abbattimento trovato
           </div>
         ) : (
-          dateGroups.map((dateGroup) => (
-            <div 
-              key={dateGroup.date}
-              className="bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden"
-            >
-              {/* Date Header */}
-              <div className="bg-slate-50/90 px-4 sm:px-6 py-3 border-b border-slate-200/70 flex items-center justify-between flex-wrap gap-2">
-                <div className="flex items-center gap-2.5">
-                  <div className="bg-lake-green/10 text-lake-green p-1.5 rounded-md">
-                    <Calendar size={16} />
-                  </div>
-                  <div>
-                    <h3 className="text-sm sm:text-base font-bold text-slate-900 capitalize">
-                      {safeFormatDate(dateGroup.date, 'EEEE d MMMM yyyy', { locale: it })}
-                    </h3>
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                      {dateGroup.speciesGroups.length} {dateGroup.speciesGroups.length === 1 ? 'specie prelevata' : 'specie prelevate'}
-                    </p>
-                  </div>
-                </div>
+          dateGroups.map((dateGroup) => {
+            const isDateExpanded = Boolean(expandedDates[dateGroup.date]);
 
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                    Totale Giornata:
-                  </span>
-                  <span className="px-2.5 py-0.5 rounded-full bg-lake-green text-white font-black text-xs sm:text-sm">
-                    {dateGroup.totalCount} {dateGroup.totalCount === 1 ? 'capo' : 'capi'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Species list within Date */}
-              <div className="divide-y divide-slate-100">
-                {dateGroup.speciesGroups.map((speciesGroup) => {
-                  const groupKey = `${dateGroup.date}_${speciesGroup.species}`;
-                  const isExpanded = Boolean(expandedSpecies[groupKey]);
-
-                  return (
-                    <div key={groupKey} className="transition-colors">
-                      {/* Species Row (Clickable accordion header) */}
-                      <button
-                        type="button"
-                        onClick={() => toggleSpeciesExpand(groupKey)}
-                        className={cn(
-                          "w-full px-4 sm:px-6 py-3.5 flex items-center justify-between text-left transition-colors hover:bg-slate-50/80",
-                          isExpanded ? "bg-lake-green/[0.03]" : ""
-                        )}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className={cn(
-                            "w-6 h-6 rounded-full flex items-center justify-center transition-transform",
-                            isExpanded ? "bg-lake-green text-white rotate-90" : "bg-slate-100 text-slate-500"
-                          )}>
-                            <ChevronRight size={14} />
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <Target size={14} className="text-lake-green opacity-70" />
-                              <span className="text-sm sm:text-base font-bold text-lake-green">
-                                {speciesGroup.species}
-                              </span>
-                            </div>
-                            <span className="text-[11px] font-semibold text-slate-400 ml-5.5">
-                              {speciesGroup.items.length} {speciesGroup.items.length === 1 ? 'cacciatore coinvolto' : 'cacciatori coinvolti'} • Clicca per visualizzare
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-3">
-                          <div className="text-right">
-                            <span className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
-                              {speciesGroup.totalCount}
-                            </span>
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">
-                              {speciesGroup.totalCount === 1 ? 'capo' : 'capi'}
-                            </span>
-                          </div>
-                        </div>
-                      </button>
-
-                      {/* Hunters Breakdown (Accordion Body) */}
-                      <AnimatePresence>
-                        {isExpanded && (
-                          <motion.div
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: 'auto' }}
-                            exit={{ opacity: 0, height: 0 }}
-                            className="overflow-hidden bg-slate-50/50 border-t border-slate-100 px-4 sm:px-6 py-3"
-                          >
-                            <div className="overflow-x-auto">
-                              <table className="w-full text-left">
-                                <thead>
-                                  <tr className="text-[10px] font-black uppercase tracking-wider text-slate-400 border-b border-slate-200/60 pb-1">
-                                    <th className="py-1.5 pl-2">Cacciatore</th>
-                                    <th className="py-1.5 px-3 text-center">Specie</th>
-                                    <th className="py-1.5 pr-2 text-right">Catture Assegnate</th>
-                                    <th className="py-1.5 pr-2 text-right w-20">Azioni</th>
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                  {speciesGroup.items.map((item) => (
-                                    <tr 
-                                      key={item.id}
-                                      id={`harvest-${item.id}`}
-                                      className={cn(
-                                        "hover:bg-white/80 transition-colors",
-                                        item.id === highlightId ? "bg-lake-green/10" : ""
-                                      )}
-                                    >
-                                      <td className="py-2.5 pl-2 font-bold text-xs sm:text-sm text-slate-800 flex items-center gap-2">
-                                        <div className="w-6 h-6 rounded-full bg-slate-200/80 text-slate-600 flex items-center justify-center text-[10px] font-bold shrink-0">
-                                          {item.hunterName.charAt(0).toUpperCase()}
-                                        </div>
-                                        <span>{formatUserName(item.hunterName)}</span>
-                                        {profile?.uid === item.hunterUid && (
-                                          <span className="text-[9px] font-extrabold uppercase tracking-wider text-lake-green bg-lake-green/10 px-1.5 py-0.5 rounded">
-                                            Tu
-                                          </span>
-                                        )}
-                                      </td>
-                                      <td className="py-2.5 px-3 text-center text-xs font-semibold text-slate-500">
-                                        {item.species}
-                                      </td>
-                                      <td className="py-2.5 pr-2 text-right font-black text-sm sm:text-base text-slate-900">
-                                        {item.count} <span className="text-[10px] font-bold text-slate-400">{item.count === 1 ? 'capo' : 'capi'}</span>
-                                      </td>
-                                      <td className="py-2.5 pr-2 text-right whitespace-nowrap">
-                                        {canManage(item) ? (
-                                          <div className="flex items-center justify-end gap-1">
-                                            <button 
-                                              onClick={() => handleOpenEdit(item)}
-                                              className="p-1 rounded hover:bg-slate-200/60 text-slate-400 hover:text-lake-green transition-colors"
-                                              title="Modifica quota"
-                                              aria-label="Modifica"
-                                            >
-                                              <Edit2 size={13} />
-                                            </button>
-                                            <button 
-                                              onClick={() => {
-                                                setItemToDelete(item);
-                                                setShowDeleteConfirm(true);
-                                              }}
-                                              className="p-1 rounded hover:bg-rose-100 text-slate-400 hover:text-rose-600 transition-colors"
-                                              title="Elimina"
-                                              aria-label="Elimina"
-                                            >
-                                              <Trash2 size={13} />
-                                            </button>
-                                          </div>
-                                        ) : (
-                                          <span className="text-[10px] text-slate-300 italic">—</span>
-                                        )}
-                                      </td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
+            return (
+              <div 
+                key={dateGroup.date}
+                className="bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden"
+              >
+                {/* Date Header (Clickable accordion header) */}
+                <button
+                  type="button"
+                  onClick={() => toggleDateExpand(dateGroup.date)}
+                  className={cn(
+                    "w-full bg-slate-50/90 px-4 sm:px-6 py-3.5 border-b flex items-center justify-between text-left transition-colors hover:bg-slate-100/80",
+                    isDateExpanded ? "border-slate-200/70 bg-slate-100/60" : "border-transparent"
+                  )}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={cn(
+                      "w-6 h-6 rounded-full flex items-center justify-center transition-transform",
+                      isDateExpanded ? "bg-lake-green text-white rotate-90" : "bg-slate-200 text-slate-600"
+                    )}>
+                      <ChevronRight size={14} />
                     </div>
-                  );
-                })}
+                    <div className="flex items-center gap-2.5">
+                      <div className="bg-lake-green/10 text-lake-green p-1.5 rounded-md">
+                        <Calendar size={16} />
+                      </div>
+                      <div>
+                        <h3 className="text-sm sm:text-base font-bold text-slate-900 capitalize">
+                          {safeFormatDate(dateGroup.date, 'EEEE d MMMM yyyy', { locale: it })}
+                        </h3>
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                          {dateGroup.speciesGroups.length} {dateGroup.speciesGroups.length === 1 ? 'specie prelevata' : 'specie prelevate'} • Clicca per {isDateExpanded ? 'chiudere' : 'aprire'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <div className="text-right">
+                      <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mr-2">
+                        Totale Giornata:
+                      </span>
+                      <span className="px-2.5 py-0.5 rounded-full bg-lake-green text-white font-black text-xs sm:text-sm">
+                        {dateGroup.totalCount} {dateGroup.totalCount === 1 ? 'capo' : 'capi'}
+                      </span>
+                    </div>
+                  </div>
+                </button>
+
+                {/* Species list within Date (Accordion Body) */}
+                <AnimatePresence>
+                  {isDateExpanded && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="overflow-hidden divide-y divide-slate-100"
+                    >
+                      {dateGroup.speciesGroups.map((speciesGroup) => {
+                        const groupKey = `${dateGroup.date}_${speciesGroup.species}`;
+                        const isExpanded = Boolean(expandedSpecies[groupKey]);
+
+                        return (
+                          <div key={groupKey} className="transition-colors">
+                            {/* Species Row (Clickable accordion header) */}
+                            <button
+                              type="button"
+                              onClick={() => toggleSpeciesExpand(groupKey)}
+                              className={cn(
+                                "w-full px-4 sm:px-6 py-3.5 flex items-center justify-between text-left transition-colors hover:bg-slate-50/80",
+                                isExpanded ? "bg-lake-green/[0.03]" : ""
+                              )}
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className={cn(
+                                  "w-6 h-6 rounded-full flex items-center justify-center transition-transform",
+                                  isExpanded ? "bg-lake-green text-white rotate-90" : "bg-slate-100 text-slate-500"
+                                )}>
+                                  <ChevronRight size={14} />
+                                </div>
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <Target size={14} className="text-lake-green opacity-70" />
+                                    <span className="text-sm sm:text-base font-bold text-lake-green">
+                                      {speciesGroup.species}
+                                    </span>
+                                  </div>
+                                  <span className="text-[11px] font-semibold text-slate-400 ml-5.5">
+                                    {speciesGroup.items.length} {speciesGroup.items.length === 1 ? 'cacciatore coinvolto' : 'cacciatori coinvolti'} • Clicca per visualizzare
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-3">
+                                <div className="text-right">
+                                  <span className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
+                                    {speciesGroup.totalCount}
+                                  </span>
+                                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">
+                                    {speciesGroup.totalCount === 1 ? 'capo' : 'capi'}
+                                  </span>
+                                </div>
+                              </div>
+                            </button>
+
+                            {/* Hunters Breakdown (Accordion Body) */}
+                            <AnimatePresence>
+                              {isExpanded && (
+                                <motion.div
+                                  initial={{ opacity: 0, height: 0 }}
+                                  animate={{ opacity: 1, height: 'auto' }}
+                                  exit={{ opacity: 0, height: 0 }}
+                                  className="overflow-hidden bg-slate-50/50 border-t border-slate-100 px-4 sm:px-6 py-3"
+                                >
+                                  <div className="overflow-x-auto">
+                                    <table className="w-full text-left">
+                                      <thead>
+                                        <tr className="text-[10px] font-black uppercase tracking-wider text-slate-400 border-b border-slate-200/60 pb-1">
+                                          <th className="py-1.5 pl-2">Cacciatore</th>
+                                          <th className="py-1.5 px-3 text-center">Specie</th>
+                                          <th className="py-1.5 pr-2 text-right">Catture Assegnate</th>
+                                          <th className="py-1.5 pr-2 text-right w-20">Azioni</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-slate-100">
+                                        {speciesGroup.items.map((item) => (
+                                          <tr 
+                                            key={item.id}
+                                            id={`harvest-${item.id}`}
+                                            className={cn(
+                                              "hover:bg-white/80 transition-colors",
+                                              item.id === highlightId ? "bg-lake-green/10" : ""
+                                            )}
+                                          >
+                                            <td className="py-2.5 pl-2 font-bold text-xs sm:text-sm text-slate-800 flex items-center gap-2">
+                                              <div className="w-6 h-6 rounded-full bg-slate-200/80 text-slate-600 flex items-center justify-center text-[10px] font-bold shrink-0">
+                                                {item.hunterName.charAt(0).toUpperCase()}
+                                              </div>
+                                              <span>{formatUserName(item.hunterName)}</span>
+                                              {profile?.uid === item.hunterUid && (
+                                                <span className="text-[9px] font-extrabold uppercase tracking-wider text-lake-green bg-lake-green/10 px-1.5 py-0.5 rounded">
+                                                  Tu
+                                                </span>
+                                              )}
+                                            </td>
+                                            <td className="py-2.5 px-3 text-center text-xs font-semibold text-slate-500">
+                                              {item.species}
+                                            </td>
+                                            <td className="py-2.5 pr-2 text-right font-black text-sm sm:text-base text-slate-900">
+                                              {item.count} <span className="text-[10px] font-bold text-slate-400">{item.count === 1 ? 'capo' : 'capi'}</span>
+                                            </td>
+                                            <td className="py-2.5 pr-2 text-right whitespace-nowrap">
+                                              {canManage(item) ? (
+                                                <div className="flex items-center justify-end gap-1">
+                                                  <button 
+                                                    onClick={() => handleOpenEdit(item)}
+                                                    className="p-1 rounded hover:bg-slate-200/60 text-slate-400 hover:text-lake-green transition-colors"
+                                                    title="Modifica quota"
+                                                    aria-label="Modifica"
+                                                  >
+                                                    <Edit2 size={13} />
+                                                  </button>
+                                                  <button 
+                                                    onClick={() => {
+                                                      setItemToDelete(item);
+                                                      setShowDeleteConfirm(true);
+                                                    }}
+                                                    className="p-1 rounded hover:bg-rose-100 text-slate-400 hover:text-rose-600 transition-colors"
+                                                    title="Elimina"
+                                                    aria-label="Elimina"
+                                                  >
+                                                    <Trash2 size={13} />
+                                                  </button>
+                                                </div>
+                                              ) : (
+                                                <span className="text-[10px] text-slate-300 italic">—</span>
+                                              )}
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                          </div>
+                        );
+                      })}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </section>
 

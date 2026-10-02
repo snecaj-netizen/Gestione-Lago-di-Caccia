@@ -861,8 +861,10 @@ export const getAssignedHuntersForDate = (
   if (!dateStr) return [];
   const list: { uid: string; displayName: string; role: 'admin' | 'socio' | 'quotista' }[] = [];
   
-  // 1. Manual assignments
-  const manuals = allHuntingDays.filter(d => d.date === dateStr);
+  const dateHuntingDays = allHuntingDays.filter(d => d.date === dateStr);
+
+  // 1. Manual assignments (that are not excluded)
+  const manuals = dateHuntingDays.filter(d => !d.excluded);
   manuals.forEach(m => {
     const matchedUser = allUsers.find(u => u.uid === m.assignedToUid);
     list.push({
@@ -881,7 +883,10 @@ export const getAssignedHuntersForDate = (
       const dayOfWeek = parsedDate.getDay();
       const recurringUsers = allUsers.filter(u => u.isActive && (u.assignedDaysOfWeek || []).includes(dayOfWeek));
       recurringUsers.forEach(u => {
-        if (!manuals.some(m => m.assignedToUid === u.uid)) {
+        const isExcluded = dateHuntingDays.some(d => d.assignedToUid === u.uid && d.excluded);
+        const hasActiveManual = dateHuntingDays.some(d => d.assignedToUid === u.uid && !d.excluded);
+
+        if (!isExcluded && !hasActiveManual) {
           list.push({
             uid: u.uid,
             displayName: u.displayName,

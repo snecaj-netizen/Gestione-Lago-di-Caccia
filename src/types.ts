@@ -57,6 +57,7 @@ export interface HuntingDay {
   type: 'socio' | 'quotista';
   notes?: string;
   overrideQuota?: number;
+  excluded?: boolean;
 }
 
 export interface Transaction {

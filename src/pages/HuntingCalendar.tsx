@@ -513,50 +513,95 @@ export function HuntingCalendar() {
     }
   };
 
-  const dayAssignments = (date: Date): HuntingDay[] => {
-    const list: HuntingDay[] = [];
+  const dayAssignments = (date: Date): (HuntingDay & { isRecurring?: boolean })[] => {
+    const list: (HuntingDay & { isRecurring?: boolean })[] = [];
     const dateStr = format(date, 'yyyy-MM-dd');
+    const dayOfWeek = getDay(date);
+    const dateHuntingDays = huntingDays.filter(d => d.date === dateStr);
     
-    // 1. Manual assignments
-    const manuals = huntingDays.filter(d => d.date === dateStr);
-    list.push(...manuals);
+    // 1. Manual assignments (not excluded)
+    const manuals = dateHuntingDays.filter(d => !d.excluded);
+    manuals.forEach(m => {
+      const userObj = availableUsers.find(u => u.uid === m.assignedToUid);
+      const isRecurring = userObj && (userObj.assignedDaysOfWeek || []).includes(dayOfWeek);
+      list.push({
+        ...m,
+        isRecurring: Boolean(isRecurring)
+      });
+    });
 
     // 2. Automatic recurring assignments
-    const dayOfWeek = getDay(date);
     const recurringUsers = availableUsers.filter(u => u.isActive && (u.assignedDaysOfWeek || []).includes(dayOfWeek));
     
     recurringUsers.forEach(u => {
-      // Only add if not manually overwritten for this specific person
-      if (!manuals.some(m => m.assignedToUid === u.uid)) {
+      const isExcluded = dateHuntingDays.some(m => m.assignedToUid === u.uid && m.excluded);
+      const hasActiveManual = manuals.some(m => m.assignedToUid === u.uid);
+
+      if (!isExcluded && !hasActiveManual) {
         list.push({
           id: `recurring-${u.uid}-${dateStr}`,
           date: dateStr,
           assignedToUid: u.uid,
           assignedToName: u.displayName,
-          type: u.role === "quotista" ? "quotista" : "socio"
+          type: u.role === "quotista" ? "quotista" : "socio",
+          isRecurring: true
         });
       }
     });
     return list;
   };
 
-  const onAssign = async (userId: string) => {
+  const handleRemoveHunter = async (uid: string, name: string, type: string, isRecurring: boolean) => {
     if (!selectedDay) return;
+    const dateStr = format(selectedDay, 'yyyy-MM-dd');
+    const recordId = `${dateStr}_${uid}`;
 
-    const user = availableUsers.find(u => u.uid === userId);
-    if (!user) return;
-
-    await assignHuntingDay({
-      id: `${format(selectedDay, 'yyyy-MM-dd')}_${user.uid}`,
-      date: format(selectedDay, 'yyyy-MM-dd'),
-      assignedToUid: user.uid,
-      assignedToName: user.displayName,
-      type: user.role === 'socio' || user.role === 'admin' ? 'socio' : 'quotista'
-    });
+    if (isRecurring) {
+      await assignHuntingDay({
+        id: recordId,
+        date: dateStr,
+        assignedToUid: uid,
+        assignedToName: name,
+        type: type as any,
+        excluded: true
+      });
+    } else {
+      await unassignHuntingDay(recordId);
+      const existing = huntingDays.find(d => d.date === dateStr && d.assignedToUid === uid);
+      if (existing) {
+        await unassignHuntingDay(existing.id);
+      }
+    }
   };
 
-  const onUnassign = async (id: string) => {
-    await unassignHuntingDay(id);
+  const handleAddHunter = async (user: UserProfile) => {
+    if (!selectedDay) return;
+    const dateStr = format(selectedDay, 'yyyy-MM-dd');
+    const recordId = `${dateStr}_${user.uid}`;
+
+    const existingRecord = huntingDays.find(d => d.date === dateStr && d.assignedToUid === user.uid);
+    if (existingRecord && existingRecord.excluded) {
+      await unassignHuntingDay(existingRecord.id);
+    } else {
+      await assignHuntingDay({
+        id: recordId,
+        date: dateStr,
+        assignedToUid: user.uid,
+        assignedToName: user.displayName,
+        type: user.role === 'admin' || user.role === 'socio' ? 'socio' : 'quotista',
+        excluded: false
+      });
+    }
+  };
+
+  const onAssign = async (userId: string) => {
+    const user = availableUsers.find(u => u.uid === userId);
+    if (!user) return;
+    await handleAddHunter(user);
+  };
+
+  const onUnassign = async (a: any) => {
+    await handleRemoveHunter(a.assignedToUid, a.assignedToName, a.type, Boolean(a.isRecurring));
   };
 
   const onSwap = async () => {
@@ -1114,22 +1159,27 @@ export function HuntingCalendar() {
                                 "w-2 h-2 rounded-full",
                                 a.type === 'socio' ? "bg-blue-500" : "bg-purple-500"
                               )} />
-                              <span className="text-sm font-black text-slate-800 uppercase tracking-tight">
-                                {formatUserName(a.assignedToName)}
-                              </span>
+                              <div>
+                                <span className="text-sm font-black text-slate-800 uppercase tracking-tight block">
+                                  {formatUserName(a.assignedToName)}
+                                </span>
+                                <span className="text-[8px] text-slate-400 font-bold uppercase">
+                                  {a.isRecurring ? 'Quota Fissa' : 'Assegnazione Manuale'}
+                                </span>
+                              </div>
                             </div>
                             <div className="flex items-center gap-2">
-                              {a.id.includes('recurring') ? (
-                                <span className="text-[8px] font-black text-accent-gold uppercase tracking-widest">FISSO</span>
-                              ) : (
-                                (profile?.role === 'admin' || profile?.role === 'socio') && (
-                                  <button 
-                                    onClick={() => onUnassign(a.id)}
-                                    className="text-rose-400 hover:text-rose-600 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                                  >
-                                    <Trash2 size={14} />
-                                  </button>
-                                )
+                              {a.isRecurring && (
+                                <span className="text-[8px] font-black text-accent-gold uppercase tracking-widest mr-1">FISSO</span>
+                              )}
+                              {(profile?.role === 'admin' || profile?.role === 'socio') && (
+                                <button 
+                                  onClick={() => onUnassign(a)}
+                                  className="text-rose-400 hover:text-rose-600 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                  title="Rimuovi dalla giornata"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
                               )}
                             </div>
                           </div>
@@ -1205,18 +1255,17 @@ export function HuntingCalendar() {
                             <span className="text-sm font-bold text-slate-800">{formatUserName(a.assignedToName)}</span>
                           </div>
                           <div className="flex items-center gap-2">
-                            {a.id.includes('recurring') ? (
-                              <span className="text-[7px] font-black text-accent-gold uppercase tracking-tighter">FISSO</span>
-                            ) : (
-                              (profile?.role === 'admin' || profile?.role === 'socio') && (
-                                <button 
-                                  onClick={() => onUnassign(a.id)}
-                                  className="text-rose-400 hover:text-rose-600 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                                  title="Rimuovi"
-                                >
-                                  <Trash2 size={12} />
-                                </button>
-                              )
+                            {a.isRecurring && (
+                              <span className="text-[7px] font-black text-accent-gold uppercase tracking-tighter mr-1">FISSO</span>
+                            )}
+                            {(profile?.role === 'admin' || profile?.role === 'socio') && (
+                              <button 
+                                onClick={() => onUnassign(a)}
+                                className="text-rose-400 hover:text-rose-600 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                title="Rimuovi"
+                              >
+                                <Trash2 size={12} />
+                              </button>
                             )}
                             <span className="text-[8px] font-black uppercase text-slate-400 tracking-widest">
                               {a.type === 'socio' ? 'Socio' : 'Quotista'}
