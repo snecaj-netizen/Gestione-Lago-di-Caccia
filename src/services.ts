@@ -859,6 +859,16 @@ export const getAssignedHuntersForDate = (
   allUsers: UserProfile[]
 ): { uid: string; displayName: string; role: 'admin' | 'socio' | 'quotista' }[] => {
   if (!dateStr) return [];
+  
+  // Check season bounds
+  const settingsList = getLocalCollection('settings');
+  const globalSetting = settingsList.find((s: any) => s.id === 'global');
+  const start = globalSetting?.seasonStart || '2026-09-01';
+  const end = globalSetting?.seasonEnd || '2027-01-31';
+  if (dateStr < start || dateStr > end) {
+    return [];
+  }
+
   const list: { uid: string; displayName: string; role: 'admin' | 'socio' | 'quotista' }[] = [];
   
   const dateHuntingDays = allHuntingDays.filter(d => d.date === dateStr);

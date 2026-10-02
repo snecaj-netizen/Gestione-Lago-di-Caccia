@@ -502,18 +502,24 @@ export function HuntingCalendar() {
   const visibleHeaders = hideSilence ? itDays.filter((_, i) => i !== 1 && i !== 4) : itDays;
 
   const isInSeason = (date: Date) => {
-    if (!settings?.seasonStart || !settings?.seasonEnd) return true;
+    const defaultStart = '2026-09-01';
+    const defaultEnd = '2027-01-31';
+    const sStart = settings?.seasonStart || defaultStart;
+    const sEnd = settings?.seasonEnd || defaultEnd;
     try {
-      const start = parseISO(settings.seasonStart);
-      const end = parseISO(settings.seasonEnd);
-      if (isNaN(start.getTime()) || isNaN(end.getTime())) return true;
+      const start = parseISO(sStart);
+      const end = parseISO(sEnd);
+      if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+        return isWithinInterval(date, { start: parseISO(defaultStart), end: parseISO(defaultEnd) });
+      }
       return isWithinInterval(date, { start, end });
     } catch (e) {
-      return true;
+      return isWithinInterval(date, { start: parseISO(defaultStart), end: parseISO(defaultEnd) });
     }
   };
 
   const dayAssignments = (date: Date): (HuntingDay & { isRecurring?: boolean })[] => {
+    if (!isInSeason(date)) return [];
     const list: (HuntingDay & { isRecurring?: boolean })[] = [];
     const dateStr = format(date, 'yyyy-MM-dd');
     const dayOfWeek = getDay(date);
@@ -1052,24 +1058,27 @@ export function HuntingCalendar() {
                         "min-h-[64px] sm:min-h-[72px] p-1 border-r border-b border-slate-100 transition-all cursor-pointer relative flex flex-col justify-between",
                         !isCurrentMonth && "opacity-25",
                         isSelected && "ring-2 ring-inset ring-accent-gold z-10",
-                        isSilenced ? "bg-rose-50/30" : isOutOfSeason ? "bg-amber-50/20" : "bg-white hover:bg-slate-50/80"
+                        isOutOfSeason ? "bg-slate-100/70 opacity-60" : isSilenced ? "bg-rose-50/30" : "bg-white hover:bg-slate-50/80"
                       )}
                     >
                       <div className="flex justify-between items-center px-0.5 mb-1">
                         <span className={cn(
                           "text-[9px] font-bold h-4 w-4 flex items-center justify-center rounded-xs",
                           isToday ? "bg-accent-gold text-white font-black" : "text-slate-500",
-                          isSilenced && !isToday && "text-rose-400 font-normal"
+                          isSilenced && !isToday && !isOutOfSeason && "text-rose-400 font-normal",
+                          isOutOfSeason && "text-slate-400"
                         )}>
                           {format(day, 'd')}
                         </span>
-                        {isSilenced && (
+                        {isOutOfSeason ? (
+                          <span className="text-[6px] font-black uppercase tracking-tighter text-slate-400">Fuori Stagione</span>
+                        ) : isSilenced ? (
                           <span className="text-[7px] font-black uppercase tracking-tighter text-rose-400">Silenzio</span>
-                        )}
+                        ) : null}
                       </div>
 
                       <div className="flex flex-col gap-0.5 overflow-hidden">
-                        {assignments.slice(0, 2).map(a => (
+                        {!isOutOfSeason && assignments.slice(0, 2).map(a => (
                           <div 
                             key={a.id} 
                             className={cn(
@@ -1082,13 +1091,13 @@ export function HuntingCalendar() {
                             <span className="truncate">{formatUserName(a.assignedToName)}</span>
                           </div>
                         ))}
-                        {assignments.length > 2 && (
+                        {!isOutOfSeason && assignments.length > 2 && (
                           <span className="hidden sm:inline text-[7px] font-bold text-slate-400 text-center">
                             +{assignments.length - 2}
                           </span>
                         )}
                         <div className="flex sm:hidden flex-wrap justify-center gap-0.5 py-0.5">
-                          {assignments.map(a => (
+                          {!isOutOfSeason && assignments.map(a => (
                             <div 
                               key={a.id} 
                               className={cn(
@@ -1117,7 +1126,7 @@ export function HuntingCalendar() {
                   {selectedDay ? format(selectedDay, 'EEEE dd MMMM', { locale: it }) : 'Seleziona una data'}
                 </p>
               </div>
-              {selectedDay && isHuntingDay(selectedDay) && (profile?.role === 'admin' || profile?.role === 'socio') && (
+              {selectedDay && isHuntingDay(selectedDay) && isInSeason(selectedDay) && (profile?.role === 'admin' || profile?.role === 'socio') && (
                 <button 
                   onClick={() => setIsAssigning(true)}
                   className="bg-lake-green text-white p-2 rounded-lg hover:bg-lake-green/90 active:scale-95 transition-all shadow-sm"
@@ -1130,63 +1139,63 @@ export function HuntingCalendar() {
 
             {selectedDay ? (
               <div className="space-y-3">
-                {!isHuntingDay(selectedDay) ? (
+                {!isInSeason(selectedDay) ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-center">
+                    <div className="bg-amber-100 p-3 rounded-full text-amber-700 mb-2">
+                      <ShieldAlert size={24} />
+                    </div>
+                    <p className="text-xs font-black uppercase tracking-widest text-amber-800">Fuori dalla Stagione Venatoria</p>
+                    <p className="text-[10px] text-slate-500 mt-1 max-w-[220px]">
+                      La stagione venatoria 2026/2027 va dal {settings?.seasonStart ? format(parseISO(settings.seasonStart), 'dd/MM/yyyy') : '01/09/2026'} al {settings?.seasonEnd ? format(parseISO(settings.seasonEnd), 'dd/MM/yyyy') : '31/01/2027'}. Non è consentita la caccia.
+                    </p>
+                  </div>
+                ) : !isHuntingDay(selectedDay) ? (
                   <div className="flex flex-col items-center justify-center py-10 opacity-40">
                     <ShieldAlert size={32} className="text-rose-500 mb-2" />
                     <p className="text-[10px] font-black uppercase tracking-widest text-rose-500">Silenzio Venatorio (Martedì e Venerdì)</p>
                   </div>
                 ) : (
-                  <>
-                    {!isInSeason(selectedDay) && (
-                      <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-xs flex items-center gap-2">
-                        <ShieldAlert size={14} className="text-amber-600 shrink-0" />
-                        <span className="text-[11px] font-medium leading-tight">
-                          Data fuori dalla stagione venatoria ({settings?.seasonStart ? format(parseISO(settings.seasonStart), 'dd/MM/yyyy') : '-'} - {settings?.seasonEnd ? format(parseISO(settings.seasonEnd), 'dd/MM/yyyy') : '-'}).
-                        </span>
-                      </div>
-                    )}
-                    {dayAssignments(selectedDay).length === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-10 opacity-30">
-                        <UserIcon size={32} className="text-slate-300 mb-2" />
-                        <p className="text-xs font-bold uppercase tracking-widest">Nessun cacciatore</p>
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-1 gap-2">
-                        {dayAssignments(selectedDay).map(a => (
-                          <div key={a.id} className="flex items-center justify-between p-3 bg-slate-50 border border-slate-100 rounded-lg group">
-                            <div className="flex items-center gap-3">
-                              <div className={cn(
-                                "w-2 h-2 rounded-full",
-                                a.type === 'socio' ? "bg-blue-500" : "bg-purple-500"
-                              )} />
-                              <div>
-                                <span className="text-sm font-black text-slate-800 uppercase tracking-tight block">
-                                  {formatUserName(a.assignedToName)}
-                                </span>
-                                <span className="text-[8px] text-slate-400 font-bold uppercase">
-                                  {a.isRecurring ? 'Quota Fissa' : 'Assegnazione Manuale'}
-                                </span>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {a.isRecurring && (
-                                <span className="text-[8px] font-black text-accent-gold uppercase tracking-widest mr-1">FISSO</span>
-                              )}
-                              {(profile?.role === 'admin' || profile?.role === 'socio') && (
-                                <button 
-                                  onClick={() => onUnassign(a)}
-                                  className="text-rose-400 hover:text-rose-600 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                                  title="Rimuovi dalla giornata"
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              )}
+                  dayAssignments(selectedDay).length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-10 opacity-30">
+                      <UserIcon size={32} className="text-slate-300 mb-2" />
+                      <p className="text-xs font-bold uppercase tracking-widest">Nessun cacciatore</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-2">
+                      {dayAssignments(selectedDay).map(a => (
+                        <div key={a.id} className="flex items-center justify-between p-3 bg-slate-50 border border-slate-100 rounded-lg group">
+                          <div className="flex items-center gap-3">
+                            <div className={cn(
+                              "w-2 h-2 rounded-full",
+                              a.type === 'socio' ? "bg-blue-500" : "bg-purple-500"
+                            )} />
+                            <div>
+                              <span className="text-sm font-black text-slate-800 uppercase tracking-tight block">
+                                {formatUserName(a.assignedToName)}
+                              </span>
+                              <span className="text-[8px] text-slate-400 font-bold uppercase">
+                                {a.isRecurring ? 'Quota Fissa' : 'Assegnazione Manuale'}
+                              </span>
                             </div>
                           </div>
-                        ))}
-                      </div>
-                    )}
-                  </>
+                          <div className="flex items-center gap-2">
+                            {a.isRecurring && (
+                              <span className="text-[8px] font-black text-accent-gold uppercase tracking-widest mr-1">FISSO</span>
+                            )}
+                            {(profile?.role === 'admin' || profile?.role === 'socio') && (
+                              <button 
+                                onClick={() => onUnassign(a)}
+                                className="text-rose-400 hover:text-rose-600 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                title="Rimuovi dalla giornata"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )
                 )}
               </div>
             ) : (
