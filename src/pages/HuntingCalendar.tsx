@@ -350,7 +350,7 @@ export function HuntingCalendar() {
   const [settings, setSettings] = useState<LakeSettings | null>(null);
   const [huntingTimes, setHuntingTimes] = useState<HuntingTime[]>([]);
   const [huntingLimits, setHuntingLimits] = useState<HuntingLimit[]>([]);
-  const [showAllTimes, setShowAllTimes] = useState(true);
+  const [showAllTimes, setShowAllTimes] = useState(false);
   const [showAllLimits, setShowAllLimits] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [hideSilence, setHideSilence] = useState(true);
@@ -831,7 +831,7 @@ export function HuntingCalendar() {
               return Boolean(s && e && todayStr >= s && todayStr <= e);
             });
             const activePeriod = activePeriodIndex !== -1 ? sortedTimes[activePeriodIndex] : null;
-            const timesToRender = showAllTimes ? sortedTimes : (activePeriod ? [activePeriod] : sortedTimes.slice(0, 3));
+            const timesToRender = showAllTimes ? sortedTimes : (activePeriod ? [activePeriod] : sortedTimes.slice(0, 1));
 
             return (
               <div className="card-polish overflow-hidden !p-0 border-t-4 border-lake-green shadow-sm">
@@ -926,13 +926,13 @@ export function HuntingCalendar() {
                   </table>
                 </div>
                 
-                {sortedTimes.length > 3 && (
+                {sortedTimes.length > 1 && (
                   <button
                     onClick={() => setShowAllTimes(!showAllTimes)}
                     className="w-full py-3 bg-white hover:bg-slate-50 border-t border-slate-100 flex items-center justify-center gap-2 transition-colors group cursor-pointer"
                   >
                     <span className="text-[10px] font-black text-slate-400 group-hover:text-lake-green uppercase tracking-[0.2em]">
-                      {showAllTimes ? 'Mostra solo periodo attivo' : `Mostra tutti i ${sortedTimes.length} periodi`}
+                      {showAllTimes ? 'Mostra solo il periodo attivo' : `Mostra tutti i ${sortedTimes.length} periodi`}
                     </span>
                     <div className={cn("transition-transform duration-300", showAllTimes ? "rotate-180" : "")}>
                       <ChevronDown size={14} className="text-slate-300 group-hover:text-lake-green" />

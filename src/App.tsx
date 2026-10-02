@@ -834,31 +834,6 @@ function MainLayout() {
           <div className="hidden lg:block flex-1" />
 
           <div className="flex items-center gap-2 sm:gap-4">
-            {/* Regolazione Font Size (Hidden on mobile/tablet, shown on desktop menu / sidebars for mobile) */}
-            <div className="hidden md:flex items-center bg-slate-100 rounded-lg p-0.5 gap-0.5 shadow-sm border border-slate-200/50">
-              <button 
-                onClick={decreaseFontSize}
-                disabled={scaleIndex === 0}
-                className="p-1 sm:p-1.5 rounded hover:bg-white text-slate-700 disabled:opacity-30 disabled:hover:bg-transparent transition-all text-[11px] sm:text-xs font-black flex items-center justify-center min-w-[24px] sm:min-w-[28px] h-6 sm:h-[28px] cursor-pointer disabled:cursor-not-allowed active:scale-90"
-                title="Riduci testo"
-              >
-                A-
-              </button>
-              <span className="hidden sm:inline-block text-[10px] font-black text-slate-500 px-1.5 uppercase select-none min-w-[32px] text-center">
-                {fontScale}%
-              </span>
-              <button 
-                onClick={increaseFontSize}
-                disabled={scaleIndex === FONT_SCALES.length - 1}
-                className="p-1 sm:p-1.5 rounded hover:bg-white text-slate-700 disabled:opacity-30 disabled:hover:bg-transparent transition-all text-[11px] sm:text-xs font-black flex items-center justify-center min-w-[24px] sm:min-w-[28px] h-6 sm:h-[28px] cursor-pointer disabled:cursor-not-allowed active:scale-90"
-                title="Aumenta testo"
-              >
-                A+
-              </button>
-            </div>
-
-            <div className="hidden md:block h-8 w-[1px] bg-slate-100 mx-0.5 sm:mx-1" />
-
             <NotificationCenter isOpen={showNotifications} onToggle={toggleNotifications} />
             <div className="h-8 w-[1px] bg-slate-100 mx-1 hidden sm:block" />
             
