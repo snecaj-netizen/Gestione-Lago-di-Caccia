@@ -148,6 +148,7 @@ export interface HuntingLimit {
   seasonalLimit: number;
   huntingPeriod?: string;
   notes?: string;
+  isDeroga?: boolean;
   updatedAt: string;
 }
 

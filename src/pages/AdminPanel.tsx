@@ -14,8 +14,9 @@ import {
   Shield, UserCheck, UserX, Trash2, Mail, ShieldAlert, MapPin, Calendar, 
   Save, UserPlus, X, Wallet, Plus, Clock, Edit2, Upload, FileText, Eye, 
   Cake, BellRing, Download, Database, HardDriveDownload, CheckCircle2, 
-  Loader2, FileJson, Copy, Check, Info
+  Loader2, FileJson, Copy, Check, Info, Scale
 } from 'lucide-react';
+import { SPECIES_LIST } from './Harvests';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -62,6 +63,19 @@ export function AdminPanel() {
   const [extractedProspect, setExtractedProspect] = useState<Partial<HuntingLimit>[] | null>(null);
   const [editingLimitId, setEditingLimitId] = useState<string | null>(null);
   const [limitDraft, setLimitDraft] = useState<HuntingLimit | null>(null);
+
+  // Deroga species state (Moriglione, Pavoncella and other derogation species)
+  const [savingDerogaId, setSavingDerogaId] = useState<string | null>(null);
+  const [savedDerogaSuccessId, setSavedDerogaSuccessId] = useState<string | null>(null);
+  const [derogaDrafts, setDerogaDrafts] = useState<Record<string, { seasonalLimit?: number; dailyLimit?: number; huntingPeriod?: string; notes?: string }>>({});
+  const [newDerogaSpecies, setNewDerogaSpecies] = useState<string>('');
+  const [customDerogaSpecies, setCustomDerogaSpecies] = useState<string>('');
+  const [newDerogaSeasonalLimit, setNewDerogaSeasonalLimit] = useState<number>(4);
+  const [newDerogaDailyLimit, setNewDerogaDailyLimit] = useState<number>(2);
+  const [newDerogaPeriod, setNewDerogaPeriod] = useState<string>('15/09 - 31/01');
+  const [newDerogaNotes, setNewDerogaNotes] = useState<string>('Deroga ATC');
+  const [isAddingDeroga, setIsAddingDeroga] = useState<boolean>(false);
+  const [addDerogaSuccess, setAddDerogaSuccess] = useState<boolean>(false);
 
   const [cleaningTimesDb, setCleaningTimesDb] = useState(false);
   const [cleanTimesDbError, setCleanTimesDbError] = useState<string | null>(null);
@@ -530,6 +544,166 @@ export function AdminPanel() {
       setLimitDraft(null);
     } catch (error) {
       alert("Errore durante l'aggiornamento");
+    }
+  };
+
+  const isDerogaLimit = (limit: HuntingLimit) => {
+    if (limit.isDeroga === true) return true;
+    if (limit.notes && limit.notes.toLowerCase().includes('deroga')) return true;
+    const s = (limit.species || '').toLowerCase().trim();
+    return s === 'moriglione' || s === 'pavoncella';
+  };
+
+  const updateDerogaDraft = (id: string, field: 'seasonalLimit' | 'dailyLimit' | 'huntingPeriod' | 'notes', value: any) => {
+    setDerogaDrafts(prev => ({
+      ...prev,
+      [id]: {
+        ...(prev[id] || {}),
+        [field]: value
+      }
+    }));
+  };
+
+  const derogaLimits = React.useMemo(() => {
+    const list: HuntingLimit[] = [];
+    const seen = new Set<string>();
+
+    limits.forEach(l => {
+      if (isDerogaLimit(l)) {
+        list.push(l);
+        seen.add(l.species.toLowerCase().trim());
+      }
+    });
+
+    const defaultPeriod = settings?.seasonStart && settings?.seasonEnd 
+      ? `${safeFormatDate(settings.seasonStart, 'dd/MM/yyyy')} - ${safeFormatDate(settings.seasonEnd, 'dd/MM/yyyy')}` 
+      : '15/09 - 31/01';
+
+    // Ensure Moriglione is always present in deroga
+    if (!seen.has('moriglione')) {
+      const existingMoriglione = limits.find(l => (l.species || '').toLowerCase().trim() === 'moriglione');
+      list.push(existingMoriglione ? { ...existingMoriglione, isDeroga: true } : {
+        id: 'moriglione_deroga',
+        species: 'Moriglione',
+        dailyLimit: 4,
+        seasonalLimit: 4,
+        huntingPeriod: defaultPeriod,
+        notes: 'Deroga ATC',
+        isDeroga: true,
+        updatedAt: new Date().toISOString()
+      });
+      seen.add('moriglione');
+    }
+
+    // Ensure Pavoncella is always present in deroga
+    if (!seen.has('pavoncella')) {
+      const existingPavoncella = limits.find(l => (l.species || '').toLowerCase().trim() === 'pavoncella');
+      list.push(existingPavoncella ? { ...existingPavoncella, isDeroga: true } : {
+        id: 'pavoncella_deroga',
+        species: 'Pavoncella',
+        dailyLimit: 2,
+        seasonalLimit: 2,
+        huntingPeriod: defaultPeriod,
+        notes: 'Deroga ATC',
+        isDeroga: true,
+        updatedAt: new Date().toISOString()
+      });
+      seen.add('pavoncella');
+    }
+
+    return list.sort((a, b) => a.species.localeCompare(b.species));
+  }, [limits, settings]);
+
+  const candidateSpecies = React.useMemo(() => {
+    const inDeroga = new Set(derogaLimits.map(l => l.species.toLowerCase().trim()));
+    const all = Array.from(new Set([
+      ...SPECIES_LIST.filter(s => s !== 'Altro' && s !== 'Stampi'),
+      'Storno',
+      'Tortora',
+      'Piccione'
+    ])).sort();
+    return all.filter(s => !inDeroga.has(s.toLowerCase().trim()));
+  }, [derogaLimits]);
+
+  const handleSaveDerogaLimit = async (limit: HuntingLimit) => {
+    setSavingDerogaId(limit.id);
+    try {
+      const draft = derogaDrafts[limit.id];
+      const updatedLimit: HuntingLimit = {
+        ...limit,
+        seasonalLimit: draft?.seasonalLimit !== undefined ? draft.seasonalLimit : (typeof limit.seasonalLimit === 'number' ? limit.seasonalLimit : 0),
+        dailyLimit: draft?.dailyLimit !== undefined ? draft.dailyLimit : (typeof limit.dailyLimit === 'number' ? limit.dailyLimit : 0),
+        huntingPeriod: draft?.huntingPeriod !== undefined ? draft.huntingPeriod : (limit.huntingPeriod || ''),
+        notes: draft?.notes !== undefined ? draft.notes : (limit.notes || 'Deroga ATC'),
+        isDeroga: true,
+        updatedAt: new Date().toISOString()
+      };
+      await saveHuntingLimit(updatedLimit);
+      setSavedDerogaSuccessId(limit.id);
+      setTimeout(() => {
+        setSavedDerogaSuccessId(null);
+      }, 2500);
+    } catch (err) {
+      console.error("Error saving deroga limit:", err);
+      alert("Errore durante il salvataggio dei limiti di deroga.");
+    } finally {
+      setSavingDerogaId(null);
+    }
+  };
+
+  const handleRemoveFromDeroga = async (limit: HuntingLimit) => {
+    if (!window.confirm(`Rimuovere "${limit.species}" dall'elenco delle specie in deroga?`)) return;
+    try {
+      const updated: HuntingLimit = {
+        ...limit,
+        isDeroga: false,
+        notes: (limit.notes || '').replace(/deroga\s*atc/gi, '').trim(),
+        updatedAt: new Date().toISOString()
+      };
+      await saveHuntingLimit(updated);
+    } catch (err) {
+      console.error("Error removing from deroga:", err);
+      alert("Errore durante la rimozione.");
+    }
+  };
+
+  const handleAddDerogaSpecies = async () => {
+    const chosen = newDerogaSpecies === 'custom' ? customDerogaSpecies.trim() : newDerogaSpecies.trim();
+    if (!chosen) {
+      alert("Seleziona o specifica la specie da abilitare in deroga.");
+      return;
+    }
+
+    setIsAddingDeroga(true);
+    try {
+      const existing = limits.find(l => l.species.toLowerCase().trim() === chosen.toLowerCase().trim());
+      const id = existing ? existing.id : chosen.toLowerCase().replace(/\s+/g, '_').replace(/[^\w]/g, '') || Math.random().toString(36).substr(2, 9);
+
+      const defaultPeriod = settings?.seasonStart && settings?.seasonEnd 
+        ? `${safeFormatDate(settings.seasonStart, 'dd/MM/yyyy')} - ${safeFormatDate(settings.seasonEnd, 'dd/MM/yyyy')}` 
+        : '15/09 - 31/01';
+
+      const toSave: HuntingLimit = {
+        id,
+        species: chosen,
+        seasonalLimit: Number(newDerogaSeasonalLimit) || 0,
+        dailyLimit: Number(newDerogaDailyLimit) || 0,
+        huntingPeriod: newDerogaPeriod.trim() || (existing?.huntingPeriod || defaultPeriod),
+        notes: newDerogaNotes.trim() || 'Deroga ATC',
+        isDeroga: true,
+        updatedAt: new Date().toISOString()
+      };
+
+      await saveHuntingLimit(toSave);
+      setNewDerogaSpecies('');
+      setCustomDerogaSpecies('');
+      setAddDerogaSuccess(true);
+      setTimeout(() => setAddDerogaSuccess(false), 3000);
+    } catch (err) {
+      console.error("Error adding deroga species:", err);
+      alert("Errore durante l'attivazione della specie in deroga.");
+    } finally {
+      setIsAddingDeroga(false);
     }
   };
 
@@ -1141,7 +1315,14 @@ export function AdminPanel() {
                         className="text-sm font-black text-slate-800 uppercase tracking-tight border-b border-lake-green outline-none w-full mr-2"
                       />
                     ) : (
-                      <h4 className="text-sm font-black text-slate-800 uppercase tracking-tight">{limit.species}</h4>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <h4 className="text-sm font-black text-slate-800 uppercase tracking-tight">{limit.species}</h4>
+                        {isDerogaLimit(limit) && (
+                          <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300">
+                            Deroga
+                          </span>
+                        )}
+                      </div>
                     )}
                     <div className="flex gap-1">
                       {editingLimitId === limit.id ? (
@@ -1229,6 +1410,276 @@ export function AdminPanel() {
               )}
             </div>
           )}
+        </div>
+      </section>
+
+      {/* Specie Cacciabili in Deroga Section (Moriglione, Pavoncella e Altre) */}
+      <section className="card-polish !border-t-amber-500 shadow-sm">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center font-bold shrink-0">
+              <Scale size={22} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-lg font-bold text-slate-gray uppercase tracking-widest">
+                  Specie Cacciabili in Deroga
+                </h2>
+                <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 font-bold">
+                  Moriglione • Pavoncella • Deroghe ATC
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                Configurazione autonoma dei tetti massimi stagionali e giornalieri per la stagione attuale e le prossime stagioni venatorie.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Informative banner */}
+        <div className="mb-6 p-4 rounded-xl bg-amber-50/70 border border-amber-200/80 flex items-start gap-3">
+          <Info size={18} className="text-amber-600 shrink-0 mt-0.5" />
+          <p className="text-xs text-amber-900 leading-relaxed">
+            I valori inseriti qui stabiliscono il prelievo massimo autorizzato per ciascun cacciatore.
+            Il sistema applicherà questi parametri in tempo reale durante la registrazione delle catture e nei conteggi del tesserino venatorio, notificando subito l'utente e il registro in caso di raggiungimento o superamento della quota.
+          </p>
+        </div>
+
+        {/* Deroga Species Cards Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+          {derogaLimits.map((limit) => {
+            const draft = derogaDrafts[limit.id];
+            const currentSeasonal = draft?.seasonalLimit !== undefined ? draft.seasonalLimit : (limit.seasonalLimit ?? 0);
+            const currentDaily = draft?.dailyLimit !== undefined ? draft.dailyLimit : (limit.dailyLimit ?? 0);
+            const currentPeriod = draft?.huntingPeriod !== undefined ? draft.huntingPeriod : (limit.huntingPeriod || '');
+            const currentNotes = draft?.notes !== undefined ? draft.notes : (limit.notes || 'Deroga ATC');
+            const isSaving = savingDerogaId === limit.id;
+            const isSaved = savedDerogaSuccessId === limit.id;
+
+            return (
+              <div 
+                key={limit.id} 
+                className="p-5 rounded-xl border border-amber-200/80 bg-gradient-to-br from-white to-amber-50/30 shadow-sm flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base font-black text-slate-800 uppercase tracking-tight">
+                        {limit.species}
+                      </span>
+                      <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded bg-amber-500 text-white shadow-xs">
+                        In Deroga
+                      </span>
+                    </div>
+
+                    {limit.species !== 'Moriglione' && limit.species !== 'Pavoncella' && (
+                      <button
+                        onClick={() => handleRemoveFromDeroga(limit)}
+                        className="text-slate-400 hover:text-rose-600 p-1 text-xs transition-colors"
+                        title="Rimuovi da deroga"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 mb-3">
+                    <div className="bg-white p-3 rounded-lg border border-slate-200">
+                      <label className="block text-[9px] font-black uppercase tracking-wider text-slate-500 mb-1">
+                        Massimo Capi Stagionali
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min="0"
+                          value={currentSeasonal}
+                          onChange={(e) => updateDerogaDraft(limit.id, 'seasonalLimit', parseInt(e.target.value) || 0)}
+                          className="w-full text-lg font-black text-amber-700 bg-amber-50/50 px-2 py-1 rounded border border-amber-200 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        />
+                        <span className="text-xs font-bold text-slate-400">capi</span>
+                      </div>
+                    </div>
+
+                    <div className="bg-white p-3 rounded-lg border border-slate-200">
+                      <label className="block text-[9px] font-black uppercase tracking-wider text-slate-500 mb-1">
+                        Limite Giornaliero
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min="0"
+                          value={currentDaily}
+                          onChange={(e) => updateDerogaDraft(limit.id, 'dailyLimit', parseInt(e.target.value) || 0)}
+                          className="w-full text-lg font-black text-lake-green bg-emerald-50/50 px-2 py-1 rounded border border-emerald-200 focus:outline-none focus:ring-1 focus:ring-lake-green"
+                        />
+                        <span className="text-xs font-bold text-slate-400">capi</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 mb-4">
+                    <div>
+                      <label className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-0.5">
+                        Periodo Venatorio
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="es. 15/09/2026 - 31/01/2027"
+                        value={currentPeriod}
+                        onChange={(e) => updateDerogaDraft(limit.id, 'huntingPeriod', e.target.value)}
+                        className="w-full text-xs font-semibold text-slate-700 bg-white px-2.5 py-1.5 rounded border border-slate-200 focus:outline-none focus:border-amber-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-0.5">
+                        Note / Riferimento Deroga
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="es. Deroga ATC, Delibera n. ..."
+                        value={currentNotes}
+                        onChange={(e) => updateDerogaDraft(limit.id, 'notes', e.target.value)}
+                        className="w-full text-xs font-medium text-slate-600 bg-white px-2.5 py-1.5 rounded border border-slate-200 focus:outline-none focus:border-amber-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-amber-100 flex items-center justify-between">
+                  <span className="text-[10px] text-slate-400 italic">
+                    {limit.updatedAt ? `Aggiornato: ${safeFormatDate(limit.updatedAt, 'dd/MM/yyyy HH:mm')}` : 'Valore predefinito'}
+                  </span>
+
+                  <button
+                    onClick={() => handleSaveDerogaLimit(limit)}
+                    disabled={isSaving}
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all shadow-xs cursor-pointer",
+                      isSaved 
+                        ? "bg-emerald-600 text-white" 
+                        : "bg-amber-600 hover:bg-amber-700 text-white active:scale-95 disabled:opacity-50"
+                    )}
+                  >
+                    {isSaving ? (
+                      <Loader2 size={13} className="animate-spin" />
+                    ) : isSaved ? (
+                      <Check size={13} />
+                    ) : (
+                      <Save size={13} />
+                    )}
+                    <span>{isSaving ? 'Salvataggio...' : isSaved ? 'Salvato!' : 'Salva Quota'}</span>
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Add Another Deroga Species Sub-panel */}
+        <div className="p-5 rounded-xl bg-slate-50 border border-slate-200">
+          <div className="flex items-center gap-2 mb-2">
+            <Plus size={16} className="text-amber-600 font-bold" />
+            <h3 className="text-xs font-black uppercase tracking-wider text-slate-700">
+              Aggiungi o Seleziona Altra Specie in Deroga per le Prossime Stagioni
+            </h3>
+          </div>
+          <p className="text-[11px] text-slate-500 mb-4">
+            Se per le future stagioni venatorie l'ATC o la Regione autorizza la caccia in deroga per un'altra specie, selezionala dall'elenco o inseriscila per impostarne subito il tetto massimo.
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+            <div className="sm:col-span-2 md:col-span-1">
+              <label className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-1">
+                Specie
+              </label>
+              <select
+                value={newDerogaSpecies}
+                onChange={(e) => setNewDerogaSpecies(e.target.value)}
+                className="w-full bg-white border border-slate-200 rounded px-2.5 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-amber-500"
+              >
+                <option value="">-- Seleziona specie --</option>
+                {candidateSpecies.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+                <option value="custom">+ Altra Specie (Personalizzata)...</option>
+              </select>
+            </div>
+
+            {newDerogaSpecies === 'custom' && (
+              <div className="sm:col-span-2 md:col-span-1">
+                <label className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-1">
+                  Nome Nuova Specie
+                </label>
+                <input
+                  type="text"
+                  placeholder="es. Storno, Tortora..."
+                  value={customDerogaSpecies}
+                  onChange={(e) => setCustomDerogaSpecies(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded px-2.5 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-amber-500"
+                />
+              </div>
+            )}
+
+            <div>
+              <label className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-1">
+                Massimo Stagionale
+              </label>
+              <input
+                type="number"
+                min="0"
+                value={newDerogaSeasonalLimit}
+                onChange={(e) => setNewDerogaSeasonalLimit(parseInt(e.target.value) || 0)}
+                className="w-full bg-white border border-slate-200 rounded px-2.5 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-amber-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-1">
+                Limite Giornaliero
+              </label>
+              <input
+                type="number"
+                min="0"
+                value={newDerogaDailyLimit}
+                onChange={(e) => setNewDerogaDailyLimit(parseInt(e.target.value) || 0)}
+                className="w-full bg-white border border-slate-200 rounded px-2.5 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-amber-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-1">
+                Riferimento Note
+              </label>
+              <input
+                type="text"
+                placeholder="es. Deroga ATC"
+                value={newDerogaNotes}
+                onChange={(e) => setNewDerogaNotes(e.target.value)}
+                className="w-full bg-white border border-slate-200 rounded px-2.5 py-1.5 text-xs font-medium text-slate-700 outline-none focus:border-amber-500"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between flex-wrap gap-2 pt-2">
+            {addDerogaSuccess ? (
+              <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-600">
+                <CheckCircle2 size={15} /> Specie in deroga attivata con successo!
+              </span>
+            ) : <span />}
+
+            <button
+              onClick={handleAddDerogaSpecies}
+              disabled={isAddingDeroga || !newDerogaSpecies || (newDerogaSpecies === 'custom' && !customDerogaSpecies.trim())}
+              className="flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-black uppercase tracking-wider rounded-lg shadow-sm transition-all disabled:opacity-40 active:scale-95 ml-auto cursor-pointer"
+            >
+              {isAddingDeroga ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Plus size={14} />
+              )}
+              <span>Attiva Deroga per Specie</span>
+            </button>
+          </div>
         </div>
       </section>
 

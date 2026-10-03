@@ -67,6 +67,21 @@ if (typeof window !== 'undefined' && 'serviceWorker' in navigator && window.loca
     navigator.serviceWorker.register('/sw.js', { scope: '/' })
       .then((reg) => {
         console.log('PWA: ServiceWorker registration successful with scope:', reg.scope);
+        // Check for updates immediately on load
+        reg.update().catch(() => {});
+
+        // Listen for new worker installed
+        reg.addEventListener('updatefound', () => {
+          const newWorker = reg.installing;
+          if (newWorker) {
+            newWorker.addEventListener('statechange', () => {
+              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                console.log('PWA: New update installed and ready');
+                window.dispatchEvent(new CustomEvent('app-update-available', { detail: { registration: reg } }));
+              }
+            });
+          }
+        });
       })
       .catch((err) => {
         console.warn('PWA: ServiceWorker registration failed:', err);

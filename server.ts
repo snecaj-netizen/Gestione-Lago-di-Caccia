@@ -399,6 +399,25 @@ async function startServer() {
     res.json({ status: "ok", env: process.env.NODE_ENV });
   });
 
+  const SERVER_START_TIME = Date.now();
+  let APP_VERSION = "1.0.0";
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, "package.json"), "utf8"));
+    APP_VERSION = pkg.version || "1.0.0";
+  } catch (e) {}
+
+  app.get("/api/version", (req, res) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+    res.json({
+      status: "ok",
+      version: APP_VERSION,
+      buildTime: SERVER_START_TIME,
+      timestamp: Date.now()
+    });
+  });
+
   app.get("/api/weather", async (req, res) => {
     const { latitude, longitude } = req.query;
     if (latitude === undefined || longitude === undefined) return res.status(400).json({ error: "Missing coords" });

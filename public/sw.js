@@ -1,5 +1,5 @@
 // Service Worker for Gestione Lago PWA
-const CACHE_NAME = 'gestione-lago-v2';
+const CACHE_NAME = 'gestione-lago-v3';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -10,6 +10,13 @@ const ASSETS_TO_CACHE = [
   '/icon-maskable-192.png',
   '/icon-maskable-512.png'
 ];
+
+// Handle message from client (e.g. user clicked "Aggiorna")
+self.addEventListener('message', (event) => {
+  if (event.data && (event.data.type === 'SKIP_WAITING' || event.data === 'skipWaiting')) {
+    self.skipWaiting();
+  }
+});
 
 // Install event - caching basic shell assets
 self.addEventListener('install', (event) => {
@@ -33,7 +40,14 @@ self.addEventListener('activate', (event) => {
           }
         })
       );
-    }).then(() => self.clients.claim())
+    }).then(() => self.clients.claim()).then(async () => {
+      try {
+        const clients = await self.clients.matchAll({ type: 'window' });
+        clients.forEach((client) => {
+          client.postMessage({ type: 'SW_UPDATED', cache: CACHE_NAME });
+        });
+      } catch (e) {}
+    })
   );
 });
 
@@ -44,8 +58,13 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   if (!url.protocol.startsWith('http')) return;
 
-  // Let Firestore & API requests bypass service worker cache
-  if (url.hostname.includes('firestore.googleapis.com') || url.hostname.includes('firebaseio.com') || url.pathname.startsWith('/api/')) {
+  // Let Firestore, sw.js, and API requests bypass service worker cache
+  if (
+    url.pathname === '/sw.js' ||
+    url.hostname.includes('firestore.googleapis.com') || 
+    url.hostname.includes('firebaseio.com') || 
+    url.pathname.startsWith('/api/')
+  ) {
     return;
   }
 
