@@ -39,7 +39,8 @@ const safeFormatDate = (dateStr: any, formatStr: string, options?: any) => {
   }
 };
 
-const SPECIES_LIST = [
+// Complete list of huntable species, including all species from Annotazione Tesserino
+export const SPECIES_LIST = [
   'Alzavola',
   'Beccaccino',
   'Canapiglia',
@@ -50,11 +51,15 @@ const SPECIES_LIST = [
   'Folaga',
   'Frullino',
   'Gallinella',
+  "Gallinella d'acqua",
   'Germano',
+  'Germano Reale',
   'Lepre',
   'Marzaiola',
   'Mestolone',
+  'Moretta',
   'Moriglione',
+  'Pavoncella',
   'Porciglione',
   'Stampi',
   'Altro'
@@ -204,6 +209,17 @@ export function Harvests() {
     }
   }, [highlightId, loading, items]);
 
+  // Available species list dynamically completed with species from tesserino / hunting_limits
+  const availableSpecies = React.useMemo(() => {
+    const set = new Set<string>(SPECIES_LIST);
+    limits.forEach(l => {
+      if (l.species && l.species.trim()) {
+        set.add(l.species.trim());
+      }
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'it', { sensitivity: 'base' }));
+  }, [limits]);
+
   // Calculate assigned hunters for the selected date
   const assignedHuntersForSelectedDate = getAssignedHuntersForDate(formData.date, huntingDays, users, settings);
   
@@ -249,7 +265,7 @@ export function Harvests() {
     }
 
     // Non-admins must use the list
-    if (profile.role !== 'admin' && !SPECIES_LIST.includes(formData.species)) {
+    if (profile.role !== 'admin' && !availableSpecies.includes(formData.species)) {
       alert('Per favore, seleziona una specie valida dalla lista.');
       return;
     }
@@ -596,7 +612,17 @@ export function Harvests() {
     return profile.role === 'admin' || item.hunterUid === profile.uid;
   };
 
-  const currentLimit = limits.find(l => l.species.toLowerCase() === formData.species.toLowerCase());
+  const isMatchingSpecies = (itemSpecies: string, targetSpecies: string): boolean => {
+    const s1 = (itemSpecies || '').toLowerCase().trim();
+    const s2 = (targetSpecies || '').toLowerCase().trim();
+    if (!s1 || !s2) return false;
+    if (s1 === s2) return true;
+    if ((s1 === 'germano' && s2 === 'germano reale') || (s1 === 'germano reale' && s2 === 'germano')) return true;
+    if ((s1 === 'gallinella' && s2 === "gallinella d'acqua") || (s1 === "gallinella d'acqua" && s2 === 'gallinella')) return true;
+    return false;
+  };
+
+  const currentLimit = limits.find(l => isMatchingSpecies(l.species, formData.species));
   
   // Reference hunter for limit calculation:
   // In edit mode: the item's hunter
@@ -606,11 +632,11 @@ export function Harvests() {
     : (assignedHuntersForSelectedDate.length > 0 ? assignedHuntersForSelectedDate[0].uid : (profile?.uid || ''));
 
   const dailyCount = items
-    .filter(h => h.date === formData.date && h.hunterUid === effectiveHunterUid && h.species.toLowerCase() === formData.species.toLowerCase() && h.id !== editingItem?.id)
+    .filter(h => h.date === formData.date && h.hunterUid === effectiveHunterUid && isMatchingSpecies(h.species, formData.species) && h.id !== editingItem?.id)
     .reduce((acc, h) => acc + h.count, 0);
 
   const seasonalCount = items
-    .filter(h => h.hunterUid === effectiveHunterUid && h.species.toLowerCase() === formData.species.toLowerCase() && h.id !== editingItem?.id)
+    .filter(h => h.hunterUid === effectiveHunterUid && isMatchingSpecies(h.species, formData.species) && h.id !== editingItem?.id)
     .reduce((acc, h) => acc + h.count, 0);
 
   // Calculate projected counts for limit checking
@@ -969,7 +995,7 @@ export function Harvests() {
 
                   {showSpeciesList && (
                     <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded shadow-xl max-h-48 overflow-y-auto py-1">
-                      {SPECIES_LIST.filter(s => 
+                      {availableSpecies.filter(s => 
                         s.toLowerCase().includes(formData.species.toLowerCase())
                       ).map(s => (
                         <button
@@ -984,7 +1010,7 @@ export function Harvests() {
                           {s}
                         </button>
                       ))}
-                      {profile?.role === 'admin' && formData.species && !SPECIES_LIST.includes(formData.species) && (
+                      {profile?.role === 'admin' && formData.species && !availableSpecies.includes(formData.species) && (
                         <button
                           type="button"
                           onClick={() => setShowSpeciesList(false)}
@@ -993,14 +1019,14 @@ export function Harvests() {
                           Usa nuovo: "{formData.species}"
                         </button>
                       )}
-                      {SPECIES_LIST.filter(s => 
+                      {availableSpecies.filter(s => 
                         s.toLowerCase().includes(formData.species.toLowerCase())
                       ).length === 0 && profile?.role !== 'admin' && (
                         <div className="px-4 py-2 text-xs text-slate-400 italic">Nessun risultato</div>
                       )}
                     </div>
                   )}
-                  {profile?.role !== 'admin' && formData.species && !SPECIES_LIST.includes(formData.species) && (
+                  {profile?.role !== 'admin' && formData.species && !availableSpecies.includes(formData.species) && (
                     <p className="text-[10px] font-bold text-rose-500 italic mt-1">
                       * Devi selezionare una specie dalla lista ufficiale
                     </p>
