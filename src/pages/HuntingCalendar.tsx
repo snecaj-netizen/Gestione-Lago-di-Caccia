@@ -549,6 +549,8 @@ export function HuntingCalendar() {
     }
   };
 
+  const [assignQuotaInput, setAssignQuotaInput] = useState<Record<string, number>>({});
+
   const dayAssignments = (date: Date): (HuntingDay & { isRecurring?: boolean })[] => {
     if (!isInSeason(date)) return [];
     const list: (HuntingDay & { isRecurring?: boolean })[] = [];
@@ -561,8 +563,12 @@ export function HuntingCalendar() {
     manuals.forEach(m => {
       const userObj = availableUsers.find(u => u.uid === m.assignedToUid);
       const isRecurring = userObj && (userObj.assignedDaysOfWeek || []).includes(dayOfWeek);
+      const effectiveQuota = typeof m.overrideQuota === 'number' && m.overrideQuota > 0 
+        ? m.overrideQuota 
+        : (userObj?.seasonalQuota || 0);
       list.push({
         ...m,
+        overrideQuota: effectiveQuota,
         isRecurring: Boolean(isRecurring)
       });
     });
@@ -581,11 +587,23 @@ export function HuntingCalendar() {
           assignedToUid: u.uid,
           assignedToName: u.displayName,
           type: u.role === "quotista" ? "quotista" : "socio",
-          isRecurring: true
+          isRecurring: true,
+          overrideQuota: u.seasonalQuota || 0
         });
       }
     });
     return list;
+  };
+
+  const getDayTotalQuota = (date: Date) => {
+    const assignments = dayAssignments(date);
+    return assignments.reduce((acc, a) => {
+      const userObj = availableUsers.find(u => u.uid === a.assignedToUid);
+      const q = typeof a.overrideQuota === 'number' && a.overrideQuota > 0 
+        ? a.overrideQuota 
+        : (userObj?.seasonalQuota || 0);
+      return acc + q;
+    }, 0);
   };
 
   const handleRemoveHunter = async (uid: string, name: string, type: string, isRecurring: boolean) => {
@@ -611,10 +629,14 @@ export function HuntingCalendar() {
     }
   };
 
-  const handleAddHunter = async (user: UserProfile) => {
+  const handleAddHunter = async (user: UserProfile, customQuota?: number) => {
     if (!selectedDay) return;
     const dateStr = format(selectedDay, 'yyyy-MM-dd');
     const recordId = `${dateStr}_${user.uid}`;
+
+    const quotaToSet = typeof customQuota === 'number' && customQuota > 0
+      ? customQuota
+      : (typeof assignQuotaInput[user.uid] === 'number' ? assignQuotaInput[user.uid] : (user.seasonalQuota || 0));
 
     const existingRecord = huntingDays.find(d => d.date === dateStr && d.assignedToUid === user.uid);
     if (existingRecord && existingRecord.excluded) {
@@ -626,15 +648,16 @@ export function HuntingCalendar() {
         assignedToUid: user.uid,
         assignedToName: user.displayName,
         type: user.role === 'admin' || user.role === 'socio' ? 'socio' : 'quotista',
-        excluded: false
+        excluded: false,
+        overrideQuota: quotaToSet
       });
     }
   };
 
-  const onAssign = async (userId: string) => {
+  const onAssign = async (userId: string, customQuota?: number) => {
     const user = availableUsers.find(u => u.uid === userId);
     if (!user) return;
-    await handleAddHunter(user);
+    await handleAddHunter(user, customQuota);
   };
 
   const onUnassign = (a: any) => {
@@ -1236,40 +1259,74 @@ export function HuntingCalendar() {
                       <p className="text-xs font-bold uppercase tracking-widest">Nessun cacciatore</p>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 gap-2">
-                      {dayAssignments(selectedDay).map(a => (
-                        <div key={a.id} className="flex items-center justify-between p-3 bg-slate-50 border border-slate-100 rounded-lg group">
-                          <div className="flex items-center gap-3">
-                            <div className={cn(
-                              "w-2 h-2 rounded-full",
-                              a.type === 'socio' ? "bg-blue-500" : "bg-purple-500"
-                            )} />
-                            <div>
-                              <span className="text-sm font-black text-slate-800 uppercase tracking-tight block">
-                                {formatUserName(a.assignedToName)}
-                              </span>
-                              <span className="text-[8px] text-slate-400 font-bold uppercase">
-                                {a.isRecurring ? 'Quota Fissa' : 'Assegnazione Manuale'}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {a.isRecurring && (
-                              <span className="text-[8px] font-black text-accent-gold uppercase tracking-widest mr-1">FISSO</span>
-                            )}
-                            {(profile?.role === 'admin' || profile?.role === 'socio') && (
-                              <button 
-                                onClick={() => onUnassign(a)}
-                                className="text-rose-500 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 p-1.5 rounded-lg transition-all flex items-center justify-center shadow-xs active:scale-95 cursor-pointer shrink-0"
-                                title="Rimuovi dalla giornata"
-                                aria-label="Rimuovi cacciatore dalla giornata"
-                              >
-                                <Trash2 size={15} />
-                              </button>
-                            )}
-                          </div>
+                    <div className="space-y-3">
+                      {/* Day Total Quota Box */}
+                      <div className="p-3 bg-gradient-to-r from-emerald-50 to-off-white border border-emerald-100 rounded-lg flex items-center justify-between shadow-xs">
+                        <div>
+                          <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest block">Quota Giornaliera</span>
+                          <p className="text-[10px] text-slate-500 font-medium">Somma quote cacciatori presenti</p>
                         </div>
-                      ))}
+                        <div className="text-right">
+                          <p className="text-base font-black text-lake-green leading-none">
+                            €{getDayTotalQuota(selectedDay).toLocaleString()}
+                          </p>
+                          {getDay(selectedDay) === 3 || getDay(selectedDay) === 6 ? (
+                            <span className="text-[7px] font-black uppercase text-blue-600 bg-blue-50 px-1 py-0.5 rounded border border-blue-100 mt-1 inline-block">
+                              Giornata Soci
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-2">
+                        {dayAssignments(selectedDay).map(a => {
+                          const hunterObj = availableUsers.find(u => u.uid === a.assignedToUid);
+                          const hunterQuota = typeof a.overrideQuota === 'number' && a.overrideQuota > 0
+                            ? a.overrideQuota
+                            : (hunterObj?.seasonalQuota || 0);
+
+                          return (
+                            <div key={a.id} className="flex items-center justify-between p-3 bg-slate-50 border border-slate-100 rounded-lg group">
+                              <div className="flex items-center gap-3">
+                                <div className={cn(
+                                  "w-2 h-2 rounded-full",
+                                  a.type === 'socio' ? "bg-blue-500" : "bg-purple-500"
+                                )} />
+                                <div>
+                                  <span className="text-sm font-black text-slate-800 uppercase tracking-tight block">
+                                    {formatUserName(a.assignedToName)}
+                                  </span>
+                                  <div className="flex items-center gap-1.5 mt-0.5">
+                                    <span className="text-[8px] text-slate-400 font-bold uppercase">
+                                      {a.isRecurring ? 'Fisso' : 'Manuale'}
+                                    </span>
+                                    {hunterQuota > 0 && (
+                                      <span className="text-[8px] font-black text-lake-green bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-100">
+                                        Quota: €{hunterQuota.toLocaleString()}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {a.isRecurring && (
+                                  <span className="text-[8px] font-black text-accent-gold uppercase tracking-widest mr-1">FISSO</span>
+                                )}
+                                {(profile?.role === 'admin' || profile?.role === 'socio') && (
+                                  <button 
+                                    onClick={() => onUnassign(a)}
+                                    className="text-rose-500 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 p-1.5 rounded-lg transition-all flex items-center justify-center shadow-xs active:scale-95 cursor-pointer shrink-0"
+                                    title="Rimuovi dalla giornata"
+                                    aria-label="Rimuovi cacciatore dalla giornata"
+                                  >
+                                    <Trash2 size={15} />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   )
                 )}
@@ -1312,7 +1369,17 @@ export function HuntingCalendar() {
             {/* Current Assignments Summary (Viewable by everyone) */}
             <div className="mb-8 space-y-4">
                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                 <h4 className="text-[0.65rem] font-black text-slate-400 uppercase tracking-widest">Cacciatori Presenti</h4>
+                 <div>
+                   <h4 className="text-[0.65rem] font-black text-slate-400 uppercase tracking-widest">Cacciatori Presenti</h4>
+                   <p className="text-[10px] text-slate-600 font-bold mt-0.5">
+                     Quota Totale Giornata: <strong className="text-lake-green font-black text-xs">€{getDayTotalQuota(selectedDay).toLocaleString()}</strong>
+                     {(getDay(selectedDay) === 3 || getDay(selectedDay) === 6) && (
+                       <span className="ml-1 text-[8px] font-black uppercase text-blue-600 bg-blue-50 px-1 py-0.5 rounded border border-blue-100">
+                         Giornata Soci
+                       </span>
+                     )}
+                   </p>
+                 </div>
                  {dayAssignments(selectedDay).length > 0 && (
                    <span className={cn(
                      "text-[8px] font-bold px-2 py-0.5 rounded",
@@ -1329,37 +1396,60 @@ export function HuntingCalendar() {
                  <p className="text-xs text-slate-400 italic">Nessun cacciatore assegnato per oggi.</p>
                ) : (
                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                   {dayAssignments(selectedDay).map(a => (
-                      <div key={a.id} className="p-3 bg-off-white rounded-lg border border-slate-100 flex flex-col gap-1 group">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <div className={cn(
-                              "w-2 h-2 rounded-full",
-                              a.type === 'socio' ? "bg-blue-500" : "bg-purple-500"
-                            )} />
-                            <span className="text-sm font-bold text-slate-800">{formatUserName(a.assignedToName)}</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {a.isRecurring && (
-                              <span className="text-[7px] font-black text-accent-gold uppercase tracking-tighter mr-1">FISSO</span>
-                            )}
-                            {(profile?.role === 'admin' || profile?.role === 'socio') && (
-                              <button 
-                                onClick={() => onUnassign(a)}
-                                className="text-rose-500 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 p-1.5 rounded-lg transition-all flex items-center justify-center shadow-xs active:scale-95 cursor-pointer shrink-0"
-                                title="Rimuovi dalla giornata"
-                                aria-label="Rimuovi cacciatore"
-                              >
-                                <Trash2 size={13} />
-                              </button>
-                            )}
-                            <span className="text-[8px] font-black uppercase text-slate-400 tracking-widest">
-                              {a.type === 'socio' ? 'Socio' : 'Quotista'}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                   ))}
+                   {dayAssignments(selectedDay).map(a => {
+                      const hunterObj = availableUsers.find(u => u.uid === a.assignedToUid);
+                      const hunterQuota = typeof a.overrideQuota === 'number' && a.overrideQuota > 0
+                        ? a.overrideQuota
+                        : (hunterObj?.seasonalQuota || 0);
+
+                      return (
+                       <div key={a.id} className="p-3 bg-off-white rounded-lg border border-slate-100 flex flex-col gap-2 group">
+                         <div className="flex items-center justify-between">
+                           <div className="flex items-center gap-2">
+                             <div className={cn(
+                               "w-2 h-2 rounded-full",
+                               a.type === 'socio' ? "bg-blue-500" : "bg-purple-500"
+                             )} />
+                             <span className="text-sm font-bold text-slate-800">{formatUserName(a.assignedToName)}</span>
+                           </div>
+                           <div className="flex items-center gap-2">
+                             {a.isRecurring && (
+                               <span className="text-[7px] font-black text-accent-gold uppercase tracking-tighter mr-1">FISSO</span>
+                             )}
+                             {(profile?.role === 'admin' || profile?.role === 'socio') && (
+                               <button 
+                                 onClick={() => onUnassign(a)}
+                                 className="text-rose-500 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 p-1.5 rounded-lg transition-all flex items-center justify-center shadow-xs active:scale-95 cursor-pointer shrink-0"
+                                 title="Rimuovi dalla giornata"
+                                 aria-label="Rimuovi cacciatore"
+                               >
+                                 <Trash2 size={13} />
+                               </button>
+                             )}
+                             <span className="text-[8px] font-black uppercase text-slate-400 tracking-widest">
+                               {a.type === 'socio' ? 'Socio' : 'Quotista'}
+                             </span>
+                           </div>
+                         </div>
+
+                         {/* Quota details and incassa quick link */}
+                         <div className="flex items-center justify-between pt-1.5 border-t border-slate-200/60 text-[10px]">
+                           <span className="font-bold text-slate-600">
+                             Quota: <strong className="text-lake-green font-black">€{hunterQuota.toLocaleString()}</strong>
+                           </span>
+                           {hunterQuota > 0 && (
+                             <Link
+                               to={`/accounting?modal=add&type=entrata&payerUid=${a.assignedToUid}&payerName=${encodeURIComponent(a.assignedToName)}&amount=${hunterQuota}&huntingDayId=${format(selectedDay, 'yyyy-MM-dd')}`}
+                               className="text-[9px] font-black text-lake-green hover:underline flex items-center gap-0.5 uppercase tracking-tight"
+                               title="Registra incasso quota in contabilità"
+                             >
+                               INCASSA <ArrowRight size={9} />
+                             </Link>
+                           )}
+                         </div>
+                       </div>
+                      );
+                   })}
                  </div>
                )}
             </div>
@@ -1421,31 +1511,63 @@ export function HuntingCalendar() {
                       <span className="text-[9px] font-bold text-amber-600 uppercase tracking-tight italic">Limite raggiunto (4)</span>
                     ) : null}
                   </div>
-                  <div className="max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+                  <div className="max-h-56 overflow-y-auto pr-2 custom-scrollbar">
                     {availableUsers
                       .filter(u => u.isActive)
                       .filter(u => !dayAssignments(selectedDay).some(a => a.assignedToUid === u.uid))
-                      .map(user => (
-                        <button
-                          key={user.uid}
-                          onClick={() => onAssign(user.uid)}
-                          className="w-full flex items-center justify-between p-3 rounded border border-slate-50 hover:border-accent-gold hover:bg-white transition-all group mb-2 text-left"
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className={cn(
-                              "w-7 h-7 rounded flex items-center justify-center text-[9px] font-bold uppercase",
-                              user.role === 'admin' ? "bg-lake-green text-white" : "bg-slate-100 text-slate-gray"
-                            )}>
-                              {user.displayName[0]}
+                      .map(user => {
+                        const defaultQuota = user.seasonalQuota || 0;
+                        const currentInputQuota = assignQuotaInput[user.uid] !== undefined 
+                          ? assignQuotaInput[user.uid] 
+                          : defaultQuota;
+
+                        return (
+                          <div
+                            key={user.uid}
+                            className="flex flex-col sm:flex-row sm:items-center justify-between p-2.5 rounded-lg border border-slate-100 hover:border-accent-gold/40 hover:bg-slate-50/50 transition-all mb-2 gap-2"
+                          >
+                            <div className="flex items-center gap-2.5">
+                              <div className={cn(
+                                "w-7 h-7 rounded flex items-center justify-center text-[9px] font-bold uppercase shrink-0",
+                                user.role === 'admin' ? "bg-lake-green text-white" : "bg-slate-100 text-slate-gray"
+                              )}>
+                                {user.displayName[0]}
+                              </div>
+                              <div>
+                                <p className="font-bold text-slate-800 text-xs">{formatUserName(user.displayName)}</p>
+                                <p className="text-[9px] text-slate-400 uppercase font-bold tracking-widest leading-tight">
+                                  {user.role} {user.seasonalQuota ? `• Quota Profilo: €${user.seasonalQuota.toLocaleString()}` : ''}
+                                </p>
+                              </div>
                             </div>
-                            <div>
-                              <p className="font-bold text-slate-800 text-xs">{formatUserName(user.displayName)}</p>
-                              <p className="text-[9px] text-slate-400 uppercase font-bold tracking-widest leading-tight">{user.role}</p>
+
+                            <div className="flex items-center gap-1.5 self-end sm:self-center shrink-0">
+                              <div className="relative">
+                                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">€</span>
+                                <input
+                                  type="number"
+                                  value={currentInputQuota || ''}
+                                  onChange={(e) => setAssignQuotaInput({
+                                    ...assignQuotaInput,
+                                    [user.uid]: parseFloat(e.target.value) || 0
+                                  })}
+                                  placeholder="0"
+                                  className="w-20 bg-white border border-slate-200 rounded pl-5 pr-1.5 py-1 text-xs font-bold text-slate-900 outline-none focus:border-lake-green shadow-2xs"
+                                  title="Quota per questa giornata (es. quota ospite o giornata soci)"
+                                />
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => onAssign(user.uid, currentInputQuota)}
+                                className="bg-lake-green hover:bg-lake-green/90 text-white text-[10px] font-black uppercase px-2.5 py-1.5 rounded transition-all flex items-center gap-1 cursor-pointer shadow-2xs"
+                                title="Assegna a questa giornata con la quota indicata"
+                              >
+                                <Plus size={12} /> Assegna
+                              </button>
                             </div>
                           </div>
-                          <Plus size={14} className="text-slate-200 group-hover:text-accent-gold" />
-                        </button>
-                      ))}
+                        );
+                      })}
                   </div>
                 </div>
               </div>

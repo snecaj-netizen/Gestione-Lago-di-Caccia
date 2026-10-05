@@ -11,7 +11,8 @@ import {
   subscribeToBudgetItems,
   addBudgetItem,
   updateBudgetItem,
-  deleteBudgetItem
+  deleteBudgetItem,
+  updateUserProfile
 } from '../services';
 import { Transaction, HuntingDay, UserProfile, LakeSettings, BudgetItem } from '../types';
 import { useAuth } from '../contexts/AuthContext';
@@ -240,43 +241,32 @@ export function Accounting() {
   const budgetExpense = budgetItems.filter(b => b.type === 'uscita').reduce((acc, b) => acc + b.amount, 0);
   const budgetBalance = budgetIncome - budgetExpense;
 
-  const handleUpdateWeekdayQuota = async (dayIndex: number, amount: number) => {
-    if (!settings) return;
-    const newQuotas = { ...(settings.weekdaySeasonQuotas || {}) };
-    newQuotas[dayIndex] = amount;
-    await updateSettings({ weekdaySeasonQuotas: newQuotas });
+  const [editingQuotaHunter, setEditingQuotaHunter] = useState<UserProfile | null>(null);
+  const [editingQuotaValue, setEditingQuotaValue] = useState<number>(0);
+  const [savingQuota, setSavingQuota] = useState(false);
+
+  const handleSaveHunterQuota = async () => {
+    if (!editingQuotaHunter) return;
+    setSavingQuota(true);
+    try {
+      await updateUserProfile(editingQuotaHunter.uid, {
+        seasonalQuota: Number(editingQuotaValue) || 0
+      });
+      setEditingQuotaHunter(null);
+    } catch (err) {
+      console.error("Error updating hunter quota:", err);
+    } finally {
+      setSavingQuota(false);
+    }
   };
 
   const getHuntersSummary = () => {
-    const activeHunters = users.filter(u => u.isActive && u.role === 'quotista');
-    
-    // Calculate how many hunters per day to divide the quota
-    const huntersPerDay: Record<number, number> = {};
-    activeHunters.forEach(u => {
-      (u.assignedDaysOfWeek || []).forEach(dayIdx => {
-        // Only count days that aren't excluded (socio days)
-        if (dayIdx !== 3 && dayIdx !== 6) {
-          huntersPerDay[dayIdx] = (huntersPerDay[dayIdx] || 0) + 1;
-        }
-      });
-    });
+    const activeHunters = users.filter(u => u.isActive && (u.role === 'quotista' || (u.seasonalQuota && u.seasonalQuota > 0)));
 
     return activeHunters
       .map(u => {
-        // Use seasonalQuota if defined (and not zero), otherwise fallback to period-based calculation
-        let targetQuota = u.seasonalQuota || 0;
-
-        if (targetQuota === 0) {
-          // Calculate target quota based on assigned days of week divided by group size
-          (u.assignedDaysOfWeek || []).forEach(dayIdx => {
-            // Explicitly zero for Wed (3) and Sat (6) as requested
-            if (dayIdx === 3 || dayIdx === 6) return;
-            
-            const dayTotal = settings?.weekdaySeasonQuotas?.[dayIdx] || 0;
-            const participants = huntersPerDay[dayIdx] || 1;
-            targetQuota += dayTotal / participants;
-          });
-        }
+        // Quota is managed EXCLUSIVELY from the hunter's profile
+        const targetQuota = u.seasonalQuota || 0;
 
         const paid = items
           .filter(t => t.type === 'entrata' && t.payerUid === u.uid)
@@ -602,7 +592,7 @@ export function Accounting() {
                 )}
               >
                 <Settings size={15} />
-                {showQuotaConfig ? 'Chiudi Config.' : 'Config. Quote'}
+                {showQuotaConfig ? 'Chiudi Quote' : 'Quote Giornaliere'}
               </button>
             </>
           )}
@@ -613,50 +603,114 @@ export function Accounting() {
         <section className="card-polish !border-t-lake-green animate-in fade-in slide-in-from-top-4 duration-300">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
             <div>
-              <h3 className="text-lg font-serif text-lake-green">Gestione Quote Stagionali</h3>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Costo totale della stagione diviso tra i cacciatori fissi</p>
+              <h3 className="text-lg font-serif text-lake-green">Riepilogo Quote Giornaliere (Somma per Cacciatore)</h3>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                La quota di ogni giorno è la somma delle quote individuali impostate nei profili dei cacciatori
+              </p>
             </div>
-            <div className="px-3 py-1 bg-emerald-50 rounded border border-emerald-100 text-[10px] font-bold text-emerald-700">
-              MERCOLEDÌ E SABATO SONO RISERVATI AI SOCI E NON HANNO QUOTA
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="px-3 py-1 bg-emerald-50 rounded border border-emerald-100 text-[10px] font-bold text-emerald-700">
+                MERCOLEDÌ E SABATO: GIORNATE SOCI (eventuali cacciatori ammessi con quota vengono inclusi nel totale)
+              </span>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-4">
             {['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'].map((day, idx) => {
               const isSilence = idx === 2 || idx === 5;
               const isSocioDay = idx === 3 || idx === 6;
-              const huntersCount = users.filter(u => u.isActive && u.role === 'quotista' && (u.assignedDaysOfWeek || []).includes(idx)).length;
-              const dayTotal = settings?.weekdaySeasonQuotas?.[idx] || 0;
-              const quotaPerHunter = huntersCount > 0 ? dayTotal / huntersCount : 0;
+
+              // Hunters assigned by recurring weekday
+              const recurringHunters = users.filter(u => u.isActive && (u.role === 'quotista' || (u.seasonalQuota && u.seasonalQuota > 0)) && (u.assignedDaysOfWeek || []).includes(idx));
+
+              // Additional hunters with quota recorded in huntingDays on this day of the week
+              const manualHuntingDayHunters = huntingDays.filter(hd => {
+                if (hd.excluded) return false;
+                try {
+                  const d = parseISO(hd.date);
+                  return getDay(d) === idx && (hd.overrideQuota || 0) > 0;
+                } catch {
+                  return false;
+                }
+              });
+
+              // Combine all hunters for this weekday
+              const huntersList: { uid: string; name: string; quota: number; isSocioAdmitted?: boolean }[] = [];
+              recurringHunters.forEach(u => {
+                huntersList.push({ uid: u.uid, name: u.displayName, quota: u.seasonalQuota || 0 });
+              });
+
+              manualHuntingDayHunters.forEach(hd => {
+                if (!huntersList.some(h => h.uid === hd.assignedToUid)) {
+                  huntersList.push({
+                    uid: hd.assignedToUid,
+                    name: hd.assignedToName,
+                    quota: hd.overrideQuota || 0,
+                    isSocioAdmitted: isSocioDay
+                  });
+                }
+              });
+
+              const dayTotalQuota = huntersList.reduce((acc, h) => acc + h.quota, 0);
 
               return (
                 <div key={day} className={cn(
-                  "p-4 rounded-lg border transition-all",
-                  isSilence || isSocioDay ? "bg-slate-50 border-slate-100 opacity-60" : "bg-off-white border-slate-200 hover:border-lake-green group"
+                  "p-4 rounded-lg border transition-all flex flex-col justify-between min-h-[160px]",
+                  isSilence 
+                    ? "bg-slate-50 border-slate-100 opacity-60" 
+                    : isSocioDay 
+                      ? "bg-blue-50/40 border-blue-100 hover:border-blue-400 group" 
+                      : "bg-off-white border-slate-200 hover:border-lake-green group"
                 )}>
-                  <div className="flex justify-between items-center mb-2">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{day}</p>
-                    <span className="text-[8px] font-bold text-slate-400">{huntersCount} cacciatori</span>
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <p className="text-[11px] font-black uppercase tracking-widest text-slate-700">{day}</p>
+                      <span className={cn(
+                        "text-[8px] font-black uppercase px-1.5 py-0.5 rounded",
+                        isSocioDay ? "bg-blue-100 text-blue-800" : isSilence ? "bg-slate-200 text-slate-500" : "bg-emerald-100 text-emerald-800"
+                      )}>
+                        {huntersList.length} {huntersList.length === 1 ? 'cacciatore' : 'cacciatori'}
+                      </span>
+                    </div>
+
+                    <div className="my-2 p-2 bg-white rounded border border-slate-100 shadow-xs">
+                      <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest block">Quota Giornaliera</span>
+                      <p className="text-base font-black text-slate-900">€{dayTotalQuota.toLocaleString()}</p>
+                    </div>
+
+                    {huntersList.length > 0 ? (
+                      <div className="space-y-1 mt-2 max-h-28 overflow-y-auto pr-1 custom-scrollbar">
+                        {huntersList.map(h => (
+                          <div key={h.uid} className="flex justify-between items-center text-[9px] py-0.5 border-b border-slate-50 last:border-0">
+                            <span className="font-semibold text-slate-700 truncate max-w-[90px]">{formatUserName(h.name)}</span>
+                            <span className="font-black text-lake-green">€{h.quota.toLocaleString()}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-[9px] text-slate-400 italic mt-2">
+                        {isSilence ? 'Silenzio Venatorio' : isSocioDay ? 'Nessun cacciatore esterno con quota' : 'Nessun cacciatore assegnato'}
+                      </p>
+                    )}
                   </div>
-                  <div className="relative">
-                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 group-focus-within:text-lake-green">€</span>
-                    <input 
-                      type="number"
-                      disabled={isSilence || isSocioDay || profile?.role !== 'admin'}
-                      placeholder=""
-                      value={dayTotal || ''}
-                      onChange={(e) => handleUpdateWeekdayQuota(idx, parseFloat(e.target.value) || 0)}
-                      className="w-full bg-white border border-slate-100 rounded pl-6 pr-2 py-2 text-sm font-bold text-slate-900 outline-none focus:border-lake-green disabled:bg-transparent"
-                    />
+
+                  <div className="pt-2 mt-2 border-t border-slate-100/60">
+                    {isSilence && <p className="text-[8px] text-slate-400 font-bold uppercase tracking-tighter">Silenzio Venatorio</p>}
+                    {isSocioDay && (
+                      <p className="text-[8px] text-blue-600 font-black uppercase tracking-tighter">
+                        Giornata Soci {huntersList.length > 0 ? '(con cacciatori a quota)' : ''}
+                      </p>
+                    )}
                   </div>
-                  {!isSilence && !isSocioDay && quotaPerHunter > 0 && (
-                    <p className="text-[8px] text-lake-green mt-2 font-bold uppercase tracking-tighter">Quota p.p. €{Math.round(quotaPerHunter).toLocaleString()}</p>
-                  )}
-                  {isSilence && <p className="text-[8px] text-slate-400 mt-1 font-bold">SILENZIO VENATORIO</p>}
-                  {isSocioDay && <p className="text-[8px] text-blue-400 mt-1 font-bold">GIORNATA SOCI</p>}
                 </div>
               );
             })}
+          </div>
+
+          <div className="mt-4 p-3 bg-amber-50/70 border border-amber-200/60 rounded-lg flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-amber-900">
+            <span>
+              ℹ️ <strong>Nota contabile:</strong> La quota giornaliera è calcolata come somma delle quote dei singoli cacciatori presenti. La suddivisione fissa per giorno / n. cacciatori è stata rimossa. Per impostare o modificare la quota di un cacciatore, usa il pulsante nella tabella sottostante o vai al suo profilo.
+            </span>
           </div>
         </section>
       )}
@@ -1176,9 +1230,24 @@ export function Accounting() {
                 </div>
 
                 <div className="space-y-1">
-                  <div className="flex justify-between text-[10px] font-bold">
+                  <div className="flex justify-between items-center text-[10px] font-bold">
                     <span className="text-slate-400">PAGATO</span>
-                    <span className="text-slate-900">€{hunter.paid.toLocaleString()} / €{hunter.targetQuota.toLocaleString()}</span>
+                    <div className="flex items-center gap-1">
+                      <span className="text-slate-900">€{hunter.paid.toLocaleString()} / €{hunter.targetQuota.toLocaleString()}</span>
+                      {(profile?.role === 'admin' || profile?.role === 'socio') && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingQuotaHunter(hunter);
+                            setEditingQuotaValue(hunter.targetQuota);
+                          }}
+                          className="p-1 text-slate-400 hover:text-lake-green hover:bg-slate-100 rounded transition-colors"
+                          title="Modifica quota nel profilo del cacciatore"
+                        >
+                          <Edit2 size={11} />
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
                     <div 
@@ -1217,6 +1286,72 @@ export function Accounting() {
           </div>
         </section>
       )}
+
+      {/* Edit Hunter Quota Modal */}
+      <AnimatePresence>
+        {editingQuotaHunter && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 border-t-4 border-lake-green relative"
+            >
+              <button 
+                type="button"
+                onClick={() => setEditingQuotaHunter(null)}
+                className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"
+              >
+                <X size={18} />
+              </button>
+
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2 mb-1">
+                <Wallet size={18} className="text-lake-green" /> Modifica Quota Cacciatore
+              </h3>
+              <p className="text-xs text-slate-500 mb-4">
+                Imposta la quota nel profilo di <strong>{editingQuotaHunter.displayName}</strong>. Tutti i calcoli e le quote giornaliere si aggiorneranno in base a questo importo.
+              </p>
+
+              <div className="space-y-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    Quota Stagionale (€)
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-400">€</span>
+                    <input
+                      type="number"
+                      value={editingQuotaValue || ''}
+                      onChange={(e) => setEditingQuotaValue(parseFloat(e.target.value) || 0)}
+                      placeholder="0"
+                      className="w-full bg-off-white border border-slate-200 rounded pl-8 pr-3 py-2 text-base font-black text-slate-900 outline-none focus:border-lake-green"
+                      autoFocus
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setEditingQuotaHunter(null)}
+                    className="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded"
+                  >
+                    Annulla
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveHunterQuota}
+                    disabled={savingQuota}
+                    className="px-4 py-2 text-xs font-black uppercase tracking-wider bg-lake-green text-white rounded hover:bg-lake-green/90 transition-all flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+                  >
+                    <Save size={13} /> {savingQuota ? 'Salvataggio...' : 'Salva Quota nel Profilo'}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* KPI Cards & Expense Breakdown Chart */}
       <div className="space-y-6">

@@ -869,7 +869,7 @@ export function AdminPanel() {
                       ) : user.seasonalQuota ? (
                         `€${user.seasonalQuota.toLocaleString()}`
                       ) : (
-                        'Calc.'
+                        <span className="text-slate-300 font-medium italic">Non impostata</span>
                       )}
                     </span>
                   </td>

@@ -148,27 +148,11 @@ export function Dashboard() {
 
   // Quotisti & Quote Calculations
   const quotistiSummary = React.useMemo(() => {
-    const activeQuotisti = users.filter(u => u.isActive && u.role === 'quotista');
-    
-    const huntersPerDay: Record<number, number> = {};
-    activeQuotisti.forEach(u => {
-      (u.assignedDaysOfWeek || []).forEach(dayIdx => {
-        if (dayIdx !== 3 && dayIdx !== 6) {
-          huntersPerDay[dayIdx] = (huntersPerDay[dayIdx] || 0) + 1;
-        }
-      });
-    });
+    const activeQuotisti = users.filter(u => u.isActive && (u.role === 'quotista' || (u.seasonalQuota && u.seasonalQuota > 0)));
 
     return activeQuotisti.map(u => {
-      let targetQuota = u.seasonalQuota || 0;
-      if (targetQuota === 0) {
-        (u.assignedDaysOfWeek || []).forEach(dayIdx => {
-          if (dayIdx === 3 || dayIdx === 6) return;
-          const dayTotal = settings?.weekdaySeasonQuotas?.[dayIdx] || 0;
-          const participants = huntersPerDay[dayIdx] || 1;
-          targetQuota += dayTotal / participants;
-        });
-      }
+      // Quota is managed exclusively from hunter's profile
+      const targetQuota = u.seasonalQuota || 0;
 
       const payments = txs.filter(t => t.type === 'entrata' && t.payerUid === u.uid);
       const paid = payments.reduce((acc, t) => acc + t.amount, 0);
@@ -181,7 +165,7 @@ export function Dashboard() {
         payments
       };
     }).sort((a, b) => b.balance - a.balance);
-  }, [users, settings, txs]);
+  }, [users, txs]);
 
   const totalExpectedFromQuotisti = quotistiSummary.reduce((acc, q) => acc + q.targetQuota, 0);
   
