@@ -346,7 +346,6 @@ export function HuntingCalendar() {
   const location = useLocation();
   const isPrivilegedCalendar = profile?.role === 'admin' || profile?.role === 'socio';
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [hasInitializedDate, setHasInitializedDate] = useState(false);
   const [huntingDays, setHuntingDays] = useState<HuntingDay[]>([]);
   const [availableUsers, setAvailableUsers] = useState<UserProfile[]>([]);
   const [settings, setSettings] = useState<LakeSettings | null>(null);
@@ -510,18 +509,6 @@ export function HuntingCalendar() {
       if (!aWater && bWater) return 1;
       return a.species.localeCompare(b.species);
     });
-
-
-  useEffect(() => {
-    if (settings?.seasonStart && !hasInitializedDate) {
-      try {
-        setCurrentDate(parseISO(settings.seasonStart));
-        setHasInitializedDate(true);
-      } catch (e) {
-        console.error("Error setting initial calendar date:", e);
-      }
-    }
-  }, [settings, hasInitializedDate]);
 
   const monthStart = startOfMonth(currentDate);
   const monthEnd = endOfMonth(monthStart);
