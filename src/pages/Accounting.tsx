@@ -481,8 +481,8 @@ export function Accounting() {
     if (finalData.memberUid) {
       const u = users.find(user => user.uid === finalData.memberUid);
       if (u) finalData.memberName = u.displayName;
-    } else if (profile.role === 'socio' && finalData.type !== 'trasferimento') {
-      // Default to current socio if not set
+    } else if ((profile?.role === 'socio' || profile?.role === 'admin') && finalData.type !== 'trasferimento') {
+      // Default to current socio/admin if not set
       finalData.memberUid = profile.uid;
       finalData.memberName = profile.displayName;
     }

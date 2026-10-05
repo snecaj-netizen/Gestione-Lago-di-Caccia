@@ -343,6 +343,7 @@ function TodayInfo({ day, assignments, isSilenced, title }: { day: Date, assignm
 
 export function HuntingCalendar() {
   const { profile } = useAuth();
+  const isPrivilegedCalendar = profile?.role === 'admin' || profile?.role === 'socio';
   const [currentDate, setCurrentDate] = useState(new Date());
   const [hasInitializedDate, setHasInitializedDate] = useState(false);
   const [huntingDays, setHuntingDays] = useState<HuntingDay[]>([]);
@@ -1261,22 +1262,24 @@ export function HuntingCalendar() {
                   ) : (
                     <div className="space-y-3">
                       {/* Day Total Quota Box */}
-                      <div className="p-3 bg-gradient-to-r from-emerald-50 to-off-white border border-emerald-100 rounded-lg flex items-center justify-between shadow-xs">
-                        <div>
-                          <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest block">Quota Giornaliera</span>
-                          <p className="text-[10px] text-slate-500 font-medium">Somma quote cacciatori presenti</p>
+                      {isPrivilegedCalendar && (
+                        <div className="p-3 bg-gradient-to-r from-emerald-50 to-off-white border border-emerald-100 rounded-lg flex items-center justify-between shadow-xs">
+                          <div>
+                            <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest block">Quota Giornaliera</span>
+                            <p className="text-[10px] text-slate-500 font-medium">Somma quote cacciatori presenti</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-base font-black text-lake-green leading-none">
+                              €{getDayTotalQuota(selectedDay).toLocaleString()}
+                            </p>
+                            {getDay(selectedDay) === 3 || getDay(selectedDay) === 6 ? (
+                              <span className="text-[7px] font-black uppercase text-blue-600 bg-blue-50 px-1 py-0.5 rounded border border-blue-100 mt-1 inline-block">
+                                Giornata Soci
+                              </span>
+                            ) : null}
+                          </div>
                         </div>
-                        <div className="text-right">
-                          <p className="text-base font-black text-lake-green leading-none">
-                            €{getDayTotalQuota(selectedDay).toLocaleString()}
-                          </p>
-                          {getDay(selectedDay) === 3 || getDay(selectedDay) === 6 ? (
-                            <span className="text-[7px] font-black uppercase text-blue-600 bg-blue-50 px-1 py-0.5 rounded border border-blue-100 mt-1 inline-block">
-                              Giornata Soci
-                            </span>
-                          ) : null}
-                        </div>
-                      </div>
+                      )}
 
                       <div className="grid grid-cols-1 gap-2">
                         {dayAssignments(selectedDay).map(a => {
@@ -1300,7 +1303,7 @@ export function HuntingCalendar() {
                                     <span className="text-[8px] text-slate-400 font-bold uppercase">
                                       {a.isRecurring ? 'Fisso' : 'Manuale'}
                                     </span>
-                                    {hunterQuota > 0 && (
+                                    {isPrivilegedCalendar && hunterQuota > 0 && (
                                       <span className="text-[8px] font-black text-lake-green bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-100">
                                         Quota: €{hunterQuota.toLocaleString()}
                                       </span>
@@ -1371,14 +1374,16 @@ export function HuntingCalendar() {
                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                  <div>
                    <h4 className="text-[0.65rem] font-black text-slate-400 uppercase tracking-widest">Cacciatori Presenti</h4>
-                   <p className="text-[10px] text-slate-600 font-bold mt-0.5">
-                     Quota Totale Giornata: <strong className="text-lake-green font-black text-xs">€{getDayTotalQuota(selectedDay).toLocaleString()}</strong>
-                     {(getDay(selectedDay) === 3 || getDay(selectedDay) === 6) && (
-                       <span className="ml-1 text-[8px] font-black uppercase text-blue-600 bg-blue-50 px-1 py-0.5 rounded border border-blue-100">
-                         Giornata Soci
-                       </span>
-                     )}
-                   </p>
+                   {isPrivilegedCalendar && (
+                     <p className="text-[10px] text-slate-600 font-bold mt-0.5">
+                       Quota Totale Giornata: <strong className="text-lake-green font-black text-xs">€{getDayTotalQuota(selectedDay).toLocaleString()}</strong>
+                       {(getDay(selectedDay) === 3 || getDay(selectedDay) === 6) && (
+                         <span className="ml-1 text-[8px] font-black uppercase text-blue-600 bg-blue-50 px-1 py-0.5 rounded border border-blue-100">
+                           Giornata Soci
+                         </span>
+                       )}
+                     </p>
+                   )}
                  </div>
                  {dayAssignments(selectedDay).length > 0 && (
                    <span className={cn(
@@ -1432,21 +1437,23 @@ export function HuntingCalendar() {
                            </div>
                          </div>
 
-                         {/* Quota details and incassa quick link */}
-                         <div className="flex items-center justify-between pt-1.5 border-t border-slate-200/60 text-[10px]">
-                           <span className="font-bold text-slate-600">
-                             Quota: <strong className="text-lake-green font-black">€{hunterQuota.toLocaleString()}</strong>
-                           </span>
-                           {hunterQuota > 0 && (
-                             <Link
-                               to={`/accounting?modal=add&type=entrata&payerUid=${a.assignedToUid}&payerName=${encodeURIComponent(a.assignedToName)}&amount=${hunterQuota}&huntingDayId=${format(selectedDay, 'yyyy-MM-dd')}`}
-                               className="text-[9px] font-black text-lake-green hover:underline flex items-center gap-0.5 uppercase tracking-tight"
-                               title="Registra incasso quota in contabilità"
-                             >
-                               INCASSA <ArrowRight size={9} />
-                             </Link>
-                           )}
-                         </div>
+                         {/* Quota details and incassa quick link (only for soci/admin) */}
+                         {isPrivilegedCalendar && (
+                           <div className="flex items-center justify-between pt-1.5 border-t border-slate-200/60 text-[10px]">
+                             <span className="font-bold text-slate-600">
+                               Quota: <strong className="text-lake-green font-black">€{hunterQuota.toLocaleString()}</strong>
+                             </span>
+                             {hunterQuota > 0 && (
+                               <Link
+                                 to={`/accounting?modal=add&type=entrata&payerUid=${a.assignedToUid}&payerName=${encodeURIComponent(a.assignedToName)}&amount=${hunterQuota}&huntingDayId=${format(selectedDay, 'yyyy-MM-dd')}`}
+                                 className="text-[9px] font-black text-lake-green hover:underline flex items-center gap-0.5 uppercase tracking-tight"
+                                 title="Registra incasso quota in contabilità"
+                               >
+                                 INCASSA <ArrowRight size={9} />
+                               </Link>
+                             )}
+                           </div>
+                         )}
                        </div>
                       );
                    })}
@@ -1536,31 +1543,18 @@ export function HuntingCalendar() {
                               <div>
                                 <p className="font-bold text-slate-800 text-xs">{formatUserName(user.displayName)}</p>
                                 <p className="text-[9px] text-slate-400 uppercase font-bold tracking-widest leading-tight">
-                                  {user.role} {user.seasonalQuota ? `• Quota Profilo: €${user.seasonalQuota.toLocaleString()}` : ''}
+                                  {user.role} {isPrivilegedCalendar && user.seasonalQuota ? `• Quota: €${user.seasonalQuota.toLocaleString()}` : ''}
                                 </p>
                               </div>
                             </div>
 
                             <div className="flex items-center gap-1.5 self-end sm:self-center shrink-0">
-                              <div className="relative">
-                                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">€</span>
-                                <input
-                                  type="number"
-                                  value={currentInputQuota || ''}
-                                  onChange={(e) => setAssignQuotaInput({
-                                    ...assignQuotaInput,
-                                    [user.uid]: parseFloat(e.target.value) || 0
-                                  })}
-                                  placeholder="0"
-                                  className="w-20 bg-white border border-slate-200 rounded pl-5 pr-1.5 py-1 text-xs font-bold text-slate-900 outline-none focus:border-lake-green shadow-2xs"
-                                  title="Quota per questa giornata (es. quota ospite o giornata soci)"
-                                />
-                              </div>
+
                               <button
                                 type="button"
-                                onClick={() => onAssign(user.uid, currentInputQuota)}
+                                onClick={() => onAssign(user.uid)}
                                 className="bg-lake-green hover:bg-lake-green/90 text-white text-[10px] font-black uppercase px-2.5 py-1.5 rounded transition-all flex items-center gap-1 cursor-pointer shadow-2xs"
-                                title="Assegna a questa giornata con la quota indicata"
+                                title="Assegna a questa giornata"
                               >
                                 <Plus size={12} /> Assegna
                               </button>
