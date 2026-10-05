@@ -15,7 +15,11 @@ import {
 } from '../services';
 import { Transaction, HuntingDay, UserProfile, LakeSettings, BudgetItem } from '../types';
 import { useAuth } from '../contexts/AuthContext';
-import { Plus, Wallet, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, X, User as UserIcon, Calendar as CalendarIcon, Settings, ChevronRight, CheckCircle2, BarChart3, Target, PieChart, Trash2, Edit2, Save } from 'lucide-react';
+import { 
+  Plus, Wallet, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, X, 
+  User as UserIcon, Calendar as CalendarIcon, Settings, ChevronRight, CheckCircle2, 
+  BarChart3, Target, PieChart, Trash2, Edit2, Save, ArrowRightLeft, Coins, Users, AlertTriangle 
+} from 'lucide-react';
 import { cn, formatUserName } from '../lib/utils';
 import { format, parseISO, getDay, isWithinInterval } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -47,17 +51,19 @@ export function Accounting() {
   const [items, setItems] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   
-  const [activeModal, setActiveModal] = useState<'quota' | 'budget' | 'add' | null>(() => {
-    const m = searchParams.get('modal');
-    if (m === 'quota' || m === 'budget' || m === 'add') return m;
+  const [activeModal, setActiveModal] = useState<'quota' | 'budget' | 'add' | 'transfer' | 'contributo' | null>(() => {
+    const m = searchParams.get('modal') || searchParams.get('action');
+    if (m === 'quota' || m === 'budget' || m === 'add' || m === 'transfer' || m === 'contributo') return m;
     return null;
   });
   
   const showAdd = activeModal === 'add';
   const showQuotaConfig = activeModal === 'quota';
   const showBudgetConfig = activeModal === 'budget';
+  const showTransfer = activeModal === 'transfer';
+  const showContributo = activeModal === 'contributo';
 
-  const handleToggleModal = (modalName: 'quota' | 'budget' | 'add' | null) => {
+  const handleToggleModal = (modalName: 'quota' | 'budget' | 'add' | 'transfer' | 'contributo' | null) => {
     setActiveModal(modalName);
     if (!modalName) {
       setSearchParams({});
@@ -84,7 +90,7 @@ export function Accounting() {
 
   const [formData, setFormData] = useState({
     date: format(new Date(), 'yyyy-MM-dd'),
-    type: 'entrata' as 'entrata' | 'uscita',
+    type: 'entrata' as 'entrata' | 'uscita' | 'trasferimento',
     category: '',
     amount: 0,
     description: '',
@@ -95,7 +101,44 @@ export function Accounting() {
     memberName: ''
   });
 
-  const getSortedBudgetCategories = (type: 'entrata' | 'uscita', itemsList: BudgetItem[]) => {
+  // Dedicated state for Trasferimento Cassa tra Soci
+  const [transferData, setTransferData] = useState({
+    fromUid: searchParams.get('fromUid') || '',
+    toUid: searchParams.get('targetUid') || '',
+    amount: 0,
+    date: format(new Date(), 'yyyy-MM-dd'),
+    description: ''
+  });
+
+  // Dedicated state for Contributo Spese Soci (Ripianamento Soci in negativo)
+  const [contributoData, setContributoData] = useState({
+    fromUid: '',
+    targetUid: searchParams.get('targetUid') || '',
+    amount: 0,
+    date: format(new Date(), 'yyyy-MM-dd'),
+    description: ''
+  });
+
+  // Sync state if URL query params change
+  useEffect(() => {
+    const modalParam = searchParams.get('modal') || searchParams.get('action');
+    if (modalParam === 'transfer' || modalParam === 'contributo' || modalParam === 'add' || modalParam === 'budget' || modalParam === 'quota') {
+      setActiveModal(modalParam);
+    }
+    const targetUid = searchParams.get('targetUid');
+    if (targetUid) {
+      setContributoData(prev => ({ ...prev, targetUid }));
+      setTransferData(prev => ({ ...prev, toUid: targetUid }));
+    }
+    const fromUid = searchParams.get('fromUid');
+    if (fromUid) {
+      setTransferData(prev => ({ ...prev, fromUid }));
+      setContributoData(prev => ({ ...prev, fromUid }));
+    }
+  }, [searchParams]);
+
+  const getSortedBudgetCategories = (type: 'entrata' | 'uscita' | 'trasferimento', itemsList: BudgetItem[]) => {
+    if (type === 'trasferimento') return [];
     return itemsList
       .filter(b => (b.type || 'uscita') === type)
       .sort((a, b) => {
@@ -111,7 +154,17 @@ export function Accounting() {
 
   const availableBudgetCategories = getSortedBudgetCategories(formData.type, budgetItems);
 
-  const handleTypeChange = (newType: 'entrata' | 'uscita') => {
+  const handleTypeChange = (newType: 'entrata' | 'uscita' | 'trasferimento') => {
+    if (newType === 'trasferimento') {
+      setFormData({
+        ...formData,
+        type: newType,
+        category: 'Trasferimento Cassa Soci',
+        payerUid: formData.payerUid || profile?.uid || '',
+        memberUid: formData.memberUid || ''
+      });
+      return;
+    }
     const cats = getSortedBudgetCategories(newType, budgetItems);
     const isCurrentValid = cats.some(c => c.label === formData.category);
     setFormData({
@@ -285,6 +338,144 @@ export function Accounting() {
       .reduce((acc, t) => acc + t.amount, 0);
   };
 
+  const getSociSummary = () => {
+    const activeSoci = users.filter(u => u.isActive && (u.role === 'socio' || u.role === 'admin'));
+    return activeSoci.map(s => {
+      // 1. Incassi ricevuti in cassa da questo socio (quote dei cacciatori, contributi ricevuti)
+      const incomeReceived = items
+        .filter(t => t.type === 'entrata' && t.memberUid === s.uid)
+        .reduce((acc, t) => acc + t.amount, 0);
+
+      // 2. Spese lago anticipate/pagate dal socio di tasca propria
+      const expensesPaid = items
+        .filter(t => t.type === 'uscita' && t.memberUid === s.uid)
+        .reduce((acc, t) => acc + t.amount, 0);
+
+      // 3. Trasferimenti di cassa ricevuti da altri soci
+      const transfersReceived = items
+        .filter(t => t.type === 'trasferimento' && t.memberUid === s.uid)
+        .reduce((acc, t) => acc + t.amount, 0);
+
+      // 4. Trasferimenti di cassa inviati ad altri soci
+      const transfersSent = items
+        .filter(t => t.type === 'trasferimento' && t.payerUid === s.uid)
+        .reduce((acc, t) => acc + t.amount, 0);
+
+      // 5. Contributi personali messi out-of-pocket da questo socio a favore di altri soci o per pareggiare spese
+      const contributionsPaid = items
+        .filter(t => t.type === 'entrata' && t.payerUid === s.uid && (t.category.toLowerCase().includes('contribut') || t.category.toLowerCase().includes('ripian')))
+        .reduce((acc, t) => acc + t.amount, 0);
+
+      // Saldo Cassa Effettivo del Socio nel Lago:
+      // (Soldi incassati o ricevuti da trasferimenti) - (Spese anticipate o trasferimenti inviati)
+      const currentBalance = (incomeReceived + transfersReceived) - (expensesPaid + transfersSent);
+
+      return {
+        ...s,
+        incomeReceived,
+        expensesPaid,
+        transfersReceived,
+        transfersSent,
+        contributionsPaid,
+        currentBalance
+      };
+    }).sort((a, b) => a.currentBalance - b.currentBalance);
+  };
+
+  const handleTransferSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!profile) return;
+    if (!transferData.fromUid || !transferData.toUid) {
+      alert("Seleziona sia il socio mittente che il socio destinatario.");
+      return;
+    }
+    if (transferData.fromUid === transferData.toUid) {
+      alert("Il socio mittente e il destinatario non possono coincidere.");
+      return;
+    }
+    if (transferData.amount <= 0) {
+      alert("Inserisci un importo valido maggiore di zero.");
+      return;
+    }
+
+    const fromUser = users.find(u => u.uid === transferData.fromUid);
+    const toUser = users.find(u => u.uid === transferData.toUid);
+
+    try {
+      await addTransaction({
+        type: 'trasferimento',
+        category: 'Trasferimento Cassa Soci',
+        amount: transferData.amount,
+        date: transferData.date,
+        payerUid: transferData.fromUid,
+        payerName: fromUser?.displayName || 'Socio',
+        memberUid: transferData.toUid,
+        memberName: toUser?.displayName || 'Socio',
+        description: transferData.description || `Trasferimento cassa da ${fromUser?.displayName || 'Socio'} a ${toUser?.displayName || 'Socio'}`,
+        createdBy: profile.uid
+      });
+
+      setTransferData({
+        fromUid: '',
+        toUid: '',
+        amount: 0,
+        date: format(new Date(), 'yyyy-MM-dd'),
+        description: ''
+      });
+      handleToggleModal(null);
+    } catch (err: any) {
+      console.error(err);
+      alert("Errore durante il trasferimento: " + (err.message || "Errore sconosciuto"));
+    }
+  };
+
+  const handleContributoSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!profile) return;
+    if (!contributoData.fromUid) {
+      alert("Seleziona il socio che versa il contributo.");
+      return;
+    }
+    if (!contributoData.targetUid) {
+      alert("Seleziona il socio che riceve il contributo per ripianare le spese.");
+      return;
+    }
+    if (contributoData.amount <= 0) {
+      alert("Inserisci un importo valido maggiore di zero.");
+      return;
+    }
+
+    const fromUser = users.find(u => u.uid === contributoData.fromUid);
+    const targetUser = users.find(u => u.uid === contributoData.targetUid);
+
+    try {
+      await addTransaction({
+        type: 'entrata',
+        category: 'Contributo Soci (Ripianamento Spese)',
+        amount: contributoData.amount,
+        date: contributoData.date,
+        payerUid: contributoData.fromUid,
+        payerName: fromUser?.displayName || 'Socio',
+        memberUid: contributoData.targetUid,
+        memberName: targetUser?.displayName || 'Socio',
+        description: contributoData.description || `Contributo di ${fromUser?.displayName || 'Socio'} a favore di ${targetUser?.displayName || 'Socio'} per ripianamento spese`,
+        createdBy: profile.uid
+      });
+
+      setContributoData({
+        fromUid: '',
+        targetUid: '',
+        amount: 0,
+        date: format(new Date(), 'yyyy-MM-dd'),
+        description: ''
+      });
+      handleToggleModal(null);
+    } catch (err: any) {
+      console.error(err);
+      alert("Errore durante la registrazione del contributo: " + (err.message || "Errore sconosciuto"));
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!profile) return;
@@ -300,10 +491,22 @@ export function Accounting() {
     if (finalData.memberUid) {
       const u = users.find(user => user.uid === finalData.memberUid);
       if (u) finalData.memberName = u.displayName;
-    } else if (profile.role === 'socio') {
+    } else if (profile.role === 'socio' && finalData.type !== 'trasferimento') {
       // Default to current socio if not set
       finalData.memberUid = profile.uid;
       finalData.memberName = profile.displayName;
+    }
+
+    if (finalData.type === 'trasferimento') {
+      finalData.category = 'Trasferimento Cassa Soci';
+      if (!finalData.payerUid || !finalData.memberUid) {
+        alert("Per un trasferimento seleziona sia il socio mittente che il socio destinatario.");
+        return;
+      }
+      if (finalData.payerUid === finalData.memberUid) {
+        alert("Il socio mittente e il destinatario non possono coincidere.");
+        return;
+      }
     }
 
     try {
@@ -319,7 +522,8 @@ export function Accounting() {
           });
       }
       setFormData({ 
-        ...formData, 
+        date: format(new Date(), 'yyyy-MM-dd'),
+        type: 'entrata',
         category: '', 
         amount: 0, 
         description: '',
@@ -343,32 +547,65 @@ export function Accounting() {
           <h1 className="text-3xl font-serif text-lake-green">Contabilità & Spese</h1>
           <p className="text-slate-gray font-medium">Monitoraggio flussi finanziari del lago</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           {(profile?.role === 'socio' || profile?.role === 'admin') && (
             <>
               <button 
+                onClick={() => {
+                  setContributoData({
+                    fromUid: profile.uid,
+                    targetUid: '',
+                    amount: 0,
+                    date: format(new Date(), 'yyyy-MM-dd'),
+                    description: ''
+                  });
+                  handleToggleModal('contributo');
+                }}
+                className="px-3.5 py-2.5 rounded font-black text-xs uppercase tracking-wider flex items-center gap-1.5 transition-all bg-amber-500 hover:bg-amber-600 text-white shadow-sm active:scale-95"
+                title="I soci mettono soldi per coprire le spese dell'anno"
+              >
+                <Coins size={15} />
+                <span>+ Contributo Spese</span>
+              </button>
+              <button 
+                onClick={() => {
+                  setTransferData({
+                    fromUid: profile.uid,
+                    toUid: '',
+                    amount: 0,
+                    date: format(new Date(), 'yyyy-MM-dd'),
+                    description: ''
+                  });
+                  handleToggleModal('transfer');
+                }}
+                className="px-3.5 py-2.5 rounded font-black text-xs uppercase tracking-wider flex items-center gap-1.5 transition-all bg-purple-600 hover:bg-purple-700 text-white shadow-sm active:scale-95"
+                title="Trasferisci disponibilità di cassa ad un altro socio"
+              >
+                <ArrowRightLeft size={15} />
+                <span>⇄ Trasferimento Cassa</span>
+              </button>
+              <button 
                 onClick={() => handleToggleModal(showBudgetConfig ? null : 'budget')}
                 className={cn(
-                  "px-4 py-2.5 rounded font-black text-xs uppercase tracking-widest flex items-center gap-2 transition-all border shadow-sm",
+                  "px-3.5 py-2.5 rounded font-black text-xs uppercase tracking-wider flex items-center gap-1.5 transition-all border shadow-sm",
                   showBudgetConfig ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-600 border-slate-200 hover:border-lake-green hover:text-lake-green"
                 )}
               >
-                <PieChart size={16} />
-                {showBudgetConfig ? 'Chiudi Budget' : 'Budget Preventivo'}
+                <PieChart size={15} />
+                {showBudgetConfig ? 'Chiudi Budget' : 'Budget'}
               </button>
               <button 
                 onClick={() => handleToggleModal(showQuotaConfig ? null : 'quota')}
                 className={cn(
-                  "px-4 py-2.5 rounded font-black text-xs uppercase tracking-widest flex items-center gap-2 transition-all border shadow-sm",
+                  "px-3.5 py-2.5 rounded font-black text-xs uppercase tracking-wider flex items-center gap-1.5 transition-all border shadow-sm",
                   showQuotaConfig ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-600 border-slate-200 hover:border-lake-green hover:text-lake-green"
                 )}
               >
-                <Settings size={16} />
+                <Settings size={15} />
                 {showQuotaConfig ? 'Chiudi Config.' : 'Config. Quote'}
               </button>
             </>
           )}
-          {profile?.role === 'socio' || profile?.role === 'admin' ? null : null}
         </div>
       </header>
 
@@ -637,8 +874,273 @@ export function Accounting() {
         </section>
       )}
 
+      {/* Soci Cash & Expense Management Section */}
+      {(profile?.role === 'socio' || profile?.role === 'admin') && !showAdd && !showQuotaConfig && !showBudgetConfig && !showTransfer && !showContributo && (
+        <section className="card-polish !border-t-lake-green">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b border-slate-100 pb-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <Users size={20} className="text-lake-green" />
+                <h3 className="text-base sm:text-lg font-serif text-slate-900">
+                  Cassa & Situazione Soci (Ripianamento Spese e Trasferimenti)
+                </h3>
+              </div>
+              <p className="text-[11px] text-slate-500 font-medium mt-1">
+                I soci <strong className="text-slate-700">non pagano una quota annuale fissa</strong>: se le entrate dei cacciatori non coprono i costi, mettono denaro per pareggiare le spese dell'anno dandolo a chi ha anticipato fondi ed è in negativo. I soci in positivo possono trasferire cassa ad altri soci.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 self-stretch sm:self-auto shrink-0">
+              <button 
+                onClick={() => {
+                  setContributoData({
+                    fromUid: profile.uid,
+                    targetUid: '',
+                    amount: 0,
+                    date: format(new Date(), 'yyyy-MM-dd'),
+                    description: ''
+                  });
+                  handleToggleModal('contributo');
+                }}
+                className="flex-1 sm:flex-initial px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-all"
+              >
+                <Coins size={14} /> + Versa Contributo
+              </button>
+              <button 
+                onClick={() => {
+                  setTransferData({
+                    fromUid: profile.uid,
+                    toUid: '',
+                    amount: 0,
+                    date: format(new Date(), 'yyyy-MM-dd'),
+                    description: ''
+                  });
+                  handleToggleModal('transfer');
+                }}
+                className="flex-1 sm:flex-initial px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-all"
+              >
+                <ArrowRightLeft size={14} /> ⇄ Trasferisci Cassa
+              </button>
+            </div>
+          </div>
+
+          {/* Quick Metrics Bar */}
+          {(() => {
+            const sociList = getSociSummary();
+            const negativeSoci = sociList.filter(s => s.currentBalance < 0);
+            const positiveSoci = sociList.filter(s => s.currentBalance > 0);
+            const totalNegative = negativeSoci.reduce((acc, s) => acc + Math.abs(s.currentBalance), 0);
+            const totalPositive = positiveSoci.reduce((acc, s) => acc + s.currentBalance, 0);
+
+            return (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+                <div className="p-3.5 bg-rose-50/50 border border-rose-100 rounded-lg flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-rose-700">Da Ripianare (In Negativo)</span>
+                    <p className="text-xl font-black text-rose-700 mt-0.5">€{totalNegative.toLocaleString()}</p>
+                    <p className="text-[9px] text-rose-600/80 font-medium">{negativeSoci.length} {negativeSoci.length === 1 ? 'socio ha' : 'soci hanno'} anticipato spese</p>
+                  </div>
+                  <div className="p-2.5 bg-rose-100/80 rounded-full text-rose-700">
+                    <AlertTriangle size={18} />
+                  </div>
+                </div>
+
+                <div className="p-3.5 bg-emerald-50/50 border border-emerald-100 rounded-lg flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-emerald-700">Disponibilità Cassa (In Positivo)</span>
+                    <p className="text-xl font-black text-emerald-700 mt-0.5">€{totalPositive.toLocaleString()}</p>
+                    <p className="text-[9px] text-emerald-600/80 font-medium">{positiveSoci.length} {positiveSoci.length === 1 ? 'socio ha' : 'soci hanno'} fondi disponibili</p>
+                  </div>
+                  <div className="p-2.5 bg-emerald-100/80 rounded-full text-emerald-700">
+                    <CheckCircle2 size={18} />
+                  </div>
+                </div>
+
+                <div className="p-3.5 bg-slate-50 border border-slate-200/70 rounded-lg flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Saldo Netto Cassa Soci</span>
+                    <p className={cn("text-xl font-black mt-0.5", (totalPositive - totalNegative) >= 0 ? "text-slate-900" : "text-rose-700")}>
+                      {(totalPositive - totalNegative) >= 0 ? `+€${(totalPositive - totalNegative).toLocaleString()}` : `-€${Math.abs(totalPositive - totalNegative).toLocaleString()}`}
+                    </p>
+                    <p className="text-[9px] text-slate-400 font-medium">Allineato con il saldo totale del lago</p>
+                  </div>
+                  <div className="p-2.5 bg-slate-200/60 rounded-full text-slate-600">
+                    <Wallet size={18} />
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Cards Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {getSociSummary().map(socio => {
+              const isNegative = socio.currentBalance < 0;
+              const isPositive = socio.currentBalance > 0;
+
+              return (
+                <div 
+                  key={socio.uid}
+                  className={cn(
+                    "p-4 rounded-xl border flex flex-col justify-between transition-all gap-4 shadow-sm",
+                    isNegative 
+                      ? "bg-rose-50/20 border-rose-200 hover:border-rose-300" 
+                      : isPositive 
+                        ? "bg-emerald-50/20 border-emerald-200 hover:border-emerald-300" 
+                        : "bg-white border-slate-100 hover:border-slate-200"
+                  )}
+                >
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h4 className="text-base font-bold text-slate-900 flex items-center gap-1.5">
+                          {formatUserName(socio.displayName)}
+                        </h4>
+                        <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">
+                          {socio.role === 'admin' ? 'Amministratore & Socio' : 'Socio del Lago'}
+                        </span>
+                      </div>
+                      <span className={cn(
+                        "text-[9px] font-black uppercase px-2 py-0.5 rounded-full border",
+                        isNegative ? "bg-rose-100 text-rose-700 border-rose-200" :
+                        isPositive ? "bg-emerald-100 text-emerald-700 border-emerald-200" :
+                        "bg-slate-100 text-slate-600 border-slate-200"
+                      )}>
+                        {isNegative ? 'In Negativo' : isPositive ? 'In Positivo' : 'In Pari'}
+                      </span>
+                    </div>
+
+                    <div className={cn(
+                      "p-3 rounded-lg border",
+                      isNegative ? "bg-white border-rose-100" : isPositive ? "bg-white border-emerald-100" : "bg-off-white border-slate-100"
+                    )}>
+                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Saldo Cassa Attuale</span>
+                      <p className={cn(
+                        "text-2xl font-black tracking-tighter mt-0.5",
+                        isNegative ? "text-rose-600" : isPositive ? "text-emerald-700" : "text-slate-800"
+                      )}>
+                        {isNegative ? `-€${Math.abs(socio.currentBalance).toLocaleString()}` : `€${socio.currentBalance.toLocaleString()}`}
+                      </p>
+                      <p className="text-[9px] text-slate-500 font-medium mt-0.5">
+                        {isNegative ? 'Ha anticipato spese per il lago non ancora coperte' :
+                         isPositive ? 'Fondi disponibili in cassa trasferibili ad altri soci' :
+                         'Tutti i pagamenti e gli incassi sono in pareggio'}
+                      </p>
+                    </div>
+
+                    {/* Breakdown */}
+                    <div className="grid grid-cols-2 gap-2 text-[10px]">
+                      <div className="p-2 bg-slate-50/70 rounded border border-slate-100">
+                        <span className="text-slate-400 uppercase font-black text-[8px] block">Spese Anticipate</span>
+                        <span className="font-bold text-rose-600">€{socio.expensesPaid.toLocaleString()}</span>
+                      </div>
+                      <div className="p-2 bg-slate-50/70 rounded border border-slate-100">
+                        <span className="text-slate-400 uppercase font-black text-[8px] block">Incassi in Cassa</span>
+                        <span className="font-bold text-emerald-600">€{socio.incomeReceived.toLocaleString()}</span>
+                      </div>
+                      <div className="p-2 bg-slate-50/70 rounded border border-slate-100">
+                        <span className="text-slate-400 uppercase font-black text-[8px] block">Giroconti Ricevuti</span>
+                        <span className="font-bold text-purple-600">+{socio.transfersReceived.toLocaleString()}</span>
+                      </div>
+                      <div className="p-2 bg-slate-50/70 rounded border border-slate-100">
+                        <span className="text-slate-400 uppercase font-black text-[8px] block">Giroconti Inviati</span>
+                        <span className="font-bold text-slate-600">-{socio.transfersSent.toLocaleString()}</span>
+                      </div>
+                    </div>
+
+                    {socio.contributionsPaid > 0 && (
+                      <div className="px-2.5 py-1.5 bg-amber-50 rounded border border-amber-100 text-[9px] text-amber-800 flex justify-between items-center">
+                        <span className="font-bold">Contributi versati per rientrare nei costi:</span>
+                        <span className="font-black text-amber-900">€{socio.contributionsPaid.toLocaleString()}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Actions for this Socio */}
+                  <div className="space-y-2 pt-1 border-t border-slate-100">
+                    {isNegative ? (
+                      <button 
+                        onClick={() => {
+                          setContributoData({
+                            fromUid: profile.uid !== socio.uid ? profile.uid : '',
+                            targetUid: socio.uid,
+                            amount: Math.abs(socio.currentBalance),
+                            date: format(new Date(), 'yyyy-MM-dd'),
+                            description: `Ripianamento spese anticipate per ${formatUserName(socio.displayName)}`
+                          });
+                          handleToggleModal('contributo');
+                        }}
+                        className="w-full py-2 px-3 bg-amber-500 hover:bg-amber-600 text-white rounded text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-all"
+                      >
+                        <Coins size={13} />
+                        <span>Versa Contributo a {formatUserName(socio.displayName)}</span>
+                      </button>
+                    ) : null}
+
+                    {isPositive ? (
+                      <button 
+                        onClick={() => {
+                          setTransferData({
+                            fromUid: socio.uid,
+                            toUid: '',
+                            amount: socio.currentBalance,
+                            date: format(new Date(), 'yyyy-MM-dd'),
+                            description: `Trasferimento cassa da ${formatUserName(socio.displayName)}`
+                          });
+                          handleToggleModal('transfer');
+                        }}
+                        className="w-full py-2 px-3 bg-purple-600 hover:bg-purple-700 text-white rounded text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-all"
+                      >
+                        <ArrowRightLeft size={13} />
+                        <span>Trasferisci Cassa ad un altro Socio</span>
+                      </button>
+                    ) : null}
+
+                    <div className="flex gap-2">
+                      {!isNegative && (
+                        <button 
+                          onClick={() => {
+                            setContributoData({
+                              fromUid: profile.uid !== socio.uid ? profile.uid : '',
+                              targetUid: socio.uid,
+                              amount: 0,
+                              date: format(new Date(), 'yyyy-MM-dd'),
+                              description: ''
+                            });
+                            handleToggleModal('contributo');
+                          }}
+                          className="flex-1 py-1.5 text-[9px] font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 rounded uppercase tracking-wider transition-colors flex items-center justify-center gap-1"
+                        >
+                          <Coins size={11} /> Versa a {formatUserName(socio.displayName).split(' ')[0]}
+                        </button>
+                      )}
+                      {!isPositive && (
+                        <button 
+                          onClick={() => {
+                            setTransferData({
+                              fromUid: '',
+                              toUid: socio.uid,
+                              amount: isNegative ? Math.abs(socio.currentBalance) : 0,
+                              date: format(new Date(), 'yyyy-MM-dd'),
+                              description: ''
+                            });
+                            handleToggleModal('transfer');
+                          }}
+                          className="flex-1 py-1.5 text-[9px] font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 rounded uppercase tracking-wider transition-colors flex items-center justify-center gap-1"
+                        >
+                          <ArrowRightLeft size={11} /> Gira cassa a {formatUserName(socio.displayName).split(' ')[0]}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
       {/* Hunters Status Table */}
-      {(profile?.role === 'socio' || profile?.role === 'admin') && !showAdd && !showQuotaConfig && !showBudgetConfig && (
+      {(profile?.role === 'socio' || profile?.role === 'admin') && !showAdd && !showQuotaConfig && !showBudgetConfig && !showTransfer && !showContributo && (
         <section className="card-polish">
           <div className="mb-6 flex justify-between items-center border-b border-slate-100 pb-3">
             <h3 className="text-sm font-bold text-slate-gray uppercase flex items-center gap-2">
@@ -871,12 +1373,12 @@ export function Accounting() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
                     <label className="text-[0.65rem] font-black text-slate-400 uppercase tracking-widest">Tipo Movimento</label>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
                       <button
                         type="button"
                         onClick={() => handleTypeChange('entrata')}
                         className={cn(
-                          "py-2 px-4 rounded font-bold text-xs uppercase tracking-widest border transition-all",
+                          "py-2 px-2 rounded font-bold text-xs uppercase tracking-wider border transition-all text-center",
                           formData.type === 'entrata' 
                             ? "bg-emerald-500 text-white border-emerald-500 shadow-md" 
                             : "bg-white text-slate-400 border-slate-200 hover:border-emerald-200"
@@ -888,7 +1390,7 @@ export function Accounting() {
                         type="button"
                         onClick={() => handleTypeChange('uscita')}
                         className={cn(
-                          "py-2 px-4 rounded font-bold text-xs uppercase tracking-widest border transition-all",
+                          "py-2 px-2 rounded font-bold text-xs uppercase tracking-wider border transition-all text-center",
                           formData.type === 'uscita' 
                             ? "bg-rose-500 text-white border-rose-500 shadow-md" 
                             : "bg-white text-slate-400 border-slate-200 hover:border-rose-200"
@@ -896,42 +1398,67 @@ export function Accounting() {
                       >
                         Uscita
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => handleTypeChange('trasferimento')}
+                        className={cn(
+                          "py-2 px-2 rounded font-bold text-xs uppercase tracking-wider border transition-all text-center",
+                          formData.type === 'trasferimento' 
+                            ? "bg-purple-600 text-white border-purple-600 shadow-md" 
+                            : "bg-white text-slate-400 border-slate-200 hover:border-purple-200"
+                        )}
+                      >
+                        Giroconto
+                      </button>
                     </div>
                   </div>
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center">
-                      <label className="text-[0.65rem] font-black text-slate-400 uppercase tracking-widest">
-                        Categoria {formData.type === 'entrata' ? '(Voci Entrata Budget)' : '(Voci Uscita Budget)'}
+
+                  {formData.type === 'trasferimento' ? (
+                    <div className="space-y-2">
+                      <label className="text-[0.65rem] font-black text-purple-600 uppercase tracking-widest">
+                        Operazione Interna
                       </label>
-                      {availableBudgetCategories.length === 0 && (profile?.role === 'admin' || profile?.role === 'socio') && (
-                        <button
-                          type="button"
-                          onClick={() => handleToggleModal('budget')}
-                          className="text-[9px] font-bold text-purple-600 hover:text-purple-800 uppercase underline"
-                        >
-                          + Budget
-                        </button>
+                      <div className="p-2.5 bg-purple-50 rounded border border-purple-100 text-xs font-bold text-purple-800 flex items-center gap-1.5">
+                        <ArrowRightLeft size={14} className="text-purple-600 shrink-0" />
+                        <span>Trasferimento fondi cassa tra soci</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <label className="text-[0.65rem] font-black text-slate-400 uppercase tracking-widest">
+                          Categoria {formData.type === 'entrata' ? '(Voci Entrata Budget)' : '(Voci Uscita Budget)'}
+                        </label>
+                        {availableBudgetCategories.length === 0 && (profile?.role === 'admin' || profile?.role === 'socio') && (
+                          <button
+                            type="button"
+                            onClick={() => handleToggleModal('budget')}
+                            className="text-[9px] font-bold text-purple-600 hover:text-purple-800 uppercase underline"
+                          >
+                            + Budget
+                          </button>
+                        )}
+                      </div>
+                      <select 
+                        required
+                        value={formData.category}
+                        onChange={e => setFormData({ ...formData, category: e.target.value })}
+                        className="w-full bg-off-white border border-slate-200 rounded px-4 py-2.5 text-sm font-bold text-slate-gray outline-none focus:border-lake-green"
+                      >
+                        <option value="" disabled>-- Seleziona Voce di {formData.type === 'entrata' ? 'Entrata' : 'Uscita'} --</option>
+                        {availableBudgetCategories.map(b => (
+                          <option key={b.id} value={b.label}>
+                            {b.label}
+                          </option>
+                        ))}
+                      </select>
+                      {availableBudgetCategories.length === 0 && (
+                        <p className="text-[10px] text-amber-700 bg-amber-50 p-2 rounded border border-amber-200 font-medium">
+                          Nessuna voce di {formData.type} definita nel Budget Preventivo. Aggiungine una nella sezione "Budget Preventivo".
+                        </p>
                       )}
                     </div>
-                    <select 
-                      required
-                      value={formData.category}
-                      onChange={e => setFormData({ ...formData, category: e.target.value })}
-                      className="w-full bg-off-white border border-slate-200 rounded px-4 py-2.5 text-sm font-bold text-slate-gray outline-none focus:border-lake-green"
-                    >
-                      <option value="" disabled>-- Seleziona Voce di {formData.type === 'entrata' ? 'Entrata' : 'Uscita'} --</option>
-                      {availableBudgetCategories.map(b => (
-                        <option key={b.id} value={b.label}>
-                          {b.label}
-                        </option>
-                      ))}
-                    </select>
-                    {availableBudgetCategories.length === 0 && (
-                      <p className="text-[10px] text-amber-700 bg-amber-50 p-2 rounded border border-amber-200 font-medium">
-                        Nessuna voce di {formData.type} definita nel Budget Preventivo. Aggiungine una nella sezione "Budget Preventivo".
-                      </p>
-                    )}
-                  </div>
+                  )}
                   <div className="space-y-2">
                     <label className="text-[0.65rem] font-black text-slate-400 uppercase tracking-widest">Importo (€)</label>
                     <div className="relative">
@@ -1113,6 +1640,54 @@ export function Accounting() {
                   </div>
                 )}
 
+                {formData.type === 'trasferimento' && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-purple-50/50 rounded border border-purple-100">
+                    <div className="space-y-2">
+                      <label className="text-[0.65rem] font-black text-purple-600 uppercase tracking-widest flex items-center gap-1">
+                        <UserIcon size={12} /> Da Socio (Mittente)
+                      </label>
+                      <select 
+                        required={formData.type === 'trasferimento'}
+                        value={formData.payerUid || ''}
+                        onChange={e => {
+                          const u = users.find(user => user.uid === e.target.value);
+                          setFormData({ ...formData, payerUid: e.target.value, payerName: u?.displayName || '' });
+                        }}
+                        className="w-full bg-white border border-slate-200 rounded px-3 py-2 text-sm font-bold text-slate-gray outline-none focus:border-purple-600"
+                      >
+                        <option value="">Seleziona Socio Mittente...</option>
+                        {getSociSummary().map(user => (
+                          <option key={user.uid} value={user.uid}>
+                            {formatUserName(user.displayName)} (Saldo: {user.currentBalance >= 0 ? `+€${user.currentBalance.toLocaleString()}` : `-€${Math.abs(user.currentBalance).toLocaleString()}`})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[0.65rem] font-black text-purple-600 uppercase tracking-widest flex items-center gap-1">
+                        <UserIcon size={12} /> A Socio (Destinatario)
+                      </label>
+                      <select 
+                        required={formData.type === 'trasferimento'}
+                        value={formData.memberUid || ''}
+                        onChange={e => {
+                          const u = users.find(user => user.uid === e.target.value);
+                          setFormData({ ...formData, memberUid: e.target.value, memberName: u?.displayName || '' });
+                        }}
+                        className="w-full bg-white border border-slate-200 rounded px-3 py-2 text-sm font-bold text-slate-gray outline-none focus:border-purple-600"
+                      >
+                        <option value="">Seleziona Socio Destinatario...</option>
+                        {getSociSummary().filter(u => u.uid !== formData.payerUid).map(user => (
+                          <option key={user.uid} value={user.uid}>
+                            {formatUserName(user.displayName)} (Saldo: {user.currentBalance >= 0 ? `+€${user.currentBalance.toLocaleString()}` : `-€${Math.abs(user.currentBalance).toLocaleString()}`})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
+
                 <div className="space-y-2">
                   <label className="text-[0.65rem] font-black text-slate-400 uppercase tracking-widest">Descrizione (Opzionale)</label>
                   <textarea 
@@ -1137,6 +1712,312 @@ export function Accounting() {
                     className="flex-1 py-3 px-6 rounded bg-accent-gold text-lake-green font-black text-xs uppercase tracking-widest hover:bg-opacity-90 transition-all shadow-lg active:scale-95"
                   >
                     Salva Movimento
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Dedicated Modal Trasferimento Cassa tra Soci */}
+      <AnimatePresence>
+        {showTransfer && (
+          <div 
+            className="fixed inset-0 w-full h-full z-50 overflow-y-auto flex items-center justify-center p-4 sm:p-6 bg-slate-900/80 backdrop-blur-sm"
+            onClick={() => handleToggleModal(null)}
+          >
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="bg-white rounded-xl p-6 sm:p-8 max-w-xl w-full shadow-2xl border-t-8 border-purple-600 relative my-auto max-h-[90vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button 
+                onClick={() => handleToggleModal(null)}
+                className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <X size={24} />
+              </button>
+
+              <div className="flex items-center gap-3 mb-5">
+                <div className="bg-purple-50 p-3 rounded-lg border border-purple-100 text-purple-600">
+                  <ArrowRightLeft size={24} />
+                </div>
+                <div>
+                  <h3 className="text-xl font-serif text-slate-900 leading-none mb-1">
+                    Trasferimento Cassa tra Soci
+                  </h3>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">
+                    Giroconto fondi da un socio in positivo a un altro socio
+                  </p>
+                </div>
+              </div>
+
+              <form onSubmit={handleTransferSubmit} className="space-y-5">
+                <div className="p-3 bg-purple-50/70 rounded-lg border border-purple-100 text-xs text-purple-900 font-medium leading-relaxed">
+                  I trasferimenti di cassa sono movimenti interni: <strong className="text-purple-950 font-bold">non alterano il bilancio totale del lago</strong>, ma trasferiscono fondi dalla cassa del socio cedente a quella del socio ricevente.
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[0.65rem] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1">
+                      <UserIcon size={12} className="text-purple-600" /> Da Socio (Mittente - Cede Fondi)
+                    </label>
+                    <select 
+                      required
+                      value={transferData.fromUid}
+                      onChange={e => setTransferData({ ...transferData, fromUid: e.target.value })}
+                      className="w-full bg-off-white border border-slate-200 rounded px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:border-purple-600"
+                    >
+                      <option value="">-- Seleziona Socio Mittente --</option>
+                      {getSociSummary().map(s => (
+                        <option key={s.uid} value={s.uid}>
+                          {formatUserName(s.displayName)} (Saldo: {s.currentBalance >= 0 ? `+€${s.currentBalance.toLocaleString()}` : `-€${Math.abs(s.currentBalance).toLocaleString()}`})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[0.65rem] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1">
+                      <UserIcon size={12} className="text-emerald-600" /> A Socio (Destinatario - Riceve Fondi)
+                    </label>
+                    <select 
+                      required
+                      value={transferData.toUid}
+                      onChange={e => setTransferData({ ...transferData, toUid: e.target.value })}
+                      className="w-full bg-off-white border border-slate-200 rounded px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:border-purple-600"
+                    >
+                      <option value="">-- Seleziona Socio Destinatario --</option>
+                      {getSociSummary().filter(s => s.uid !== transferData.fromUid).map(s => (
+                        <option key={s.uid} value={s.uid}>
+                          {formatUserName(s.displayName)} (Saldo: {s.currentBalance >= 0 ? `+€${s.currentBalance.toLocaleString()}` : `-€${Math.abs(s.currentBalance).toLocaleString()}`})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[0.65rem] font-black text-slate-500 uppercase tracking-widest">
+                      Importo da Trasferire (€)
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">€</span>
+                      <input 
+                        type="number"
+                        step="0.01"
+                        min="0.01"
+                        required
+                        placeholder="0.00"
+                        value={transferData.amount || ''}
+                        onFocus={e => e.target.select()}
+                        onChange={e => setTransferData({ ...transferData, amount: parseFloat(e.target.value) || 0 })}
+                        className="w-full bg-off-white border border-slate-200 rounded pl-8 pr-3 py-2 text-sm font-bold text-slate-900 outline-none focus:border-purple-600"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[0.65rem] font-black text-slate-500 uppercase tracking-widest">
+                      Data Operazione
+                    </label>
+                    <input 
+                      type="date"
+                      required
+                      value={transferData.date}
+                      onChange={e => setTransferData({ ...transferData, date: e.target.value })}
+                      className="w-full bg-off-white border border-slate-200 rounded px-3 py-2 text-sm font-bold text-slate-900 outline-none focus:border-purple-600"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[0.65rem] font-black text-slate-500 uppercase tracking-widest">
+                    Note / Motivazione (Opzionale)
+                  </label>
+                  <textarea 
+                    rows={2}
+                    value={transferData.description}
+                    onChange={e => setTransferData({ ...transferData, description: e.target.value })}
+                    placeholder="Es. Giroconto cassa per rimborso anticipi spese lago..."
+                    className="w-full bg-off-white border border-slate-200 rounded px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:border-purple-600 resize-none"
+                  />
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button 
+                    type="button"
+                    onClick={() => handleToggleModal(null)}
+                    className="flex-1 py-2.5 px-4 rounded bg-slate-100 text-slate-600 font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all"
+                  >
+                    Annulla
+                  </button>
+                  <button 
+                    type="submit"
+                    className="flex-1 py-2.5 px-4 rounded bg-purple-600 text-white font-black text-xs uppercase tracking-widest hover:bg-purple-700 transition-all shadow-md active:scale-95 flex items-center justify-center gap-1.5"
+                  >
+                    <ArrowRightLeft size={14} /> Conferma Trasferimento
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Dedicated Modal Contributo Spese Soci (Ripianamento Soci in negativo) */}
+      <AnimatePresence>
+        {showContributo && (
+          <div 
+            className="fixed inset-0 w-full h-full z-50 overflow-y-auto flex items-center justify-center p-4 sm:p-6 bg-slate-900/80 backdrop-blur-sm"
+            onClick={() => handleToggleModal(null)}
+          >
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="bg-white rounded-xl p-6 sm:p-8 max-w-xl w-full shadow-2xl border-t-8 border-amber-500 relative my-auto max-h-[90vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button 
+                onClick={() => handleToggleModal(null)}
+                className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <X size={24} />
+              </button>
+
+              <div className="flex items-center gap-3 mb-5">
+                <div className="bg-amber-50 p-3 rounded-lg border border-amber-100 text-amber-600">
+                  <Coins size={24} />
+                </div>
+                <div>
+                  <h3 className="text-xl font-serif text-slate-900 leading-none mb-1">
+                    Contributo Spese Soci (Ripianamento)
+                  </h3>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">
+                    Versamento soci per coprire i costi annuali e rimborsare chi è in negativo
+                  </p>
+                </div>
+              </div>
+
+              <form onSubmit={handleContributoSubmit} className="space-y-5">
+                <div className="p-3 bg-amber-50/80 rounded-lg border border-amber-200 text-xs text-amber-950 font-medium leading-relaxed">
+                  I soci non pagano una quota fissa, ma mettono soldi per rientrare nelle spese dell'anno se non coperte dai cacciatori quotisti, dandoli direttamente a uno dei soci che ne ha spesi ed è in negativo. Questa operazione viene registrata come entrata del lago a favore del socio destinatario.
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[0.65rem] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1">
+                      <UserIcon size={12} className="text-amber-600" /> Socio che versa il contributo
+                    </label>
+                    <select 
+                      required
+                      value={contributoData.fromUid}
+                      onChange={e => setContributoData({ ...contributoData, fromUid: e.target.value })}
+                      className="w-full bg-off-white border border-slate-200 rounded px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:border-amber-500"
+                    >
+                      <option value="">-- Seleziona Socio Pagatore --</option>
+                      {getSociSummary().map(s => (
+                        <option key={s.uid} value={s.uid}>
+                          {formatUserName(s.displayName)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[0.65rem] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1">
+                      <UserIcon size={12} className="text-rose-600" /> A Socio con spese (Destinatario)
+                    </label>
+                    <select 
+                      required
+                      value={contributoData.targetUid}
+                      onChange={e => {
+                        const targetSocio = getSociSummary().find(s => s.uid === e.target.value);
+                        const suggested = targetSocio && targetSocio.currentBalance < 0 ? Math.abs(targetSocio.currentBalance) : contributoData.amount;
+                        setContributoData({ 
+                          ...contributoData, 
+                          targetUid: e.target.value,
+                          amount: suggested > 0 ? suggested : contributoData.amount
+                        });
+                      }}
+                      className="w-full bg-off-white border border-slate-200 rounded px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:border-amber-500"
+                    >
+                      <option value="">-- Seleziona Socio da Ripianare --</option>
+                      {getSociSummary().map(s => (
+                        <option key={s.uid} value={s.uid}>
+                          {formatUserName(s.displayName)} {s.currentBalance < 0 ? `(In Negativo: -€${Math.abs(s.currentBalance).toLocaleString()})` : `(Saldo: €${s.currentBalance.toLocaleString()})`}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[0.65rem] font-black text-slate-500 uppercase tracking-widest">
+                      Importo Versato (€)
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">€</span>
+                      <input 
+                        type="number"
+                        step="0.01"
+                        min="0.01"
+                        required
+                        placeholder="0.00"
+                        value={contributoData.amount || ''}
+                        onFocus={e => e.target.select()}
+                        onChange={e => setContributoData({ ...contributoData, amount: parseFloat(e.target.value) || 0 })}
+                        className="w-full bg-off-white border border-slate-200 rounded pl-8 pr-3 py-2 text-sm font-bold text-slate-900 outline-none focus:border-amber-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[0.65rem] font-black text-slate-500 uppercase tracking-widest">
+                      Data del Versamento
+                    </label>
+                    <input 
+                      type="date"
+                      required
+                      value={contributoData.date}
+                      onChange={e => setContributoData({ ...contributoData, date: e.target.value })}
+                      className="w-full bg-off-white border border-slate-200 rounded px-3 py-2 text-sm font-bold text-slate-900 outline-none focus:border-amber-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[0.65rem] font-black text-slate-500 uppercase tracking-widest">
+                    Note / Causale (Opzionale)
+                  </label>
+                  <textarea 
+                    rows={2}
+                    value={contributoData.description}
+                    onChange={e => setContributoData({ ...contributoData, description: e.target.value })}
+                    placeholder="Es. Quota volontaria soci per pareggio spese annuali..."
+                    className="w-full bg-off-white border border-slate-200 rounded px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:border-amber-500 resize-none"
+                  />
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button 
+                    type="button"
+                    onClick={() => handleToggleModal(null)}
+                    className="flex-1 py-2.5 px-4 rounded bg-slate-100 text-slate-600 font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all"
+                  >
+                    Annulla
+                  </button>
+                  <button 
+                    type="submit"
+                    className="flex-1 py-2.5 px-4 rounded bg-amber-500 text-white font-black text-xs uppercase tracking-widest hover:bg-amber-600 transition-all shadow-md active:scale-95 flex items-center justify-center gap-1.5"
+                  >
+                    <Coins size={14} /> Registra Contributo
                   </button>
                 </div>
               </form>
@@ -1171,20 +2052,33 @@ export function Accounting() {
                         <div className="flex flex-col">
                           <span className={cn(
                             "text-[8px] sm:text-[9px] font-bold uppercase px-2 py-0.5 rounded-full border w-fit mb-0.5",
-                            item.type === 'entrata' ? "bg-emerald-50 text-emerald-700 border-emerald-100" : "bg-rose-50 text-rose-700 border-rose-100"
+                            item.type === 'entrata' ? "bg-emerald-50 text-emerald-700 border-emerald-100" :
+                            item.type === 'trasferimento' ? "bg-purple-50 text-purple-700 border-purple-100" :
+                            "bg-rose-50 text-rose-700 border-rose-100"
                           )}>
-                            {item.category}
+                            {item.type === 'trasferimento' ? 'Giroconto Cassa Soci' : item.category}
                           </span>
-                          {item.payerName && (
-                            <div className="flex items-center gap-1 text-[9px] text-slate-400 font-bold uppercase tracking-tighter">
-                              <UserIcon size={10} /> {formatUserName(item.payerName)}
-                              {item.huntingDayId && <span className="text-accent-gold">• {safeFormatDate(item.huntingDayId, 'dd/MM')}</span>}
+
+                          {item.type === 'trasferimento' ? (
+                            <div className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-tight text-purple-800 mt-0.5">
+                              <span>Da: {formatUserName(item.payerName || 'Socio')}</span>
+                              <ArrowRightLeft size={10} className="text-purple-500 shrink-0" />
+                              <span>A: {formatUserName(item.memberName || 'Socio')}</span>
                             </div>
-                          )}
-                          {item.memberName && (
-                            <div className="flex items-center gap-1 text-[9px] text-lake-green font-bold uppercase tracking-tighter mt-0.5">
-                              <Wallet size={10} className="opacity-70" /> {item.type === 'entrata' ? 'In cassa a' : 'Pagato da'}: {formatUserName(item.memberName)}
-                            </div>
+                          ) : (
+                            <>
+                              {item.payerName && (
+                                <div className="flex items-center gap-1 text-[9px] text-slate-400 font-bold uppercase tracking-tighter">
+                                  <UserIcon size={10} /> {item.category.toLowerCase().includes('contribut') ? 'Versato da' : 'Pagato da'}: {formatUserName(item.payerName)}
+                                  {item.huntingDayId && <span className="text-accent-gold">• {safeFormatDate(item.huntingDayId, 'dd/MM')}</span>}
+                                </div>
+                              )}
+                              {item.memberName && (
+                                <div className="flex items-center gap-1 text-[9px] text-lake-green font-bold uppercase tracking-tighter mt-0.5">
+                                  <Wallet size={10} className="opacity-70" /> {item.type === 'entrata' ? (item.category.toLowerCase().includes('contribut') ? 'A favore di' : 'In cassa a') : 'Pagato da'}: {formatUserName(item.memberName)}
+                                </div>
+                              )}
+                            </>
                           )}
                         </div>
                       </td>
@@ -1193,9 +2087,13 @@ export function Accounting() {
                       </td>
                       <td className={cn(
                         "px-3 sm:px-6 py-3 text-right font-bold text-sm whitespace-nowrap flex items-center justify-end gap-3",
-                        item.type === 'entrata' ? "text-emerald-700" : "text-rose-700"
+                        item.type === 'entrata' ? "text-emerald-700" :
+                        item.type === 'trasferimento' ? "text-purple-700" :
+                        "text-rose-700"
                       )}>
-                        <span>{item.type === 'entrata' ? '+' : '-'}€{item.amount.toLocaleString()}</span>
+                        <span>
+                          {item.type === 'entrata' ? '+' : item.type === 'uscita' ? '-' : '⇄ '}€{item.amount.toLocaleString()}
+                        </span>
                         {profile?.role === 'admin' && (
                            <div className="flex items-center gap-1.5 ml-2">
                              <button 

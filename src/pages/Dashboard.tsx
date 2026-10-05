@@ -10,6 +10,7 @@ import {
 import { Transaction, Harvest, UserProfile, HuntingLimit, LakeSettings, BudgetItem } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { BirthdayBanner } from '../components/BirthdayBanner';
+import { Link } from 'react-router-dom';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -26,7 +27,9 @@ import {
   Users,
   CheckCircle2,
   AlertCircle,
-  ChevronDown
+  ChevronDown,
+  ArrowRightLeft,
+  Coins
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LabelList } from 'recharts';
@@ -226,13 +229,17 @@ export function Dashboard() {
   // Calculate Cassa per Socio
   const soci = users.filter(u => u.isActive && (u.role === 'socio' || u.role === 'admin'));
   const sociCassa = soci.map(s => {
-    const sIncome = txs.filter(t => t.type === 'entrata' && t.memberUid === s.uid).reduce((acc, t) => acc + t.amount, 0);
-    const sExpense = txs.filter(t => t.type === 'uscita' && t.memberUid === s.uid).reduce((acc, t) => acc + t.amount, 0);
+    const sIncome = txs.filter(t => (t.type === 'entrata' && t.memberUid === s.uid) || (t.type === 'trasferimento' && t.memberUid === s.uid)).reduce((acc, t) => acc + t.amount, 0);
+    const sExpense = txs.filter(t => (t.type === 'uscita' && t.memberUid === s.uid) || (t.type === 'trasferimento' && t.payerUid === s.uid)).reduce((acc, t) => acc + t.amount, 0);
+    const sContributionsGiven = txs.filter(t => t.type === 'entrata' && t.payerUid === s.uid && (t.category.toLowerCase().includes('contribut') || t.category.toLowerCase().includes('ripian'))).reduce((acc, t) => acc + t.amount, 0);
     return {
       ...s,
+      income: sIncome,
+      expenses: sExpense,
+      contributionsGiven: sContributionsGiven,
       balance: sIncome - sExpense
     };
-  }).sort((a, b) => b.balance - a.balance);
+  }).sort((a, b) => a.balance - b.balance);
 
   if (loading) return null;
 
@@ -391,33 +398,84 @@ export function Dashboard() {
             <p className="p-4 text-center text-slate-300 italic text-xs col-span-full">Nessun socio trovato</p>
           ) : (
             sociCassa.map(socio => (
-              <div key={socio.uid} className="bg-off-white border border-slate-100 rounded-lg p-4 flex flex-col gap-3 group hover:border-lake-green transition-all shadow-sm">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h4 className="text-sm font-bold text-slate-900">{formatUserName(socio.displayName)}</h4>
-                    <span className="text-[9px] font-black text-lake-green/50 uppercase tracking-widest">{socio.role}</span>
-                  </div>
-                  <div className={cn(
-                    "p-2 rounded-full",
-                    socio.balance >= 0 ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"
-                  )}>
-                    <Wallet size={16} />
-                  </div>
-                </div>
+              <div 
+                key={socio.uid} 
+                className={cn(
+                  "border rounded-lg p-4 flex flex-col justify-between gap-3 group transition-all shadow-sm",
+                  socio.balance < 0 
+                    ? "bg-rose-50/30 border-rose-200/80 hover:border-rose-400" 
+                    : socio.balance > 0 
+                      ? "bg-emerald-50/20 border-emerald-200/80 hover:border-emerald-400" 
+                      : "bg-off-white border-slate-100 hover:border-lake-green"
+                )}
+              >
                 <div>
-                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Saldo in Tasca</p>
-                  <p className={cn(
-                    "text-2xl font-black tracking-tighter",
-                    socio.balance >= 0 ? "text-slate-900" : "text-rose-600"
-                  )}>
-                    €{socio.balance.toLocaleString()}
-                  </p>
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-900">{formatUserName(socio.displayName)}</h4>
+                      <span className="text-[9px] font-black text-lake-green/60 uppercase tracking-widest">{socio.role}</span>
+                    </div>
+                    <div className={cn(
+                      "p-2 rounded-full",
+                      socio.balance < 0 ? "bg-rose-100 text-rose-700" : socio.balance > 0 ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
+                    )}>
+                      <Wallet size={16} />
+                    </div>
+                  </div>
+
+                  <div className="mt-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Saldo Cassa</p>
+                      <span className={cn(
+                        "text-[8px] font-black uppercase px-1.5 py-0.2 rounded border",
+                        socio.balance < 0 
+                          ? "bg-rose-100 text-rose-700 border-rose-200" 
+                          : socio.balance > 0 
+                            ? "bg-emerald-100 text-emerald-700 border-emerald-200" 
+                            : "bg-slate-100 text-slate-600 border-slate-200"
+                      )}>
+                        {socio.balance < 0 ? 'In Negativo' : socio.balance > 0 ? 'In Positivo' : 'In Pari'}
+                      </span>
+                    </div>
+                    <p className={cn(
+                      "text-2xl font-black tracking-tighter mt-0.5",
+                      socio.balance < 0 ? "text-rose-600" : socio.balance > 0 ? "text-emerald-700" : "text-slate-800"
+                    )}>
+                      {socio.balance < 0 ? `-€${Math.abs(socio.balance).toLocaleString()}` : `€${socio.balance.toLocaleString()}`}
+                    </p>
+                    <p className="text-[9px] text-slate-400 font-medium mt-0.5">
+                      {socio.balance < 0 
+                        ? 'Ha anticipato spese per il lago' 
+                        : socio.balance > 0 
+                          ? 'Disponibilità di cassa' 
+                          : 'Spese e incassi allineati'}
+                    </p>
+                  </div>
                 </div>
-                <div className="h-1 w-full bg-slate-100 rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-lake-green transition-all duration-1000" 
-                    style={{ width: `${(totalIncome - totalExpense) > 0 ? (Math.max(0, socio.balance) / (totalIncome - totalExpense)) * 100 : 100}%` }} 
-                  />
+
+                <div className="pt-2 border-t border-slate-100/80">
+                  {socio.balance < 0 ? (
+                    <Link
+                      to={`/spese?modal=contributo&targetUid=${socio.uid}`}
+                      className="w-full py-1.5 px-2 bg-amber-500 hover:bg-amber-600 text-white rounded text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-1 transition-all shadow-sm active:scale-95"
+                    >
+                      <Coins size={11} /> Ripiana con Contributo
+                    </Link>
+                  ) : socio.balance > 0 ? (
+                    <Link
+                      to={`/spese?modal=transfer&fromUid=${socio.uid}`}
+                      className="w-full py-1.5 px-2 bg-purple-600 hover:bg-purple-700 text-white rounded text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-1 transition-all shadow-sm active:scale-95"
+                    >
+                      <ArrowRightLeft size={11} /> Trasferisci Cassa
+                    </Link>
+                  ) : (
+                    <Link
+                      to="/spese"
+                      className="w-full py-1.5 px-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-1 transition-all"
+                    >
+                      Dettaglio Spese <ChevronRight size={10} />
+                    </Link>
+                  )}
                 </div>
               </div>
             ))
@@ -558,14 +616,18 @@ export function Dashboard() {
                       <td className="py-3">
                         <span className={cn(
                           "text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border",
-                          t.type === 'entrata' ? "bg-emerald-50 text-emerald-700 border-emerald-100" : "bg-rose-50 text-rose-700 border-rose-100"
-                        )}>{t.category}</span>
+                          t.type === 'entrata' ? "bg-emerald-50 text-emerald-700 border-emerald-100" :
+                          t.type === 'trasferimento' ? "bg-purple-50 text-purple-700 border-purple-100" :
+                          "bg-rose-50 text-rose-700 border-rose-100"
+                        )}>{t.type === 'trasferimento' ? 'Trasferimento' : t.category}</span>
                       </td>
                       <td className={cn(
                         "py-3 text-right font-bold",
-                        t.type === 'entrata' ? "text-emerald-700" : "text-rose-700"
+                        t.type === 'entrata' ? "text-emerald-700" :
+                        t.type === 'trasferimento' ? "text-purple-700" :
+                        "text-rose-700"
                       )}>
-                        {t.type === 'entrata' ? '+' : '-'}€{t.amount.toLocaleString()}
+                        {t.type === 'entrata' ? '+' : t.type === 'uscita' ? '-' : '⇄ '}€{t.amount.toLocaleString()}
                       </td>
                     </tr>
                   ))}

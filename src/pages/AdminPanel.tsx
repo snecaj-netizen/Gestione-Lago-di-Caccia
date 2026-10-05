@@ -864,7 +864,13 @@ export function AdminPanel() {
                   </td>
                   <td className="px-3 sm:px-6 py-3 whitespace-nowrap hidden lg:table-cell">
                     <span className="text-[10px] font-bold text-slate-600">
-                      {user.seasonalQuota ? `€${user.seasonalQuota.toLocaleString()}` : 'Calc.'}
+                      {user.role === 'socio' ? (
+                        <span className="text-slate-400 font-medium italic">Nessuna (Socio)</span>
+                      ) : user.seasonalQuota ? (
+                        `€${user.seasonalQuota.toLocaleString()}`
+                      ) : (
+                        'Calc.'
+                      )}
                     </span>
                   </td>
                   <td className="px-3 sm:px-6 py-3 whitespace-nowrap hidden md:table-cell">

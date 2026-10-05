@@ -955,13 +955,27 @@ export const subscribeToTransactions = (callback: (txs: Transaction[]) => void) 
 };
 
 export const addTransaction = async (tx: Omit<Transaction, 'id'>) => {
+  const amount = tx.amount.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' });
+  let notifTitle = "Nuovo Movimento";
+  let notifBody = "";
+  if (tx.type === 'trasferimento') {
+    notifTitle = "Trasferimento Cassa Soci";
+    notifBody = `${tx.payerName || 'Un socio'} ha trasferito ${amount} a ${tx.memberName || 'un socio'}`;
+  } else if (tx.type === 'entrata') {
+    notifTitle = tx.category.toLowerCase().includes('contribut') || tx.category.toLowerCase().includes('ripian')
+      ? "Contributo Spese Soci"
+      : "Nuovo Versamento";
+    notifBody = `${tx.payerName || 'Un utente'} ha versato ${amount} (${tx.category})`;
+  } else {
+    notifTitle = "Nuova Spesa Registrata";
+    notifBody = `${tx.memberName || 'Un socio'} ha registrato una spesa di ${amount} (${tx.category})`;
+  }
+
   if (!db) {
     const newDoc = addLocalDoc('transactions', tx);
-    const amount = tx.amount.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' });
-    const userName = tx.payerName || "Un utente";
     await notifyAdminsAndSubscribers(
-      "Nuovo Versamento",
-      `${userName} ha effettuato un versamento di ${amount}`,
+      notifTitle,
+      notifBody,
       'transaction',
       '/spese',
       { transactionId: newDoc.id }
@@ -970,14 +984,9 @@ export const addTransaction = async (tx: Omit<Transaction, 'id'>) => {
   }
   try {
     const docRef = await addDoc(collection(db, 'transactions'), cleanData(tx));
-
-    // Notify admins
-    const amount = tx.amount.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' });
-    const userName = tx.payerName || "Un utente";
-
     await notifyAdminsAndSubscribers(
-      "Nuovo Versamento",
-      `${userName} ha effettuato un versamento di ${amount}`,
+      notifTitle,
+      notifBody,
       'transaction',
       '/spese',
       { transactionId: docRef.id }

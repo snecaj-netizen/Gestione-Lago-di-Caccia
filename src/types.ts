@@ -63,7 +63,7 @@ export interface HuntingDay {
 export interface Transaction {
   id: string;
   date: string;
-  type: 'entrata' | 'uscita';
+  type: 'entrata' | 'uscita' | 'trasferimento';
   category: string;
   amount: number;
   description?: string;

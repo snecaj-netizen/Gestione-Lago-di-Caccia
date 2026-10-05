@@ -109,7 +109,7 @@ service cloud.firestore {
     match /transactions/{id} {
       function isValidTransaction(data) {
         return isValidDate(data.date) &&
-               data.type in ["entrata", "uscita"] &&
+               data.type in ["entrata", "uscita", "trasferimento"] &&
                data.category is string && data.category.size() <= 100 &&
                data.amount is number && data.amount > 0 &&
                (!("description" in data) || (data.description is string && data.description.size() <= 500));
