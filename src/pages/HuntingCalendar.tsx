@@ -31,7 +31,7 @@ import {
 import { it } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, User as UserIcon, Calendar as CalendarIcon, Info, Plus, X, Clock, Trash2, Filter, ArrowRight, ArrowLeftRight, ChevronDown, ShieldAlert, Target, Bird, Search, FileText } from 'lucide-react';
 import { cn, formatUserName } from '../lib/utils';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useWeather } from '../hooks/useWeather';
 import { BirthdayBanner } from '../components/BirthdayBanner';
 
@@ -343,6 +343,7 @@ function TodayInfo({ day, assignments, isSilenced, title }: { day: Date, assignm
 
 export function HuntingCalendar() {
   const { profile } = useAuth();
+  const location = useLocation();
   const isPrivilegedCalendar = profile?.role === 'admin' || profile?.role === 'socio';
   const [currentDate, setCurrentDate] = useState(new Date());
   const [hasInitializedDate, setHasInitializedDate] = useState(false);
@@ -356,6 +357,14 @@ export function HuntingCalendar() {
   const [searchTerm, setSearchTerm] = useState('');
   const [hideSilence, setHideSilence] = useState(true);
   const [selectedDay, setSelectedDay] = useState<Date | null>(new Date());
+
+  // Reset calendar to current month and day when landing on Home
+  useEffect(() => {
+    if (location.pathname === '/') {
+      setCurrentDate(new Date());
+      setSelectedDay(new Date());
+    }
+  }, [location.key, location.pathname]);
   const [isAssigning, setIsAssigning] = useState(false);
   const [showSwapModal, setShowSwapModal] = useState(false);
   const [swapTargetDate, setSwapTargetDate] = useState<string>('');
