@@ -542,8 +542,62 @@ export function Harvests() {
       }));
   }, [filteredItems, includeEmptyDays, huntingDays]);
 
+  const getSeasonLabel = React.useCallback(() => {
+    // 1. Try to extract from limits first
+    const years = new Set<number>();
+    limits.forEach(l => {
+      if (!l.huntingPeriod) return;
+      const dateMatches = l.huntingPeriod.match(/(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})/g);
+      if (dateMatches) {
+        dateMatches.forEach(match => {
+          const parts = match.split(/[\/\-\.]/);
+          let year = parseInt(parts[parts.length - 1]);
+          if (year < 100) year += 2000;
+          years.add(year);
+        });
+      } else {
+        const standaloneYears = l.huntingPeriod.match(/\b(20\d{2})\b/g);
+        if (standaloneYears) {
+          standaloneYears.forEach(y => years.add(parseInt(y)));
+        }
+      }
+    });
+
+    if (years.size > 0) {
+      const sortedYears = Array.from(years).sort((a, b) => a - b);
+      const maxY = sortedYears[sortedYears.length - 1];
+      const startY = maxY - 1;
+      return `${startY}/${maxY}`;
+    }
+
+    // 2. Try to extract from settings
+    if (settings?.seasonStart && settings?.seasonEnd) {
+      try {
+        const start = new Date(settings.seasonStart);
+        const end = new Date(settings.seasonEnd);
+        if (!isNaN(start.getTime()) && !isNaN(end.getTime()) && start.getFullYear() !== end.getFullYear()) {
+          return `${start.getFullYear()}/${end.getFullYear()}`;
+        }
+      } catch (e) {}
+    }
+
+    // 3. Fallback based on current date
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth(); // 0-indexed (0=Jan, 9=Oct)
+    if (currentMonth >= 6) {
+      return `${currentYear}/${currentYear + 1}`;
+    }
+    return `${currentYear - 1}/${currentYear}`;
+  }, [limits, settings]);
+
+  const seasonLabel = getSeasonLabel();
+
   const fullScreenTrendData = React.useMemo(() => {
-    const seasonStart = settings?.seasonStart || '2026-09-01';
+    const defaultSeasonStart = (new Date().getMonth() >= 6 
+      ? `${new Date().getFullYear()}-09-01` 
+      : `${new Date().getFullYear() - 1}-09-01`);
+    const seasonStart = settings?.seasonStart || defaultSeasonStart;
     const map = new Map<string, { date: string; anatidi: number; altreSpecie: number; total: number }>();
     
     // 1. Determine the actual start date for the chart
@@ -716,7 +770,7 @@ export function Harvests() {
                 {/* Full Screen Chart Button */}
                 <button
                   onClick={() => setShowDailyChartModal(true)}
-                  title="Visualizza grafico a schermo intero con tutte le giornate"
+                  title={`Visualizza grafico a schermo intero della stagione ${seasonLabel}`}
                   className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold transition-all border bg-white border-slate-200 text-slate-500 hover:border-lake-green hover:text-lake-green"
                 >
                   <Maximize size={12} className="text-slate-400" />
@@ -1428,7 +1482,12 @@ export function Harvests() {
               {/* Modal Header */}
               <div className="p-4 md:p-6 border-b border-slate-100 flex items-center justify-between bg-white sticky top-0 z-10">
                 <div className="flex flex-col">
-                  <h3 className="text-xl font-serif text-lake-green">Andamento Stagionale</h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-xl font-serif text-lake-green">Andamento Stagionale</h3>
+                    <span className="text-[10px] font-bold text-lake-green bg-lake-green/10 px-2 py-0.5 rounded border border-lake-green/20">
+                      Stagione {seasonLabel}
+                    </span>
+                  </div>
                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
                     Tutti i giorni di caccia conclusi
                   </p>
@@ -1561,7 +1620,7 @@ export function Harvests() {
                     Altre Specie
                   </span>
                 </div>
-                <span>Stagione Venatoria 2024/25</span>
+                <span>Stagione Venatoria {seasonLabel}</span>
               </div>
             </motion.div>
           </div>
