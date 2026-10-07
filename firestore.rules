@@ -1,50 +1,30 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Default deny
+    // Default deny for unmatched collections
     match /{document=**} {
       allow read, write: if false;
     }
-    
+
+    // Health check endpoint for connection testing
     match /test/connection {
       allow read: if true;
     }
 
+    match /_internal_/connection_test {
+      allow read: if true;
+    }
+
     // ===============================================================
-    // Helper Functions
+    // Global Helper Functions
     // ===============================================================
     
     function isSignedIn() {
       return request.auth != null;
     }
-    
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-
-    function isAdmin() {
-      // Very simple admin check for Stefano
-      return isSignedIn() && (request.auth.token.email == "snecaj@gmail.com");
-    }
-
-    function isSocio() {
-      // Socios include admins or users with the 'socio' role
-      let hasSocioRole = exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-                          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "socio";
-      return isAdmin() || hasSocioRole;
-    }
-
-    function isActive() {
-      // Stefano is always active. Others must have profile isActive == true
-      return isSignedIn() && (
-        (request.auth.token.email == "snecaj@gmail.com") ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isActive == true)
-      );
-    }
 
     function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches("^[a-zA-Z0-9_\\-]+$");
+      return id is string && id.size() > 0 && id.size() <= 128;
     }
 
     function isValidEmail(email) {
@@ -55,131 +35,208 @@ service cloud.firestore {
       return dateStr is string && dateStr.matches("^\\d{4}-\\d{2}-\\d{2}$");
     }
 
-    function isValidRecipe(data) {
-      return data.title is string && data.title.size() <= 200 &&
-             data.ingredients is list && data.ingredients.size() <= 100 &&
-             data.instructions is string && data.instructions.size() <= 10000 &&
-             data.authorUid is string && data.authorUid.size() <= 128 &&
-             data.courseType in ["Antipasto", "Primo", "Secondo", "Altro"];
-    }
-
     // ===============================================================
-    // Collection Rules
+    // Collection Validations and Rules
     // ===============================================================
 
-    // NOTE: Application uses custom username/password login. 
-    // To support this without a backend and with Firestore rules, 
-    // we allow unauthenticated reads on certain collections.
-    // Writes remain protected.
-
-    // Users
+    // 1. Users Profile Collection
     match /users/{userId} {
       function isValidUser(data) {
         return data.uid is string && data.uid.size() <= 128 &&
-               data.email is string && isValidEmail(data.email) &&
-               data.displayName is string && data.displayName.size() <= 100 &&
+               data.displayName is string && data.displayName.size() <= 120 &&
                data.role in ["admin", "socio", "quotista"] &&
                data.isActive is bool &&
-               (!("assignedDaysOfWeek" in data) || (data.assignedDaysOfWeek is list && data.assignedDaysOfWeek.size() <= 7)) &&
+               (!("email" in data) || (data.email is string && data.email.size() <= 200)) &&
                (!("seasonalQuota" in data) || (data.seasonalQuota is number)) &&
+               (!("assignedDaysOfWeek" in data) || (data.assignedDaysOfWeek is list && data.assignedDaysOfWeek.size() <= 7)) &&
                (!("username" in data) || (data.username is string && data.username.size() <= 100)) &&
                (!("password" in data) || (data.password is string && data.password.size() <= 100)) &&
-               data.keys().hasAll(["uid", "email", "role", "isActive", "displayName"]);
+               (!("photoURL" in data) || (data.photoURL is string && data.photoURL.size() <= 500000)) &&
+               (!("phone" in data) || (data.phone is string && data.phone.size() <= 30)) &&
+               (!("emergencyContact" in data) || (data.emergencyContact is string && data.emergencyContact.size() <= 120));
       }
-      
-      allow get, list: if true; 
-      allow create: if true;
-      allow update: if true;
-      allow delete: if true;
+
+      allow read: if isValidId(userId);
+      allow create: if isValidId(userId) && isValidUser(request.resource.data);
+      allow update: if isValidId(userId) && isValidUser(request.resource.data);
+      allow delete: if isValidId(userId);
     }
 
-    // Hunting Days
+    // 2. Hunting Days Assignments
     match /hunting_days/{dayId} {
       function isValidHuntingDay(data) {
         return isValidDate(data.date) &&
                data.assignedToUid is string && data.assignedToUid.size() <= 128 &&
-               data.assignedToName is string && data.assignedToName.size() <= 100 &&
-               data.type in ["socio", "quotista"] &&
-               (!("notes" in data) || (data.notes is string && data.notes.size() <= 500));
+               data.assignedToName is string && data.assignedToName.size() <= 120 &&
+               (!("type" in data) || data.type in ["socio", "quotista"]) &&
+               (!("overrideQuota" in data) || data.overrideQuota is number) &&
+               (!("excluded" in data) || data.excluded is bool) &&
+               (!("notes" in data) || (data.notes is string && data.notes.size() <= 1000));
       }
-      allow read, write: if true;
+
+      allow read: if true;
+      allow create: if isValidHuntingDay(request.resource.data);
+      allow update: if isValidHuntingDay(request.resource.data);
+      allow delete: if true;
     }
 
-    // Transactions
+    // 3. Transactions (Contabilità)
     match /transactions/{id} {
       function isValidTransaction(data) {
         return isValidDate(data.date) &&
                data.type in ["entrata", "uscita", "trasferimento"] &&
                data.category is string && data.category.size() <= 100 &&
-               data.amount is number && data.amount > 0 &&
-               (!("description" in data) || (data.description is string && data.description.size() <= 500));
+               data.amount is number &&
+               (!("description" in data) || (data.description is string && data.description.size() <= 1000)) &&
+               (!("createdBy" in data) || (data.createdBy is string && data.createdBy.size() <= 128)) &&
+               (!("payerUid" in data) || (data.payerUid is string && data.payerUid.size() <= 128)) &&
+               (!("payerName" in data) || (data.payerName is string && data.payerName.size() <= 120)) &&
+               (!("memberUid" in data) || (data.memberUid is string && data.memberUid.size() <= 128)) &&
+               (!("memberName" in data) || (data.memberName is string && data.memberName.size() <= 120)) &&
+               (!("huntingDayId" in data) || (data.huntingDayId is string && data.huntingDayId.size() <= 64));
       }
-      allow read, write: if true;
+
+      allow read: if true;
+      allow create: if isValidTransaction(request.resource.data);
+      allow update: if isValidTransaction(request.resource.data);
+      allow delete: if true;
     }
 
-    // Harvests
+    // 4. Harvests (Abbattimenti)
     match /harvests/{id} {
       function isValidHarvest(data) {
         return isValidDate(data.date) &&
-               data.species is string && data.species.size() <= 100 &&
+               data.species is string && data.species.size() <= 120 &&
                data.count is number && data.count >= 0 &&
-               data.hunterUid is string && data.hunterUid.size() <= 128 &&
-               data.hunterName is string && data.hunterName.size() <= 100;
+               (!("hunterUid" in data) || (data.hunterUid is string && data.hunterUid.size() <= 128)) &&
+               (!("hunterName" in data) || (data.hunterName is string && data.hunterName.size() <= 120));
       }
-      allow read, write: if true;
+
+      allow read: if true;
+      allow create: if isValidHarvest(request.resource.data);
+      allow update: if isValidHarvest(request.resource.data);
+      allow delete: if true;
     }
 
-    // Settings
+    // 5. Settings (Configurazione globale lago)
     match /settings/{id} {
-      allow read, write: if true;
+      function isValidSettings(data) {
+        return (!("latitude" in data) || data.latitude is number) &&
+               (!("longitude" in data) || data.longitude is number) &&
+               (!("seasonStart" in data) || (data.seasonStart is string && data.seasonStart.size() <= 30)) &&
+               (!("seasonEnd" in data) || (data.seasonEnd is string && data.seasonEnd.size() <= 30));
+      }
+
+      allow read: if true;
+      allow create, update: if isValidSettings(request.resource.data);
+      allow delete: if false;
     }
 
-    // Photos
+    // 6. Photos (Galleria fotografica)
     match /photos/{photoId} {
       function isValidPhoto(data) {
-        return data.url is string && data.url.size() <= 2000000 && // Allowing for base64
-               (!("caption" in data) || (data.caption is string && data.caption.size() <= 1000)) &&
-               (!("date" in data) || (data.date is string && data.date.size() <= 20)) &&
+        return data.url is string && data.url.size() <= 2500000 &&
                data.userUid is string && data.userUid.size() <= 128 &&
-               data.userName is string && data.userName.size() <= 100 &&
-               data.createdAt is string;
+               data.userName is string && data.userName.size() <= 120 &&
+               (!("caption" in data) || (data.caption is string && data.caption.size() <= 1000)) &&
+               (!("date" in data) || (data.date is string && data.date.size() <= 30));
       }
-      allow read, write: if true;
+
+      allow read: if true;
+      allow create: if isValidPhoto(request.resource.data);
+      allow update: if isValidPhoto(request.resource.data);
+      allow delete: if true;
     }
 
-    // Budget Items (Preventive)
+    // 7. Budget Items (Preventivo)
     match /budget_items/{itemId} {
-      allow read, write: if true;
+      function isValidBudgetItem(data) {
+        return data.label is string && data.label.size() <= 120 &&
+               data.amount is number &&
+               data.type in ["entrata", "uscita"];
+      }
+
+      allow read: if true;
+      allow create, update: if isValidBudgetItem(request.resource.data);
+      allow delete: if true;
     }
 
-    // Hunting Times
+    // 8. Hunting Times (Orari venatori)
     match /hunting_times/{timeId} {
-      allow read, write: if true;
+      function isValidHuntingTime(data) {
+        return data.startDate is string && data.startDate.size() <= 20 &&
+               data.endDate is string && data.endDate.size() <= 20 &&
+               data.startTime is string && data.startTime.size() <= 10 &&
+               data.endTime is string && data.endTime.size() <= 10;
+      }
+
+      allow read: if true;
+      allow create, update: if isValidHuntingTime(request.resource.data);
+      allow delete: if true;
     }
 
-    // Hunting Limits
-    match /hunting_limits/{document=**} {
-      allow read, write: if true;
+    // 9. Hunting Limits (Limiti per specie)
+    match /hunting_limits/{limitId} {
+      function isValidHuntingLimit(data) {
+        return data.species is string && data.species.size() <= 120 &&
+               data.dailyLimit is number &&
+               data.seasonalLimit is number &&
+               (!("huntingPeriod" in data) || (data.huntingPeriod is string && data.huntingPeriod.size() <= 200)) &&
+               (!("notes" in data) || (data.notes is string && data.notes.size() <= 1000));
+      }
+
+      allow read: if true;
+      allow create, update: if isValidHuntingLimit(request.resource.data);
+      allow delete: if true;
     }
-    
-    // Notifications
+
+    // 10. Notifications (Notifiche utente)
     match /notifications/{notificationId} {
-      allow read, write: if true;
-    }
-    
-    // Recipes
-    match /recipes/{recipeId} {
-      allow read, write: if true;
-    }
-    
-    // Tesserino Entries (Admin personal official card tracker)
-    match /tesserino_entries/{entryId} {
-      allow read, write: if true;
+      function isValidNotification(data) {
+        return data.title is string && data.title.size() <= 200 &&
+               data.body is string && data.body.size() <= 1000 &&
+               data.targetUid is string && data.targetUid.size() <= 128 &&
+               data.read is bool;
+      }
+
+      allow read: if true;
+      allow create: if isValidNotification(request.resource.data);
+      allow update: if isValidNotification(request.resource.data);
+      allow delete: if true;
     }
 
-    // Regulations Summary Documents
+    // 11. Recipes (Ricette selvaggina)
+    match /recipes/{recipeId} {
+      function isValidRecipe(data) {
+        return data.title is string && data.title.size() <= 200 &&
+               data.ingredients is list && data.ingredients.size() <= 100 &&
+               data.instructions is string && data.instructions.size() <= 15000 &&
+               data.authorUid is string && data.authorUid.size() <= 128 &&
+               data.courseType in ["Antipasto", "Primo", "Secondo", "Altro"];
+      }
+
+      allow read: if true;
+      allow create, update: if isValidRecipe(request.resource.data);
+      allow delete: if true;
+    }
+
+    // 12. Tesserino Entries (Registro caccia admin)
+    match /tesserino_entries/{entryId} {
+      function isValidTesserinoEntry(data) {
+        return isValidDate(data.date) &&
+               data.species is string && data.species.size() <= 120 &&
+               data.count is number && data.count >= 0;
+      }
+
+      allow read: if true;
+      allow create, update: if isValidTesserinoEntry(request.resource.data);
+      allow delete: if true;
+    }
+
+    // 13. Regulations (Regolamenti e documenti)
     match /regulations/{document=**} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if true;
     }
   }
 }
