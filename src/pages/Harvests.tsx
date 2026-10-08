@@ -39,6 +39,28 @@ const safeFormatDate = (dateStr: any, formatStr: string, options?: any) => {
   }
 };
 
+const formatWithWeekday = (dateStr: any) => {
+  try {
+    if (!dateStr) return '---';
+    let parsed: Date;
+    if (dateStr && typeof dateStr.toDate === 'function') {
+      parsed = dateStr.toDate();
+    } else {
+      parsed = new Date(dateStr);
+    }
+    if (isNaN(parsed.getTime())) {
+      return typeof dateStr === 'string' ? dateStr : '---';
+    }
+    const raw = format(parsed, 'EEE dd MMM', { locale: it });
+    return raw
+      .split(' ')
+      .map(part => part ? part.charAt(0).toUpperCase() + part.slice(1) : '')
+      .join(' ');
+  } catch (e) {
+    return '---';
+  }
+};
+
 // Complete list of huntable species, including all species from Annotazione Tesserino
 export const SPECIES_LIST = [
   'Alzavola',
@@ -657,7 +679,7 @@ export function Harvests() {
       .sort((a, b) => a.date.localeCompare(b.date))
       .map(item => ({
         ...item,
-        formattedDate: safeFormatDate(item.date, 'dd MMM', { locale: it })
+        formattedDate: formatWithWeekday(item.date)
       }));
   }, [filteredItems, huntingDays, users, settings, today, profile, userHuntingDateSet]);
 
@@ -1558,10 +1580,10 @@ export function Harvests() {
                 ) : (
                   <div className="h-full w-full">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={fullScreenTrendData} margin={{ top: 20, right: 20, left: 0, bottom: 60 }}>
+                      <BarChart data={fullScreenTrendData} margin={{ top: 20, right: 20, left: 0, bottom: 70 }}>
                         <XAxis 
                           dataKey="formattedDate" 
-                          tick={{ fontSize: 12, fill: '#64748b', fontWeight: 'bold' }} 
+                          tick={{ fontSize: 11, fill: '#64748b', fontWeight: 'bold' }} 
                           angle={-45} 
                           textAnchor="end"
                           interval={0}
