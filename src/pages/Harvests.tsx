@@ -72,9 +72,7 @@ export const SPECIES_LIST = [
   'Fischione',
   'Folaga',
   'Frullino',
-  'Gallinella',
   "Gallinella d'acqua",
-  'Germano',
   'Germano Reale',
   'Lepre',
   'Marzaiola',
@@ -92,7 +90,6 @@ export const ANATIDAE_SPECIES = new Set([
   'Canapiglia',
   'Codone',
   'Fischione',
-  'Germano',
   'Germano Reale',
   'Marzaiola',
   'Mestolone',
@@ -693,7 +690,6 @@ export function Harvests() {
     const s2 = (targetSpecies || '').toLowerCase().trim();
     if (!s1 || !s2) return false;
     if (s1 === s2) return true;
-    if ((s1 === 'germano' && s2 === 'germano reale') || (s1 === 'germano reale' && s2 === 'germano')) return true;
     if ((s1 === 'gallinella' && s2 === "gallinella d'acqua") || (s1 === "gallinella d'acqua" && s2 === 'gallinella')) return true;
     return false;
   };

@@ -1086,13 +1086,32 @@ export const deleteBudgetItem = async (itemId: string) => {
 export const subscribeToHarvests = (callback: (harvests: Harvest[]) => void) => {
   if (!db) {
     return subscribeMockCollection('harvests', (list) => {
-      const sorted = [...list].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+      let migrated = false;
+      const updated = list.map(item => {
+        if (item.species && item.species.toLowerCase().trim() === 'germano') {
+          migrated = true;
+          return { ...item, species: 'Germano Reale' };
+        }
+        return item;
+      });
+      if (migrated) {
+        saveLocalCollection('harvests', updated);
+      }
+      const sorted = [...updated].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
       callback(sorted);
     });
   }
   const q = query(collection(db, 'harvests'), orderBy('date', 'desc'));
   return onSnapshot(q, (snapshot) => {
-    callback(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Harvest)));
+    const list = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Harvest));
+    const updated = list.map(item => {
+      if (item.species && item.species.toLowerCase().trim() === 'germano') {
+        updateDoc(doc(db, 'harvests', item.id), { species: 'Germano Reale' }).catch(e => console.error(e));
+        return { ...item, species: 'Germano Reale' };
+      }
+      return item;
+    });
+    callback(updated);
   }, (error) => handleFirestoreError(error, OperationType.LIST, 'harvests'));
 };
 
@@ -1745,7 +1764,18 @@ export const subscribeToTesserinoEntries = (callback: (entries: TesserinoEntry[]
 
   if (!db) {
     return subscribeMockCollection('tesserino_entries', (list) => {
-      callback(sortEntries(list));
+      let migrated = false;
+      const updated = list.map(item => {
+        if (item.species && item.species.toLowerCase().trim() === 'germano') {
+          migrated = true;
+          return { ...item, species: 'Germano Reale' };
+        }
+        return item;
+      });
+      if (migrated) {
+        saveLocalCollection('tesserino_entries', updated);
+      }
+      callback(sortEntries(updated));
     });
   }
 
@@ -1753,7 +1783,14 @@ export const subscribeToTesserinoEntries = (callback: (entries: TesserinoEntry[]
   const q = query(collection(db, 'tesserino_entries'));
   return onSnapshot(q, (snapshot) => {
     const list = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as TesserinoEntry));
-    const sorted = sortEntries(list);
+    const updated = list.map(item => {
+      if (item.species && item.species.toLowerCase().trim() === 'germano') {
+        updateDoc(doc(db, 'tesserino_entries', item.id), { species: 'Germano Reale' }).catch(e => console.error(e));
+        return { ...item, species: 'Germano Reale' };
+      }
+      return item;
+    });
+    const sorted = sortEntries(updated);
     saveLocalCollection('tesserino_entries', sorted);
     callback(sorted);
   }, (error) => {
