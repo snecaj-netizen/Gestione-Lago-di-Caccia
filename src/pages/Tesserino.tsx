@@ -27,7 +27,7 @@ import {
   subscribeToHuntingLimits,
   getLocalCollection
 } from '../services';
-import { TesserinoEntry, HuntingLimit } from '../types';
+import { TesserinoEntry, HuntingLimit, canonicalizeSpecies } from '../types';
 import { format, parseISO, compareDesc } from 'date-fns';
 import { it } from 'date-fns/locale';
 
@@ -72,10 +72,21 @@ export function Tesserino() {
   });
   const [loading, setLoading] = useState(false);
 
-  // Available species names: from limits or fallback
-  const speciesListOptions = limits.length > 0 
-    ? limits.map(l => l.species)
-    : FALLBACK_HUNTING_SPECIES;
+  // Available species names: from limits or fallback, normalized and deduplicated
+  const speciesListOptions = React.useMemo(() => {
+    const rawList = limits.length > 0 
+      ? limits.map(l => l.species)
+      : FALLBACK_HUNTING_SPECIES;
+    const speciesMap = new Map<string, string>();
+    rawList.forEach(s => {
+      if (s && s.trim()) {
+        const canon = canonicalizeSpecies(s);
+        speciesMap.set(canon.toLowerCase().trim(), canon);
+      }
+    });
+    return Array.from(new Set(Array.from(speciesMap.values()).map(s => canonicalizeSpecies(s))))
+      .sort((a, b) => a.localeCompare(b, 'it', { sensitivity: 'base' }));
+  }, [limits]);
 
   // Form State
   const [selectedDate, setSelectedDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));

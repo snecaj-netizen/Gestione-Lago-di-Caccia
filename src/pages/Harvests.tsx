@@ -11,7 +11,7 @@ import {
   subscribeToSettings,
   getAssignedHuntersForDate
 } from '../services';
-import { Harvest, UserProfile, HuntingLimit, HuntingDay, LakeSettings } from '../types';
+import { Harvest, UserProfile, HuntingLimit, HuntingDay, LakeSettings, canonicalizeSpecies } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { Plus, Target, Trash2, Search, Filter, X, Edit2, User, ChevronDown, ChevronRight, ShieldAlert, Users, Info, Calendar, Maximize } from 'lucide-react';
 import { cn, formatUserName } from '../lib/utils';
@@ -230,13 +230,22 @@ export function Harvests() {
 
   // Available species list dynamically completed with species from tesserino / hunting_limits
   const availableSpecies = React.useMemo(() => {
-    const set = new Set<string>(SPECIES_LIST);
+    const speciesMap = new Map<string, string>(); // lowerKey -> canonicalDisplayName
+
+    SPECIES_LIST.forEach(s => {
+      const canon = canonicalizeSpecies(s);
+      speciesMap.set(canon.toLowerCase().trim(), canon);
+    });
+
     limits.forEach(l => {
       if (l.species && l.species.trim()) {
-        set.add(l.species.trim());
+        const canon = canonicalizeSpecies(l.species);
+        speciesMap.set(canon.toLowerCase().trim(), canon);
       }
     });
-    return Array.from(set).sort((a, b) => a.localeCompare(b, 'it', { sensitivity: 'base' }));
+
+    return Array.from(new Set(Array.from(speciesMap.values()).map(s => canonicalizeSpecies(s))))
+      .sort((a, b) => a.localeCompare(b, 'it', { sensitivity: 'base' }));
   }, [limits]);
 
   // Calculate assigned hunters for the selected date
@@ -296,11 +305,12 @@ export function Harvests() {
     }
 
     try {
+      const canonicalSpecies = canonicalizeSpecies(formData.species);
       if (editingItem) {
         // Editing an existing single record
         await updateHarvest(editingItem.id, {
           date: formData.date,
-          species: formData.species,
+          species: canonicalSpecies,
           count: parsedCount,
           hunterUid: formData.hunterUid || editingItem.hunterUid,
           hunterName: formData.hunterName || editingItem.hunterName
@@ -324,7 +334,7 @@ export function Harvests() {
           if (hunterCount > 0) {
             harvestsToAdd.push({
               date: formData.date,
-              species: formData.species,
+              species: canonicalSpecies,
               count: hunterCount,
               hunterUid: hunter.uid,
               hunterName: hunter.displayName
@@ -686,12 +696,10 @@ export function Harvests() {
   };
 
   const isMatchingSpecies = (itemSpecies: string, targetSpecies: string): boolean => {
-    const s1 = (itemSpecies || '').toLowerCase().trim();
-    const s2 = (targetSpecies || '').toLowerCase().trim();
+    const s1 = canonicalizeSpecies(itemSpecies).toLowerCase();
+    const s2 = canonicalizeSpecies(targetSpecies).toLowerCase();
     if (!s1 || !s2) return false;
-    if (s1 === s2) return true;
-    if ((s1 === 'gallinella' && s2 === "gallinella d'acqua") || (s1 === "gallinella d'acqua" && s2 === 'gallinella')) return true;
-    return false;
+    return s1 === s2;
   };
 
   const currentLimit = limits.find(l => isMatchingSpecies(l.species, formData.species));
@@ -1047,6 +1055,8 @@ export function Harvests() {
                   <div className="relative">
                     <input 
                       required
+                      autoComplete="off"
+                      name="species_choice"
                       placeholder="Cerca o seleziona specie..."
                       value={formData.species}
                       onChange={e => {
@@ -1068,13 +1078,13 @@ export function Harvests() {
                   {showSpeciesList && (
                     <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded shadow-xl max-h-48 overflow-y-auto py-1">
                       {availableSpecies.filter(s => 
-                        s.toLowerCase().includes(formData.species.toLowerCase())
+                        s.toLowerCase().includes(formData.species.toLowerCase().trim())
                       ).map(s => (
                         <button
                           key={s}
                           type="button"
                           onClick={() => {
-                            setFormData({ ...formData, species: s });
+                            setFormData({ ...formData, species: canonicalizeSpecies(s) });
                             setShowSpeciesList(false);
                           }}
                           className="w-full text-left px-4 py-2 text-sm font-bold text-slate-gray hover:bg-lake-green hover:text-white transition-colors"
@@ -1085,14 +1095,17 @@ export function Harvests() {
                       {profile?.role === 'admin' && formData.species && !availableSpecies.includes(formData.species) && (
                         <button
                           type="button"
-                          onClick={() => setShowSpeciesList(false)}
+                          onClick={() => {
+                            setFormData({ ...formData, species: canonicalizeSpecies(formData.species) });
+                            setShowSpeciesList(false);
+                          }}
                           className="w-full text-left px-4 py-2 text-sm font-black text-lake-green hover:bg-slate-50 transition-colors border-t border-slate-100 italic"
                         >
-                          Usa nuovo: "{formData.species}"
+                          Usa nuovo: "{canonicalizeSpecies(formData.species)}"
                         </button>
                       )}
                       {availableSpecies.filter(s => 
-                        s.toLowerCase().includes(formData.species.toLowerCase())
+                        s.toLowerCase().includes(formData.species.toLowerCase().trim())
                       ).length === 0 && profile?.role !== 'admin' && (
                         <div className="px-4 py-2 text-xs text-slate-400 italic">Nessun risultato</div>
                       )}

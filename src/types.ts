@@ -169,3 +169,16 @@ export interface RegulationSummary {
   updatedAt: string;
 }
 
+export const canonicalizeSpecies = (speciesName: string | undefined | null): string => {
+  if (!speciesName) return '';
+  const trimmed = speciesName.trim().replace(/\s+/g, ' ');
+  const lower = trimmed.toLowerCase();
+  if (lower === 'germano' || lower === 'germano reale' || lower.includes('germano')) {
+    return 'Germano Reale';
+  }
+  if (lower === 'gallinella' || lower === "gallinella d'acqua" || lower === "gallinella d’acqua" || lower.includes('gallinella')) {
+    return "Gallinella d'acqua";
+  }
+  return trimmed;
+};
+

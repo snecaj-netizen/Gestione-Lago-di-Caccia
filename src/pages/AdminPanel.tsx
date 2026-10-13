@@ -6,7 +6,7 @@ import {
   deleteHuntingLimit, clearAllHuntingLimits, clearAllHuntingTimes,
   downloadDatabaseBackup, fetchAllDatabaseData, AppBackupData, restoreDatabaseFromBackup
 } from '../services';
-import { UserProfile, LakeSettings, HuntingTime, HuntingLimit } from '../types';
+import { UserProfile, LakeSettings, HuntingTime, HuntingLimit, canonicalizeSpecies } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -615,13 +615,13 @@ export function AdminPanel() {
   }, [limits, settings]);
 
   const candidateSpecies = React.useMemo(() => {
-    const inDeroga = new Set(derogaLimits.map(l => l.species.toLowerCase().trim()));
+    const inDeroga = new Set(derogaLimits.map(l => canonicalizeSpecies(l.species).toLowerCase().trim()));
     const all = Array.from(new Set([
-      ...SPECIES_LIST.filter(s => s !== 'Altro' && s !== 'Stampi'),
+      ...SPECIES_LIST.filter(s => s !== 'Altro' && s !== 'Stampi').map(s => canonicalizeSpecies(s)),
       'Storno',
       'Tortora',
       'Piccione'
-    ])).sort();
+    ])).sort((a, b) => a.localeCompare(b, 'it', { sensitivity: 'base' }));
     return all.filter(s => !inDeroga.has(s.toLowerCase().trim()));
   }, [derogaLimits]);
 

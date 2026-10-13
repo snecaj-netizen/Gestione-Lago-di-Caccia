@@ -14,7 +14,7 @@ import {
   Timestamp,
   getDocs
 } from 'firebase/firestore';
-import { UserProfile, HuntingDay, Transaction, Harvest, LakeSettings, HuntingPhoto, BudgetItem, Notification, HuntingTime, Recipe, HuntingLimit, TesserinoEntry, RegulationSummary } from './types';
+import { UserProfile, HuntingDay, Transaction, Harvest, LakeSettings, HuntingPhoto, BudgetItem, Notification, HuntingTime, Recipe, HuntingLimit, TesserinoEntry, RegulationSummary, canonicalizeSpecies } from './types';
 import { format } from 'date-fns';
 import { safeLocalStorage } from './lib/safeLocalStorage';
 
@@ -208,6 +208,24 @@ if (typeof window !== 'undefined') {
     ];
     if (limits.length === 0) {
       safeLocalStorage.setItem('lake_db_hunting_limits', JSON.stringify(defaultLimits));
+    } else {
+      const sanitized = limits.map((l: any) => ({ ...l, species: canonicalizeSpecies(l.species) }));
+      safeLocalStorage.setItem('lake_db_hunting_limits', JSON.stringify(sanitized));
+    }
+
+    const harvestsStr = safeLocalStorage.getItem('lake_db_harvests');
+    if (harvestsStr) {
+      const hList = JSON.parse(harvestsStr);
+      if (Array.isArray(hList)) {
+        safeLocalStorage.setItem('lake_db_harvests', JSON.stringify(hList.map((h: any) => ({ ...h, species: canonicalizeSpecies(h.species) }))));
+      }
+    }
+    const tesserinoStr = safeLocalStorage.getItem('lake_db_tesserino_entries');
+    if (tesserinoStr) {
+      const tList = JSON.parse(tesserinoStr);
+      if (Array.isArray(tList)) {
+        safeLocalStorage.setItem('lake_db_tesserino_entries', JSON.stringify(tList.map((t: any) => ({ ...t, species: canonicalizeSpecies(t.species) }))));
+      }
     }
   } catch (e) {
     console.error(e);
@@ -1088,9 +1106,10 @@ export const subscribeToHarvests = (callback: (harvests: Harvest[]) => void) => 
     return subscribeMockCollection('harvests', (list) => {
       let migrated = false;
       const updated = list.map(item => {
-        if (item.species && item.species.toLowerCase().trim() === 'germano') {
+        const canonical = canonicalizeSpecies(item.species);
+        if (item.species && item.species !== canonical) {
           migrated = true;
-          return { ...item, species: 'Germano Reale' };
+          return { ...item, species: canonical };
         }
         return item;
       });
@@ -1105,9 +1124,10 @@ export const subscribeToHarvests = (callback: (harvests: Harvest[]) => void) => 
   return onSnapshot(q, (snapshot) => {
     const list = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Harvest));
     const updated = list.map(item => {
-      if (item.species && item.species.toLowerCase().trim() === 'germano') {
-        updateDoc(doc(db, 'harvests', item.id), { species: 'Germano Reale' }).catch(e => console.error(e));
-        return { ...item, species: 'Germano Reale' };
+      const canonical = canonicalizeSpecies(item.species);
+      if (item.species && item.species !== canonical) {
+        updateDoc(doc(db, 'harvests', item.id), { species: canonical }).catch(e => console.error(e));
+        return { ...item, species: canonical };
       }
       return item;
     });
@@ -1370,35 +1390,36 @@ const notifyAdminsAndSubscribers = async (title: string, body: string, type: Not
 
 export const addHarvestsBatch = async (harvestsList: Omit<Harvest, 'id'>[]) => {
   if (!harvestsList || harvestsList.length === 0) return;
+  const normalizedList = harvestsList.map(h => ({ ...h, species: canonicalizeSpecies(h.species) }));
   
   if (!db) {
     const createdDocs: any[] = [];
-    for (const h of harvestsList) {
+    for (const h of normalizedList) {
       const newDoc = addLocalDoc('harvests', h);
       createdDocs.push(newDoc);
     }
-    const summary = harvestsList.map(h => `${h.count}x ${h.species} (${h.hunterName})`).join(', ');
+    const summary = normalizedList.map(h => `${h.count}x ${h.species} (${h.hunterName})`).join(', ');
     await notifyAdminsAndSubscribers(
       "Nuovo Abbattimento Registrato",
       `Registrati capi per la giornata: ${summary}`,
       'harvest',
       `/abbattimenti`,
-      { batchSize: harvestsList.length }
+      { batchSize: normalizedList.length }
     );
     return;
   }
 
   try {
-    const promises = harvestsList.map(h => addDoc(collection(db, 'harvests'), cleanData(h)));
+    const promises = normalizedList.map(h => addDoc(collection(db, 'harvests'), cleanData(h)));
     await Promise.all(promises);
 
-    const summary = harvestsList.map(h => `${h.count}x ${h.species} (${h.hunterName})`).join(', ');
+    const summary = normalizedList.map(h => `${h.count}x ${h.species} (${h.hunterName})`).join(', ');
     await notifyAdminsAndSubscribers(
       "Nuovo Abbattimento Registrato",
       `Registrati capi per la giornata: ${summary}`,
       'harvest',
       `/abbattimenti`,
-      { batchSize: harvestsList.length }
+      { batchSize: normalizedList.length }
     );
   } catch (error) {
     handleFirestoreError(error, OperationType.CREATE, 'harvests');
@@ -1406,11 +1427,12 @@ export const addHarvestsBatch = async (harvestsList: Omit<Harvest, 'id'>[]) => {
 };
 
 export const addHarvest = async (harvest: Omit<Harvest, 'id'>) => {
+  const normalizedHarvest = { ...harvest, species: canonicalizeSpecies(harvest.species) };
   if (!db) {
-    const newDoc = addLocalDoc('harvests', harvest);
+    const newDoc = addLocalDoc('harvests', normalizedHarvest);
     await notifyAdminsAndSubscribers(
       "Nuovo Abbattimento",
-      `${harvest.hunterName} ha registrato ${harvest.count}x ${harvest.species}`,
+      `${normalizedHarvest.hunterName} ha registrato ${normalizedHarvest.count}x ${normalizedHarvest.species}`,
       'harvest',
       `/abbattimenti?highlight=${newDoc.id}`,
       { harvestId: newDoc.id }
@@ -1418,12 +1440,12 @@ export const addHarvest = async (harvest: Omit<Harvest, 'id'>) => {
     return;
   }
   try {
-    const docRef = await addDoc(collection(db, 'harvests'), cleanData(harvest));
+    const docRef = await addDoc(collection(db, 'harvests'), cleanData(normalizedHarvest));
     
     // Notify admins and soci
     await notifyAdminsAndSubscribers(
       "Nuovo Abbattimento",
-      `${harvest.hunterName} ha registrato ${harvest.count}x ${harvest.species}`,
+      `${normalizedHarvest.hunterName} ha registrato ${normalizedHarvest.count}x ${normalizedHarvest.species}`,
       'harvest',
       `/abbattimenti?highlight=${docRef.id}`,
       { harvestId: docRef.id }
@@ -1434,14 +1456,18 @@ export const addHarvest = async (harvest: Omit<Harvest, 'id'>) => {
 };
 
 export const updateHarvest = async (harvestId: string, updates: Partial<Harvest>) => {
+  const normalizedUpdates = { ...updates };
+  if (normalizedUpdates.species) {
+    normalizedUpdates.species = canonicalizeSpecies(normalizedUpdates.species);
+  }
   if (!db) {
     const list = getLocalCollection('harvests');
     const item = list.find(h => h.id === harvestId);
     if (item) {
       const oldData = { ...item };
-      updateLocalDoc('harvests', harvestId, updates);
+      updateLocalDoc('harvests', harvestId, normalizedUpdates);
       
-      const species = updates.species || oldData.species;
+      const species = normalizedUpdates.species || oldData.species;
       const count = updates.count !== undefined ? updates.count : oldData.count;
       const oldCount = oldData.count;
 
@@ -1683,8 +1709,19 @@ export const subscribeToHuntingLimits = (callback: (limits: HuntingLimit[]) => v
   if (!db) {
     return subscribeMockCollection('hunting_limits', (list) => {
       const source = list && list.length > 0 ? list : fallbackLimits;
-      saveLocalCollection('hunting_limits', source);
-      const sorted = [...source].sort((a, b) => (a.species || '').localeCompare(b.species || ''));
+      const normalizedLimits: HuntingLimit[] = [];
+      const seenSpecies = new Map<string, HuntingLimit>();
+      source.forEach(l => {
+        const canonical = canonicalizeSpecies(l.species);
+        const item = { ...l, species: canonical };
+        const key = canonical.toLowerCase();
+        if (!seenSpecies.has(key)) {
+          seenSpecies.set(key, item);
+          normalizedLimits.push(item);
+        }
+      });
+      saveLocalCollection('hunting_limits', normalizedLimits);
+      const sorted = [...normalizedLimits].sort((a, b) => (a.species || '').localeCompare(b.species || ''));
       callback(sorted);
     });
   }
@@ -1698,28 +1735,48 @@ export const subscribeToHuntingLimits = (callback: (limits: HuntingLimit[]) => v
       const localList = getLocalCollection('hunting_limits');
       const toSeed = localList && localList.length > 0 ? localList : fallbackLimits;
       toSeed.forEach(l => {
-        setDoc(doc(db!, 'hunting_limits', l.id), cleanData(l)).catch(() => {});
+        setDoc(doc(db!, 'hunting_limits', l.id), cleanData({ ...l, species: canonicalizeSpecies(l.species) })).catch(() => {});
       });
-      callback(toSeed);
+      callback(toSeed.map(l => ({ ...l, species: canonicalizeSpecies(l.species) })));
       return;
     }
 
-    saveLocalCollection('hunting_limits', limits);
-    callback(limits);
+    // Normalize species and deduplicate case-insensitively
+    const normalizedLimits: HuntingLimit[] = [];
+    const seenSpecies = new Map<string, HuntingLimit>();
+    limits.forEach(l => {
+      const canonical = canonicalizeSpecies(l.species);
+      if (canonical !== l.species) {
+        updateDoc(doc(db!, 'hunting_limits', l.id), { species: canonical }).catch(e => console.error(e));
+      }
+      const item = { ...l, species: canonical };
+      const key = canonical.toLowerCase().trim();
+      if (!seenSpecies.has(key)) {
+        seenSpecies.set(key, item);
+        normalizedLimits.push(item);
+      } else {
+        deleteDoc(doc(db!, 'hunting_limits', l.id)).catch(e => console.error(e));
+      }
+    });
+
+    saveLocalCollection('hunting_limits', normalizedLimits);
+    callback(normalizedLimits);
   }, (error) => {
     console.warn("Firestore error in subscribeToHuntingLimits, using local fallback:", error);
     const localList = getLocalCollection('hunting_limits');
-    callback(localList && localList.length > 0 ? localList : fallbackLimits);
+    const source = localList && localList.length > 0 ? localList : fallbackLimits;
+    callback(source.map(l => ({ ...l, species: canonicalizeSpecies(l.species) })));
   });
 };
 
 export const saveHuntingLimit = async (limit: HuntingLimit) => {
-  setLocalDoc('hunting_limits', limit.id, limit);
+  const normalized = { ...limit, species: canonicalizeSpecies(limit.species) };
+  setLocalDoc('hunting_limits', normalized.id, normalized);
   if (!db) {
     return;
   }
   try {
-    await setDoc(doc(db, 'hunting_limits', limit.id), cleanData(limit));
+    await setDoc(doc(db, 'hunting_limits', normalized.id), cleanData(normalized));
   } catch (error) {
     console.warn("Firestore error in saveHuntingLimit:", error);
   }
@@ -1766,9 +1823,10 @@ export const subscribeToTesserinoEntries = (callback: (entries: TesserinoEntry[]
     return subscribeMockCollection('tesserino_entries', (list) => {
       let migrated = false;
       const updated = list.map(item => {
-        if (item.species && item.species.toLowerCase().trim() === 'germano') {
+        const canonical = canonicalizeSpecies(item.species);
+        if (item.species && item.species !== canonical) {
           migrated = true;
-          return { ...item, species: 'Germano Reale' };
+          return { ...item, species: canonical };
         }
         return item;
       });
@@ -1784,9 +1842,10 @@ export const subscribeToTesserinoEntries = (callback: (entries: TesserinoEntry[]
   return onSnapshot(q, (snapshot) => {
     const list = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as TesserinoEntry));
     const updated = list.map(item => {
-      if (item.species && item.species.toLowerCase().trim() === 'germano') {
-        updateDoc(doc(db, 'tesserino_entries', item.id), { species: 'Germano Reale' }).catch(e => console.error(e));
-        return { ...item, species: 'Germano Reale' };
+      const canonical = canonicalizeSpecies(item.species);
+      if (item.species && item.species !== canonical) {
+        updateDoc(doc(db, 'tesserino_entries', item.id), { species: canonical }).catch(e => console.error(e));
+        return { ...item, species: canonical };
       }
       return item;
     });
@@ -1802,13 +1861,14 @@ export const subscribeToTesserinoEntries = (callback: (entries: TesserinoEntry[]
 };
 
 export const addTesserinoEntry = async (entry: Omit<TesserinoEntry, 'id'>) => {
+  const normalized = { ...entry, species: canonicalizeSpecies(entry.species) };
   // Always record locally so state is immediately available
-  const localDoc = addLocalDoc('tesserino_entries', entry);
+  const localDoc = addLocalDoc('tesserino_entries', normalized);
   if (!db) {
     return localDoc.id;
   }
   try {
-    const docRef = await addDoc(collection(db, 'tesserino_entries'), cleanData(entry));
+    const docRef = await addDoc(collection(db, 'tesserino_entries'), cleanData(normalized));
     return docRef.id;
   } catch (error) {
     console.warn("Firestore error in addTesserinoEntry (kept in local storage):", error);
@@ -1829,12 +1889,16 @@ export const deleteTesserinoEntry = async (id: string) => {
 };
 
 export const updateTesserinoEntry = async (id: string, updates: Partial<TesserinoEntry>) => {
-  updateLocalDoc('tesserino_entries', id, updates);
+  const normalizedUpdates = { ...updates };
+  if (normalizedUpdates.species) {
+    normalizedUpdates.species = canonicalizeSpecies(normalizedUpdates.species);
+  }
+  updateLocalDoc('tesserino_entries', id, normalizedUpdates);
   if (!db) {
     return;
   }
   try {
-    await updateDoc(doc(db, 'tesserino_entries', id), cleanData(updates));
+    await updateDoc(doc(db, 'tesserino_entries', id), cleanData(normalizedUpdates));
   } catch (error) {
     console.warn("Firestore error in updateTesserinoEntry:", error);
   }
